@@ -1,0 +1,10 @@
+node_modules/
+.cache/
+.env
+.env.*
+*.log
+__pycache__/
+*.zip
+# Never put user data or local import JSONs in this extension repository.
+user-data/
+local-imports/

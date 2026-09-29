@@ -1,0 +1,26 @@
+{
+  "realHost": "SillyTavern 1.19.0",
+  "pageErrors": [],
+  "modelRequests": [],
+  "cases": {
+    "pendingAttachmentRejected": {
+      "blocked": true,
+      "unchanged": true
+    },
+    "editedHistoryInvalidatesDraft": true,
+    "generationLockViaRealLifecycleEvent": true,
+    "duplicateAndMarkup": {
+      "concurrent": true,
+      "reused": true,
+      "onlyOne": true,
+      "inert": true,
+      "executed": false
+    },
+    "readbackFailureNoAutomaticRetry": {
+      "ambiguous": true,
+      "reused": true,
+      "onlyOne": true
+    }
+  },
+  "faultInjection": "Only /api/chats/get readback was made to return HTTP503 for the failure test. sendMessageAsUser, context, chat persistence were not mocked."
+}

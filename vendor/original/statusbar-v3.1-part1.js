@@ -1,0 +1,1 @@
+window.addEventListener("error",function(e){try{if(window.__ztReady)return;var t=document.querySelector(".mvu-msg-text");t&&(t.textContent="（状态栏脚本加载失败："+(e&&e.message?e.message:"未知错误")+"，请截图反馈）")}catch(e){}});

@@ -1,0 +1,29 @@
+{
+  "host": "SillyTavern 1.19.0",
+  "extension": "0.2.0",
+  "source": "real isolated host; fixture replies explicitly NOT model generated",
+  "pageErrors": [],
+  "modelRequests": [],
+  "receiptsOnDisk": 6,
+  "balanceOnDisk": 817,
+  "cases": [
+    "default off",
+    "explicit backup/legacy stop consent",
+    "legacy actor detected",
+    "payment confirmation required",
+    "original task points and physical rewards",
+    "original reputation discount",
+    "one sold flag",
+    "consume one at a time",
+    "no item reaward after consumption",
+    "original recycle price",
+    "system receipts in normal chat",
+    "foreign variables unchanged",
+    "reload persistence",
+    "earlier history edit freezes ledger",
+    "missing readback freezes without retry",
+    "reload recovers single committed receipt",
+    "mobile commerce no overflow"
+  ],
+  "faultInjection": "Second /api/chats/get returned503 after real /api/chats/save succeeded. No model or host context mocks."
+}

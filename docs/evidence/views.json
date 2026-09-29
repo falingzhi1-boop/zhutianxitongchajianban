@@ -1,0 +1,40 @@
+{
+  "host": "SillyTavern 1.19.0",
+  "viewport": "390x844",
+  "mobileViews": {
+    "home": {
+      "noHorizontalOverflow": true
+    },
+    "book": {
+      "noHorizontalOverflow": true
+    },
+    "ledger": {
+      "noHorizontalOverflow": true
+    },
+    "interact": {
+      "noHorizontalOverflow": true
+    },
+    "commerce": {
+      "noHorizontalOverflow": true
+    },
+    "memory": {
+      "noHorizontalOverflow": true
+    },
+    "diagnostics": {
+      "noHorizontalOverflow": true
+    }
+  },
+  "builtinRules": 35,
+  "tests": [
+    "all seven mobile views",
+    "worldbook search",
+    "task to unsent player draft",
+    "inventory to unsent observation draft",
+    "WebGL unavailable original-art fallback",
+    "focused draft cleared on chat switch",
+    "launcher works from initial mobile load",
+    "missing consent blocks send",
+    "rapid disable/enable lifecycle"
+  ],
+  "pageErrors": []
+}

@@ -1,0 +1,4 @@
+
+> zhutian-covenant-terminal@0.2.0 check
+> node --check index.js && node --check src/host-adapter.js && node --check src/terminal.js && node --check src/contracts.js && node --check vendor/original/runtime.js && node --check src/ledger-plan.js && node --check src/ledger-service.js
+

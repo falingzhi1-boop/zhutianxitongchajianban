@@ -1,0 +1,13 @@
+{
+  "host": "SillyTavern 1.19.0",
+  "extension": "0.2.0",
+  "tests": [
+    "same-origin Web Lock rejects competing tab without writing",
+    "stale second-tab preview cannot overwrite first receipt",
+    "captured save target survives mid-response real chat switch; no metadata injected into other chat"
+  ],
+  "pageErrors": [],
+  "receiptCountBefore": 6,
+  "receiptCountAfter": 8,
+  "transportNote": "For chat-switch test route.fetch performs the real save; its response is delayed until a real selectCharacterById call completes."
+}

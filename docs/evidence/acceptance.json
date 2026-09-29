@@ -1,0 +1,33 @@
+{
+  "host": "SillyTavern 1.19.0",
+  "commit": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+  "browser": "Playwright Chromium desktop 1500x1000 and mobile viewport 390x844",
+  "source": "real isolated server, no mock getContext",
+  "persistedPlayerMessages": 2,
+  "cases": [
+    "native extension activation",
+    "original animated portrait",
+    "keyboard gesture prepares unsent draft",
+    "reduced-motion and closed-dialog pause",
+    "read-only legacy ledger",
+    "confirmed player message send",
+    "other character target",
+    "main composer preserved",
+    "reload persistence",
+    "original recall injection opt-in",
+    "chat-switch invalidation and prompt cleanup",
+    "mobile horizontal layout",
+    "mobile original portrait sheet",
+    "deactivate/recreate cleanup"
+  ],
+  "portraitRenderer": "layers",
+  "pageErrors": [],
+  "modelRequests": [],
+  "notTested": [
+    "paid model generation",
+    "Git URL installation",
+    "complete legacy feature migration",
+    "physical mobile performance",
+    "old production save migration"
+  ]
+}

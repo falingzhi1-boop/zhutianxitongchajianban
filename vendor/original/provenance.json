@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/falingzhi1-boop/zhutian-system-v1.1",
+  "commit": "3ee2db2e1388f9843335962c370888f746228d94",
+  "sourceHashes": {
+    "assistant-v1.1.js": "6c844bd92ec6d4aa4d6210ed6b76054ea370c23bd0eb8fc02967d7205e978cd0",
+    "statusbar-v3.1.css": "f8dc62c27c20707f31d74727400be348222396a21af891b7370371a4c7513257",
+    "statusbar-v3.1-part1.js": "0b580f29d0e8ffe76a71c3d878fcc82ad9a55698a0e0a1a229782c02475e555d",
+    "statusbar-v3.1-part2.js": "8c4b64c100f15cb1c8765a842e3675ff97ca2294f528149c25f90e4e1146f8c8",
+    "statusbar-v3.1-part3.js": "43ace54aeded6516d8ab5dc1f38bd26d0a01fc0f2144be1e0311b9f964b1498f"
+  },
+  "extraction": "Original pure modules inside a private closure; old Tavern Helper adapter is not executed.",
+  "sectionIndices": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "wrapperAdaptation": "Original sections unchanged; private namespace receives bound platform atob for original hair weights. No old Tavern Helper host adapter executes.",
+  "runtimeSha256": "b916c01f8afeb25aeb61f783d7678f915befdd02cd9d5ed324964a89184018e8"
+}

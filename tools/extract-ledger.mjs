@@ -1,0 +1,23 @@
+import {parse} from 'acorn';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const folder=new URL('../vendor/original/',import.meta.url);
+const raw=readFileSync(new URL('statusbar-v3.1-part2.js',folder),'utf8');
+const ast=parse(raw,{ecmaVersion:'latest'});
+const names=`ztTaskName ztTaskID ztTaskActive ztTaskInit ztTaskBatch ztTaskHasSettlement ztTaskApply ztTaskSummary ztTaskLegacyVars ztKnownTier ztSys ztNum ztFmt ztHash ztClone ztSafePath ztGetPath ztSetPath ztNormGrade ztGradeOfCap ztNormName ztParsePanel ztIsEmpty ztRes ztParseRes ztShopLevel ztShopName ztDiscount ztTier ztFixSkill ztLib ztFindSkill ztStageOf ztNextTarget ztSetMain ztSyncMain ztPushPending ztStageCheck ztGfLog ztBracketGrade ztMasteryOps ztLegacyMastery ztVarOps ztTakeSnap ztRestoreSnap ztApplyDirectives ztApplyPanel ztDerive parseMastery ztBagPush toNum recycleValue`.split(' ');
+const functions=names.map(name=>{const n=ast.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name===name);if(!n)throw Error(name);return raw.slice(n.start,n.end)});
+const constants=['ZT_FIELDS','ZT_SNAP_KEYS','TIER_PRICE'].map(name=>{const n=ast.body.find(n=>n.type==='VariableDeclaration'&&n.declarations.some(d=>d.id.name===name));if(!n)throw Error(name);return raw.slice(n.start,n.end)});
+const helper=readFileSync(new URL('assistant-v1.1.js',folder),'utf8');
+const helperAst=parse(helper,{ecmaVersion:'latest'});const found={};
+function walk(n,fn){if(!n||typeof n!=='object')return;fn(n);for(const v of Object.values(n)){if(Array.isArray(v))v.forEach(x=>walk(x,fn));else if(v&&typeof v==='object')walk(v,fn);}}
+walk(helperAst,n=>{if(n.type==='FunctionDeclaration'&&['matchesPromise','awardPlan','grant'].includes(n.id.name))found[n.id.name]=n;});
+let grant;
+walk(found.grant,n=>{if(n.type==='CallExpression'&&n.callee.type==='MemberExpression'&&n.callee.property.name==='sysWriteVars')grant=n.arguments[0];});
+if(!grant)throw Error('Original reward mutation not found');
+const text=`// Generated from pinned original source. No DOM listeners, Helper or API requests execute.\nexport function createLedgerKernel(messageInfo,write){\nconst ztMsgInfo=()=>messageInfo; const sysWriteVars=write;\n${constants.join('\n')}\n// Native safety overlay: model variable directives must not erase stable physical receipts.\nZT_PROTECTED.push('任务实物凭据');\n${functions.join('\n')}\nreturn {${names.join(',')}};\n}\n`;
+writeFileSync(new URL('ledger-kernel.js',folder),text);
+const reward=`// Original award planner and original grant callback, extracted without rewriting rules.\nimport original from './runtime.js';\nconst C=original.ZhuTianMemoryCore;\nconst GRADES=new Set(['凡品','灵品','仙品','神品','禁忌']);\nconst own=(v,k)=>v!==null&&typeof v==='object'&&Object.hasOwn(v,k);\n${helper.slice(found.matchesPromise.start,found.matchesPromise.end)}\n${helper.slice(found.awardPlan.start,found.awardPlan.end)}\nexport {awardPlan};\nexport function grantRewards(vars,job,expectedHash,plan){\nlet granted=0;const added=new Set();const ticket=0;const current=()=>true;\nconst mutate=${helper.slice(grant.start,grant.end)};\nmutate(vars);return {granted,added:[...added]};\n}\n`;
+writeFileSync(new URL('reward-kernel.js',folder),reward);
+const provenance={originalCommit:'3ee2db2e1388f9843335962c370888f746228d94',functions:names,constants:['ZT_FIELDS declaration (all constants)','ZT_SNAP_KEYS','TIER_PRICE'],sourceSha256:createHash('sha256').update(raw).digest('hex'),helperSha256:createHash('sha256').update(helper).digest('hex'),overlay:'Protect 任务实物凭据 from model variable directives; extract grant callback into synchronous clone-only mutation. Caller performs source and persistence guards.',outputs:{'ledger-kernel.js':createHash('sha256').update(text).digest('hex'),'reward-kernel.js':createHash('sha256').update(reward).digest('hex')}};
+writeFileSync(new URL('ledger-provenance.json',folder),JSON.stringify(provenance,null,2)+'\n');
+console.log('Extracted',names.length,'original ledger functions; reward promise/evidence/receipt rules retained.');

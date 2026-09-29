@@ -1,0 +1,19 @@
+{
+  "name": "zhutian-covenant-terminal",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "SillyTavern native extension migration checkpoint, not a feature-complete release",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check index.js && node --check src/host-adapter.js && node --check src/terminal.js && node --check src/contracts.js && node --check vendor/original/runtime.js && node --check src/ledger-plan.js && node --check src/ledger-service.js",
+    "extract:ledger": "node tools/extract-ledger.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "acorn": "8.15.0"
+  },
+  "homepage": "https://github.com/falingzhi1-boop/zhutianxitongchajianban"
+}
