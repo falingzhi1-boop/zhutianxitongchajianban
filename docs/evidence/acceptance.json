@@ -23,11 +23,12 @@
   "portraitRenderer": "layers",
   "pageErrors": [],
   "modelRequests": [],
-  "notTested": [
+  "notTestedByThisScript": [
     "paid model generation",
     "Git URL installation",
     "complete legacy feature migration",
     "physical mobile performance",
     "old production save migration"
-  ]
+  ],
+  "extensionFolder": "zhutianxitongchajianban"
 }

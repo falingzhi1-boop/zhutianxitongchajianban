@@ -6,137 +6,137 @@ TAP version 13
 # Subtest: intent stays a player action, not an invented reply
 ok 1 - intent stays a player action, not an invented reply
   ---
-  duration_ms: 1.328488
+  duration_ms: 1.320821
   ...
 # Subtest: macro delimiters and markup become inert visible text
 ok 2 - macro delimiters and markup become inert visible text
   ---
-  duration_ms: 0.226805
+  duration_ms: 0.284065
   ...
 # Subtest: empty and oversize input rejected
 ok 3 - empty and oversize input rejected
   ---
-  duration_ms: 0.400648
+  duration_ms: 0.429172
   ...
 # Subtest: identity requires a real single-character chat
 ok 4 - identity requires a real single-character chat
   ---
-  duration_ms: 0.299318
+  duration_ms: 0.259504
   ...
 # Subtest: different chats and characters have different identities
 ok 5 - different chats and characters have different identities
   ---
-  duration_ms: 0.18279
+  duration_ms: 0.165123
   ...
 # Subtest: new message invalidates preview token
 ok 6 - new message invalidates preview token
   ---
-  duration_ms: 0.158074
+  duration_ms: 0.14439
   ...
 # Subtest: last-message edit and swipe invalidate preview token
 ok 7 - last-message edit and swipe invalidate preview token
   ---
-  duration_ms: 1.548457
+  duration_ms: 1.558359
   ...
 # Subtest: ledger projection is read-only and never invents records
 ok 8 - ledger projection is read-only and never invents records
   ---
-  duration_ms: 0.809861
+  duration_ms: 0.656089
   ...
 # Subtest: feature gaps are explicit, not advertised as migrated
 ok 9 - feature gaps are explicit, not advertised as migrated
   ---
-  duration_ms: 0.314941
+  duration_ms: 0.313422
   ...
 # Subtest: original memory defaults off and rejects unknown schema
 ok 10 - original memory defaults off and rejects unknown schema
   ---
-  duration_ms: 0.539083
+  duration_ms: 0.271597
   ...
 # Subtest: original memory provenance invalidates after source edits
 ok 11 - original memory provenance invalidates after source edits
   ---
-  duration_ms: 1.673389
+  duration_ms: 1.576422
   ...
 # Subtest: original memory rejects fabricated evidence and prototype keys
 ok 12 - original memory rejects fabricated evidence and prototype keys
   ---
-  duration_ms: 0.643009
+  duration_ms: 0.600488
   ...
 # Subtest: original memory recall preserves ledger and neutralizes markup
 ok 13 - original memory recall preserves ledger and neutralizes markup
   ---
-  duration_ms: 0.641121
+  duration_ms: 0.643011
   ...
 # Subtest: original rig and motion APIs are actually retained
 ok 14 - original rig and motion APIs are actually retained
   ---
-  duration_ms: 0.185857
+  duration_ms: 0.17429
   ...
 # Subtest: all five baseline source files match recorded SHA256
 ok 15 - all five baseline source files match recorded SHA256
   ---
-  duration_ms: 11.970402
+  duration_ms: 2.591939
   ...
 # Subtest: original panel settles points and promised physical reward atomically on clone
 ok 16 - original panel settles points and promised physical reward atomically on clone
   ---
-  duration_ms: 139.854444
+  duration_ms: 43.476423
   ...
 # Subtest: stable original receipt stops reward replay after item is consumed
 ok 17 - stable original receipt stops reward replay after item is consumed
   ---
-  duration_ms: 2.566626
+  duration_ms: 2.339628
   ...
 # Subtest: missing pre-settlement promise rejects entire plan including points
 ok 18 - missing pre-settlement promise rejects entire plan including points
   ---
-  duration_ms: 1.048007
+  duration_ms: 0.986101
   ...
 # Subtest: fabricated evidence rejected
 ok 19 - fabricated evidence rejected
   ---
-  duration_ms: 0.609965
+  duration_ms: 0.685857
   ...
 # Subtest: reward grade or quantity cannot escalate beyond recorded promise
 ok 20 - reward grade or quantity cannot escalate beyond recorded promise
   ---
-  duration_ms: 1.184964
+  duration_ms: 1.04466
   ...
 # Subtest: user source and duplicate panels rejected
 ok 21 - user source and duplicate panels rejected
   ---
-  duration_ms: 0.753065
+  duration_ms: 0.721398
   ...
 # Subtest: original reputation discount is ceiled and stock sold exactly once
 ok 22 - original reputation discount is ceiled and stock sold exactly once
   ---
-  duration_ms: 2.102983
+  duration_ms: 0.942264
   ...
 # Subtest: insufficient funds and unsafe values fail without changing input
 ok 23 - insufficient funds and unsafe values fail without changing input
   ---
-  duration_ms: 0.43673
+  duration_ms: 1.100573
   ...
 # Subtest: consumable uses one; equipment is retained
 ok 24 - consumable uses one; equipment is retained
   ---
-  duration_ms: 0.868674
+  duration_ms: 0.883628
   ...
 # Subtest: recycle uses original one-tenth paid price rule
 ok 25 - recycle uses original one-tenth paid price rule
   ---
-  duration_ms: 0.610023
+  duration_ms: 0.731465
   ...
 # Subtest: protected physical receipts cannot be erased by model variable update
 ok 26 - protected physical receipts cannot be erased by model variable update
   ---
-  duration_ms: 1.996717
+  duration_ms: 1.961086
   ...
 # Subtest: history receipts allow appended messages, ignore own system records, reject earlier edits/swipes/deletions
 ok 27 - history receipts allow appended messages, ignore own system records, reject earlier edits/swipes/deletions
   ---
-  duration_ms: 16.200457
+  duration_ms: 13.379265
   ...
 1..27
 # tests 27
@@ -146,4 +146,4 @@ ok 27 - history receipts allow appended messages, ignore own system records, rej
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 357.651644
+# duration_ms 238.284579

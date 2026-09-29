@@ -1,0 +1,19 @@
+{
+  "url": "https://github.com/falingzhi1-boop/zhutianxitongchajianban",
+  "method": "actual SillyTavern /api/extensions/install; per-user installation; old manual directory removed first",
+  "installation": {
+    "status": 200,
+    "body": "{\"version\":\"0.2.0\",\"author\":\"诸天系统项目\",\"display_name\":\"诸天 · 莉莉丝契约终端（开发检查点）\",\"extensionPath\":\"data/default-user/extensions/zhutianxitongchajianban\",\"folderName\":\"zhutianxitongchajianban\"}"
+  },
+  "version": "0.2.0",
+  "launcherCount": 1,
+  "pageErrors": [],
+  "installedCommit": "a7678ddd8ea527c5b749239c06a70e27409b95c1",
+  "regressionScriptsPassed": [
+    "native_acceptance.py",
+    "native_guards.py",
+    "native_views.py",
+    "native_ledger.py",
+    "native_ledger_guards.py"
+  ]
+}
