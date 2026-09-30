@@ -1,12 +1,12 @@
 {
   "name": "zhutian-covenant-terminal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "SillyTavern native extension migration checkpoint, not a feature-complete release",
+  "description": "SillyTavern 1.16–1.19 native extension: original status bar, Lilith assistant, ledger, AI variants and real Live2D; see docs/FEATURE_MATRIX.md for what is migrated",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check index.js && node --check src/host-adapter.js && node --check src/terminal.js && node --check src/contracts.js && node --check vendor/original/runtime.js && node --check src/ledger-plan.js && node --check src/ledger-service.js",
+    "check": "node --check index.js && node --check src/contracts.js && node --check src/compat.js && node --check src/host-adapter.js && node --check src/th-bridge.js && node --check src/settings.js && node --check src/ledger-plan.js && node --check src/ledger-service.js && node --check src/statusbar-host.js && node --check src/assistant-host.js && node --check src/features.js && node --check src/portrait.js && node --check src/psd-export.js && node --check src/terminal.js && node --check vendor/original/runtime.js && node --check vendor/original/assistant-runtime.js && python3 tools/extract_original.py --check",
     "extract:ledger": "node tools/extract-ledger.mjs"
   },
   "engines": {

@@ -24,5 +24,20 @@
     14
   ],
   "wrapperAdaptation": "Original sections unchanged; private namespace receives bound platform atob for original hair weights. No old Tavern Helper host adapter executes.",
-  "runtimeSha256": "b916c01f8afeb25aeb61f783d7678f915befdd02cd9d5ed324964a89184018e8"
+  "runtimeSha256": "b916c01f8afeb25aeb61f783d7678f915befdd02cd9d5ed324964a89184018e8",
+  "assistantSectionIndices": [
+    5,
+    6,
+    7,
+    15
+  ],
+  "assistantRuntimeSha256": "e86d3d2d62ebeaa951cf3510c6675871267bf834d2a6c943e0aae353cf34de3b",
+  "statusbarShell": {
+    "file": "statusbar-v3.1-shell.html",
+    "derivedFrom": "regex 诸天万界最强系统状态栏 3.1 (online import, findRegex /<ZhuTianPanel>([\\s\\S]*?)<\\/ZhuTianPanel>/gm) replaceString",
+    "sourceReplaceStringSha256": "8b2ff49126185ad169f86cc2c7added3c3ae35ac0dbf7a19b0262a73c1758d9e",
+    "transform": "strip ```html fence; replace the 4 pinned jsDelivr @7609dd1 URLs with __ZT_VENDOR__/ (same bytes as the vendored part files); $1 kept as the single panel slot",
+    "sha256": "329453420ef4aa759b9ca44ab5fcc22d7568613b181d11d7b9845367e9163844",
+    "note": "The import JSON itself is local-only and is not uploaded."
+  }
 }

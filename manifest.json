@@ -1,11 +1,11 @@
 {
-  "display_name": "诸天 · 莉莉丝契约终端（开发检查点）",
+  "display_name": "诸天 · 莉莉丝契约终端",
   "author": "诸天系统项目",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "loading_order": 200,
   "js": "index.js",
   "css": "styles/host.css",
-  "minimum_client_version": "1.19.0",
+  "minimum_client_version": "1.16.0",
   "dependencies": [],
   "auto_update": false,
   "hooks": {

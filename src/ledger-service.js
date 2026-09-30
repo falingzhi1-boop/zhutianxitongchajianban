@@ -5,7 +5,7 @@ export class LedgerService {
  constructor(adapter){this.adapter=adapter;this.uncertain=new Set();}
  get receipts(){return this.adapter.settings().ledgerReceipts||{};}
  legacyActive(){
-  if(document.getElementById('zt-memory-assistant-v1'))return true;
+  if(document.querySelector('#zt-memory-assistant-v1:not([data-zt-native])'))return true; // our native Lilith is tagged, a real old TH helper is not
   for(const frame of document.querySelectorAll('iframe[id^="TH-message--"]'))try{if(typeof frame.contentWindow?.ztApplyPanel==='function')return true;}catch{return true;}
   return false;
  }
@@ -16,6 +16,7 @@ export class LedgerService {
   this.ready();const a=this.adapter,c=a.context(),chat=clone(c.chat),metadata=clone(c.chatMetadata),stamp=this.state(),epoch=a.generationEpoch;
   const id=crypto.randomUUID(),target={avatar_url:c.characters[c.characterId].avatar,file_name:c.getCurrentChatId()};
   await assertHistory(chat,this.receipts);
+  if(kind==='panel'&&a.statusbarActive?.())throw Error('原生状态栏正在运行，它是剧情结算的唯一引擎（与原版一致）；终端不再重复核算同一条正文。');
   if(kind==='panel'){
    const last=chat.map((m,i)=>({m,i})).filter(x=>!x.m.is_system).at(-1)?.i;
    const logicalHistory=history(chat),logicalHash=await digest(logicalHistory);

@@ -1,8 +1,8 @@
 import {LedgerService} from './ledger-service.js';
-import { ID, STORAGE, PROMPT, HOST_VERSION, identity, snapshotToken, normalizeIntent } from './contracts.js';
-// Internal import deliberately pinned and tested: SillyTavern 1.19.0 @06bde939...
-// getContext() does not expose sendMessageAsUser. No unverified universal API is invented here.
-import { sendMessageAsUser, is_send_press } from '/script.js';
+import { ID, STORAGE, PROMPT, identity, snapshotToken, normalizeIntent } from './contracts.js';
+import { hostSupport, loadHostModule, fetchHostVersion, probeCapabilities } from './compat.js';
+// 0.3.0: no static `import … from '/script.js'` any more (a missing export would kill module linking on other hosts).
+// sendMessageAsUser / is_send_press are resolved at start() through a dynamic import, verified for 1.16.0–1.19.0.
 
 export class HostAdapter {
     constructor(original) {
@@ -15,26 +15,33 @@ export class HostAdapter {
         this.generationEpoch = 0;
         this.sendingReceipts = new Set();
         this.version = null;
+        this.support = null;
+        this.capabilities = [];
+        this.host = null;
         this.transactions = new LedgerService(this);
     }
     context() { return globalThis.SillyTavern?.getContext?.(); }
     async start() {
         const c = this.context();
-        if (!c?.eventSource || !c.eventTypes || typeof c.saveChat !== 'function' || typeof sendMessageAsUser !== 'function') throw Error('宿主缺少已核验接口，停止启动，未改写数据。');
-        try {
-            const r = await fetch('/version', {credentials:'same-origin',signal:AbortSignal.timeout(15000)});
-            if (!r.ok) throw Error('版本接口返回错误');
-            const v = await r.json(); this.version = v.pkgVersion;
-        } catch { throw Error('无法核对酒馆版本，已阻止写入。'); }
+        this.host = await loadHostModule();
         if (this.dead) return;
+        if (!c?.eventSource || !c.eventTypes || typeof c.saveChat !== 'function' || typeof this.host.sendMessageAsUser !== 'function') throw Error('宿主缺少已核验接口（事件总线 / saveChat / sendMessageAsUser），停止启动，未改写数据。');
+        try { const v = await fetchHostVersion(); this.version = v.pkgVersion; this.versionInfo = v; }
+        catch { throw Error('无法核对酒馆版本，已阻止写入。'); }
+        if (this.dead) return;
+        this.support = hostSupport(this.version);
+        if (!this.support.ok) throw Error(this.support.reason);
         await new Promise(resolve => {
             const event=c.eventTypes.APP_READY;
             const ready=()=>{c.eventSource.removeListener(event,ready);resolve();};
-            this.disposers.push(ready);
-            c.eventSource.on(event,ready); // APP_READY auto-fires for late subscribers in the pinned host.
+            this.disposers.push(()=>c.eventSource.removeListener(event,ready));
+            c.eventSource.on(event,ready); // APP_READY is in autoFireAfterEmit on 1.16.0–1.19.0: late subscribers fire immediately.
         });
         if (this.dead) return;
-        if (this.version !== HOST_VERSION) throw Error(`当前适配器仅核验 ${HOST_VERSION}；检测到 ${this.version || '未知版本'}。请先进行接口验收，不能冒充已兼容。`);
+        this.capabilities = probeCapabilities(this.context(), this.host);
+        const missing = this.capabilities.filter(x => !x.ok && ['eventSource','eventTypes','saveChat','saveMetadata','setExtensionPrompt','addOneMessage'].includes(x.key));
+        if (missing.length) throw Error('宿主缺少核心接口：' + missing.map(x => x.label).join('、') + '；停止启动，未改写数据。');
+        if (this.support.level === 'newer') globalThis.toastr?.warning(this.support.reason, '诸天契约终端');
         for (const key of ['CHAT_CHANGED','MESSAGE_RECEIVED','MESSAGE_EDITED','MESSAGE_SWIPED','MESSAGE_DELETED','USER_MESSAGE_RENDERED','CHARACTER_MESSAGE_RENDERED']) {
             const event = c.eventTypes[key]; if (!event) continue;
             const fn = () => {
@@ -52,7 +59,7 @@ export class HostAdapter {
     }
     subscribe(fn) { this.subscribers.add(fn); return ()=>this.subscribers.delete(fn); }
     notify() { if(!this.dead)for(const fn of this.subscribers) { try{fn();}catch(e){console.warn('[诸天终端] 只读刷新失败',e.message);} } }
-    isGenerating() { return this.generating||is_send_press; }
+    isGenerating() { return this.generating||!!this.host?.isSendPress?.(); }
     currentIdentity() { return identity(this.context()); }
     variables() {
         // Storage corroborated against Tavern Helper variables.ts @519599bc... (type:'chat').
@@ -74,7 +81,7 @@ export class HostAdapter {
     async setRecall(enabled) {
         if(this.busy)throw Error('交易正在保存，请稍后修改设置。');
         if(!this.currentIdentity())throw Error('请先打开单角色聊天。');
-        if(enabled && document.getElementById('zt-memory-assistant-v1'))throw Error('检测到旧版记忆助手：请先停用它，再启用新版回忆提示，避免重复注入。');
+        if(enabled && document.querySelector('#zt-memory-assistant-v1:not([data-zt-native])'))throw Error('检测到旧版记忆助手：请先停用它，再启用新版回忆提示，避免重复注入。');
         const c=this.context(),chat=c.chat,id=this.currentIdentity();
         c.chatMetadata[STORAGE]={...this.settings(),schema:1,recallEnabled:!!enabled};
         await c.saveMetadata();
@@ -94,14 +101,14 @@ export class HostAdapter {
     clearPrompt() { this.context()?.setExtensionPrompt?.(PROMPT,'',1,0,false,0); }
     refreshPrompt(type='') {
         const c=this.context();
-        if(this.dead||!identity(c)||!this.settings().recallEnabled||document.getElementById('zt-memory-assistant-v1')){this.clearPrompt();return;}
+        if(this.dead||!identity(c)||!this.settings().recallEnabled||this.assistantOwnsPrompt?.()||document.querySelector('#zt-memory-assistant-v1:not([data-zt-native])')){this.clearPrompt();return;}
         try{
             const core=this.original.ZhuTianMemoryCore,st=this.memory();
             if(!st.enabled){this.clearPrompt();return;}
             let time=this.timeline();if(['regenerate','swipe'].includes(type)){const last=time.findLast(x=>x.role==='assistant'&&!x.hidden);if(last)time=time.filter(x=>x.id<last.id);}
             const q=time.findLast(x=>x.role==='user'&&!x.hidden)?.body||'';
             const recalled=core.recall(st,time,this.ledger(),q),id=identity(c);
-            c.setExtensionPrompt(PROMPT,recalled.content,1,0,false,0,()=>!this.dead&&this.currentIdentity()===id&&this.settings().recallEnabled&&!document.getElementById('zt-memory-assistant-v1'));
+            c.setExtensionPrompt(PROMPT,recalled.content,1,0,false,0,()=>!this.dead&&this.currentIdentity()===id&&this.settings().recallEnabled&&!document.querySelector('#zt-memory-assistant-v1:not([data-zt-native])'));
         }catch(e){this.clearPrompt();console.warn('[诸天终端] 回忆提示未启用：',e.message);}
     }
     draft(target,action) {
@@ -110,7 +117,7 @@ export class HostAdapter {
     }
     async send(draft) {
         if(this.dead)throw Error('扩展已停用。');
-        if(this.busy||this.generating||is_send_press)throw Error('已有操作或主聊天正在生成，请稍后再试。');
+        if(this.busy||this.isGenerating())throw Error('已有操作或主聊天正在生成，请稍后再试。');
         const c=this.context();
         if(!draft?.id||this.sendingReceipts.has(draft.id))throw Error('该操作已提交，不会重复发送。');
         if(identity(c)!==draft.chatIdentity||c.chat!==draft.chatRef||snapshotToken(c)!==draft.token||draft.epoch!==this.generationEpoch)throw Error('聊天或正文已变化，请重新预览再发送。');
@@ -119,7 +126,7 @@ export class HostAdapter {
         const diskTarget={avatar_url:c.characters[c.characterId].avatar,file_name:c.getCurrentChatId()};
         this.busy=true;this.sendingReceipts.add(draft.id);this.notify();
         try {
-            const message=await sendMessageAsUser(normalized.message,'');
+            const message=await this.host.sendMessageAsUser(normalized.message,'');
             // After host events/save, use the original object identity to avoid stamping a different chat.
             if(!draft.chatRef.includes(message))throw Error('宿主未确认消息对象，停止后续操作；不要自动重发。');
             if(identity(this.context())!==draft.chatIdentity||this.context().chat!==draft.chatRef)throw Error('发送期间聊天发生变化。消息可能已写入原聊天，请人工核对；不会自动重发。');

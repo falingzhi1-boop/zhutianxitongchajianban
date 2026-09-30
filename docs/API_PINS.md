@@ -11,13 +11,13 @@
 ## SillyTavern
 
 - 仓库： https://github.com/SillyTavern/SillyTavern
-- 版本 1.19.0，commit `06bde939fb1e9c4c8d8641d810f0a916b5bce127`
+- 0.2.0 固定于 1.19.0 commit `06bde939fb1e9c4c8d8641d810f0a916b5bce127`；0.3.0 支持范围见文末“0.3.0 多版本固定点”。
 - `public/scripts/extensions.js`：manifest hooks；activate 同步返回，异步初始化由扩展内部承接。
 - `public/scripts/st-context.js`：getContext、chatMetadata、eventSource、saveChat、setExtensionPrompt 等。
 - `public/script.js`：**内部导出** `sendMessageAsUser(messageText,messageBias,insertAt=null,compact=false,name=name1,avatar=user_avatar)`，以及 `is_send_press`。不能假定 sendMessageAsUser 位于 getContext。
 - `saveChatConditional` 会捕获保存异常，因此其 Promise 完成不能独立证明写盘成功。本扩展额外读取 `/api/chats/get` 核对消息凭据。
 - `src/endpoints/chats.js`：POST `/api/chats/get`，请求体 avatar_url、file_name，使用宿主 CSRF headers。
-- `/version` 读取字段 `pkgVersion`；确切版本门槛是 1.19.0，不是“所有 1.19+”。
+- `/version` 读取字段 `pkgVersion`。0.3.0 起门槛为 1.16.0（`src/compat.js`），不再精确锁定 1.19.0。
 - `public/lib/eventemitter.js`、`public/scripts/events.js`：APP_READY 对后加入的订阅者自动触发；初始化等待 APP_READY，停用清理订阅。
 - `public/scripts/chats.js`：附件输入 `file_form_input`；有待处理附件则拒绝本次发送。
 - 正文展示选择器：`#chat .mes[mesid="i"] .mes_text`。只追加无执行行为的标记，不重写宿主正文。
@@ -42,3 +42,24 @@
 - `src/endpoints/extensions.js`：安装入口 POST `/api/extensions/install`，JSON 参数 `url`、`global`、可选 `branch`。安装验收在隔离实例进行。
 - 原内核：`vendor/original/ledger-kernel.js` 中52函数与常量逐段提取自原 part2；物品奖励规划和入包回调提取自原助手。范围与哈希见 `ledger-provenance.json`。
 - 安全覆盖层明确增加 `任务实物凭据` 到原模型变量指令保护表；原五文件字节不改动。
+
+## 0.3.0 多版本固定点
+
+验收宿主：1.16.0 `e3b866b5`、1.17.0 `e3f41666`、1.18.0 `51ad27fb`、1.19.0 `7e8663cd`（完整哈希见 `docs/ACCEPTANCE-0.3.0.md`）。
+
+- `public/scripts/extensions.js`：manifest `hooks`（`activate` 等）**从 1.17.0 开始提供**。1.16.0 会加载 `js` 但不调用钩子，本扩展在 `index.js` 里自启动（轮询 `getContext` 后等 `APP_READY`）。
+- `public/lib/eventemitter.js`：四个版本都有 `autoFireLastArgs` / `autoFireAfterEmit`，`APP_READY` 会补发给后订阅的监听者。
+- `public/scripts/st-context.js`：四个版本都提供 `generateRaw`、`sendMessageAsUser`（经 `/script.js` 动态导入）、`setExtensionPrompt`、`saveChat`、`saveMetadata`、
+  `loadWorldInfo`、`saveWorldInfo`、`updateWorldInfoList`、`callGenericPopup`、`registerSlashCommand`、`substituteParams`、`executeSlashCommandsWithOptions`、`powerUserSettings`、`macros`。
+- 宏：`macros.register(name, {handler, description})` 四个版本都有，但 `power_user.experimental_macro_engine` 在 **1.16.0 默认 false**，1.17.0 起默认 true。
+  引擎关闭时 `substituteParams` 只看旧 `MacrosParser`，所以本扩展会按开关状态补注册旧宏条目，并在 `SETTINGS_UPDATED` 时重新检查。
+  1.16 起旧 `registerMacro` 每次调用都会打印 `[DEPRECATED]`。
+- 首次启动引导：全新 `data` 目录会弹出语言和用户引导弹窗，在弹窗关闭前不会触发 `APP_READY`。这是宿主行为；验收脚本会自动关闭它。
+- 酒馆助手 iframe 内的全局 `SillyTavern` 是**上下文对象**（`getCurrentChatId`、`name1`、`groupId` 直接挂在它上面），而宿主页面上的 `SillyTavern` 是带 `getContext()` 的命名空间。
+  原版助手依赖前者，桥接用 `stContextProxy` 实时代理 `getContext()`。
+- 原版状态栏 v3.1 用到的酒馆助手接口只有 7 个：`getVariables`、`replaceVariables`、`updateVariablesWith`、`getLastMessageId`、`getCurrentMessageId`、`generateRaw`、`SillyTavern`，全部由 `src/th-bridge.js` 提供。
+
+## 0.3.0 第三方运行库
+
+- PixiJS 6.5.10、pixi-live2d-display 0.4.0（`cubism4.min.js`），版本、哈希和许可证见 `vendor/live2d/LICENSES.md`。
+- Cubism Core 不打包，默认地址为 `https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js`，可以在设置里改成 `user/files` 里的副本。
