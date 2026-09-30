@@ -1,149 +1,244 @@
 
-> zhutian-covenant-terminal@0.2.0 test
+> zhutian-covenant-terminal@0.4.0 test
 > node --test tests/*.test.js
 
 TAP version 13
 # Subtest: intent stays a player action, not an invented reply
 ok 1 - intent stays a player action, not an invented reply
   ---
-  duration_ms: 1.320821
+  duration_ms: 2.01696
   ...
 # Subtest: macro delimiters and markup become inert visible text
 ok 2 - macro delimiters and markup become inert visible text
   ---
-  duration_ms: 0.284065
+  duration_ms: 0.414351
   ...
 # Subtest: empty and oversize input rejected
 ok 3 - empty and oversize input rejected
   ---
-  duration_ms: 0.429172
+  duration_ms: 0.531967
   ...
 # Subtest: identity requires a real single-character chat
 ok 4 - identity requires a real single-character chat
   ---
-  duration_ms: 0.259504
+  duration_ms: 0.583301
   ...
 # Subtest: different chats and characters have different identities
 ok 5 - different chats and characters have different identities
   ---
-  duration_ms: 0.165123
+  duration_ms: 0.320231
   ...
 # Subtest: new message invalidates preview token
 ok 6 - new message invalidates preview token
   ---
-  duration_ms: 0.14439
+  duration_ms: 0.223535
   ...
 # Subtest: last-message edit and swipe invalidate preview token
 ok 7 - last-message edit and swipe invalidate preview token
   ---
-  duration_ms: 1.558359
+  duration_ms: 0.384576
   ...
 # Subtest: ledger projection is read-only and never invents records
 ok 8 - ledger projection is read-only and never invents records
   ---
-  duration_ms: 0.656089
+  duration_ms: 1.072725
   ...
 # Subtest: feature gaps are explicit, not advertised as migrated
 ok 9 - feature gaps are explicit, not advertised as migrated
   ---
-  duration_ms: 0.313422
+  duration_ms: 0.364632
   ...
 # Subtest: original memory defaults off and rejects unknown schema
 ok 10 - original memory defaults off and rejects unknown schema
   ---
-  duration_ms: 0.271597
+  duration_ms: 0.543023
   ...
 # Subtest: original memory provenance invalidates after source edits
 ok 11 - original memory provenance invalidates after source edits
   ---
-  duration_ms: 1.576422
+  duration_ms: 2.209907
   ...
 # Subtest: original memory rejects fabricated evidence and prototype keys
 ok 12 - original memory rejects fabricated evidence and prototype keys
   ---
-  duration_ms: 0.600488
+  duration_ms: 0.984832
   ...
 # Subtest: original memory recall preserves ledger and neutralizes markup
 ok 13 - original memory recall preserves ledger and neutralizes markup
   ---
-  duration_ms: 0.643011
+  duration_ms: 1.118087
   ...
 # Subtest: original rig and motion APIs are actually retained
 ok 14 - original rig and motion APIs are actually retained
   ---
-  duration_ms: 0.17429
+  duration_ms: 0.357748
   ...
 # Subtest: all five baseline source files match recorded SHA256
 ok 15 - all five baseline source files match recorded SHA256
   ---
-  duration_ms: 2.591939
+  duration_ms: 3.291806
   ...
 # Subtest: original panel settles points and promised physical reward atomically on clone
 ok 16 - original panel settles points and promised physical reward atomically on clone
   ---
-  duration_ms: 43.476423
+  duration_ms: 34.726786
   ...
 # Subtest: stable original receipt stops reward replay after item is consumed
 ok 17 - stable original receipt stops reward replay after item is consumed
   ---
-  duration_ms: 2.339628
+  duration_ms: 2.814407
   ...
 # Subtest: missing pre-settlement promise rejects entire plan including points
 ok 18 - missing pre-settlement promise rejects entire plan including points
   ---
-  duration_ms: 0.986101
+  duration_ms: 1.186861
   ...
 # Subtest: fabricated evidence rejected
 ok 19 - fabricated evidence rejected
   ---
-  duration_ms: 0.685857
+  duration_ms: 0.851363
   ...
 # Subtest: reward grade or quantity cannot escalate beyond recorded promise
 ok 20 - reward grade or quantity cannot escalate beyond recorded promise
   ---
-  duration_ms: 1.04466
+  duration_ms: 1.305913
   ...
 # Subtest: user source and duplicate panels rejected
 ok 21 - user source and duplicate panels rejected
   ---
-  duration_ms: 0.721398
+  duration_ms: 0.978967
   ...
 # Subtest: original reputation discount is ceiled and stock sold exactly once
 ok 22 - original reputation discount is ceiled and stock sold exactly once
   ---
-  duration_ms: 0.942264
+  duration_ms: 2.122377
   ...
 # Subtest: insufficient funds and unsafe values fail without changing input
 ok 23 - insufficient funds and unsafe values fail without changing input
   ---
-  duration_ms: 1.100573
+  duration_ms: 0.544361
   ...
 # Subtest: consumable uses one; equipment is retained
 ok 24 - consumable uses one; equipment is retained
   ---
-  duration_ms: 0.883628
+  duration_ms: 0.971105
   ...
 # Subtest: recycle uses original one-tenth paid price rule
 ok 25 - recycle uses original one-tenth paid price rule
   ---
-  duration_ms: 0.731465
+  duration_ms: 0.928482
   ...
 # Subtest: protected physical receipts cannot be erased by model variable update
 ok 26 - protected physical receipts cannot be erased by model variable update
   ---
-  duration_ms: 1.961086
+  duration_ms: 2.209408
   ...
 # Subtest: history receipts allow appended messages, ignore own system records, reject earlier edits/swipes/deletions
 ok 27 - history receipts allow appended messages, ignore own system records, reject earlier edits/swipes/deletions
   ---
-  duration_ms: 13.379265
+  duration_ms: 19.221422
   ...
-1..27
-# tests 27
+# Subtest: version gate: 1.16.0 minimum, 1.16–1.19 tested, hooks only from 1.17
+ok 28 - version gate: 1.16.0 minimum, 1.16–1.19 tested, hooks only from 1.17
+  ---
+  duration_ms: 2.232567
+  ...
+# Subtest: settings: defaults are filled in place so nested patches are never lost
+ok 29 - settings: defaults are filled in place so nested patches are never lost
+  ---
+  duration_ms: 0.380767
+  ...
+# Subtest: SillyTavern shim: behaves like the Tavern Helper iframe global (context, always fresh)
+ok 30 - SillyTavern shim: behaves like the Tavern Helper iframe global (context, always fresh)
+  ---
+  duration_ms: 0.329146
+  ...
+# Subtest: Live2D helpers: expression picking and height-fit without blank bands
+ok 31 - Live2D helpers: expression picking and height-fit without blank bands
+  ---
+  duration_ms: 1.944703
+  ...
+# Subtest: AI variants: every mood has a shipped 424×632 frame; poses are declared honestly
+ok 32 - AI variants: every mood has a shipped 424×632 frame; poses are declared honestly
+  ---
+  duration_ms: 8.522998
+  ...
+# Subtest: PSD encoder: valid header, layer count, Unicode names, composite
+ok 33 - PSD encoder: valid header, layer count, Unicode names, composite
+  ---
+  duration_ms: 5.118328
+  ...
+# Subtest: version is consistent across manifest, package.json, package-lock and contracts
+ok 34 - version is consistent across manifest, package.json, package-lock and contracts
+  ---
+  duration_ms: 1.018742
+  ...
+# Subtest: macro-like: get_chat_variable reads 诸天系统 paths like Tavern Helper
+ok 35 - macro-like: get_chat_variable reads 诸天系统 paths like Tavern Helper
+  ---
+  duration_ms: 4.964132
+  ...
+# Subtest: macro-like: every worldbook use of get_chat_variable resolves
+ok 36 - macro-like: every worldbook use of get_chat_variable resolves
+  ---
+  duration_ms: 4.001115
+  ...
+# Subtest: macro-like yields to an enabled Tavern Helper macro engine
+ok 37 - macro-like yields to an enabled Tavern Helper macro engine
+  ---
+  duration_ms: 0.281982
+  ...
+# Subtest: voice box: pattern is byte-identical to the v1.1 regex and extracts cue/text like $1$2$4 / $3$5
+ok 38 - voice box: pattern is byte-identical to the v1.1 regex and extracts cue/text like $1$2$4 / $3$5
+  ---
+  duration_ms: 2.27505
+  ...
+# Subtest: compact floor summary matches the original fields (either colon)
+ok 39 - compact floor summary matches the original fields (either colon)
+  ---
+  duration_ms: 0.772644
+  ...
+# Subtest: prompt filter strips panels at depth >= 2 only, never mutating the saved chat
+ok 40 - prompt filter strips panels at depth >= 2 only, never mutating the saved chat
+  ---
+  duration_ms: 1.231709
+  ...
+# Subtest: legacy status-bar detection ignores the prompt-only and compact regexes
+ok 41 - legacy status-bar detection ignores the prompt-only and compact regexes
+  ---
+  duration_ms: 5.66324
+  ...
+# Subtest: bridge.generateRaw honours custom_api max_tokens and temperature (v1.1 bug fix)
+ok 42 - bridge.generateRaw honours custom_api max_tokens and temperature (v1.1 bug fix)
+  ---
+  duration_ms: 32.950733
+  ...
+# Subtest: main-API sentinel is routed to SillyTavern generateRaw and never fetched
+ok 43 - main-API sentinel is routed to SillyTavern generateRaw and never fetched
+  ---
+  duration_ms: 1.366083
+  ...
+# Subtest: takeover finds all v1.1 regexes and scripts (global, folder, character) and restores exactly them
+ok 44 - takeover finds all v1.1 regexes and scripts (global, folder, character) and restores exactly them
+  ---
+  duration_ms: 1.599961
+  ...
+# Subtest: touch strokes: rubbing escalates, a straight short move is not a stroke
+ok 45 - touch strokes: rubbing escalates, a straight short move is not a stroke
+  ---
+  duration_ms: 0.753997
+  ...
+# Subtest: capability list declares the replaced v1.1 pieces
+ok 46 - capability list declares the replaced v1.1 pieces
+  ---
+  duration_ms: 0.328716
+  ...
+1..46
+# tests 46
 # suites 0
-# pass 27
+# pass 46
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 238.284579
+# duration_ms 513.967294

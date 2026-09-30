@@ -2,6 +2,11 @@
 // ledger rollback, compatibility diagnostics, ledger HUD, hotkeys, slash commands and macros.
 import { ID, VERSION, STORAGE, inert } from './contracts.js';
 import { HOST_TESTED } from './compat.js';
+import { detectLegacy } from './takeover.js';
+import { promptFilterStats } from './prompt-filter.js';
+import { readConfigs } from './api-center.js';
+import { isMainApi } from './th-bridge.js';
+import { tavernHelperMacrosActive } from './macro-like.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -16,6 +21,7 @@ export function ledgerSummary(v) {
     const tasks = s.任务库 && typeof s.任务库 === 'object' ? Object.values(s.任务库).filter(t => t && t.状态 !== '已完成' && t.状态 !== '已失败') : [];
     return { points: s.系统点 ?? 0, world: s.当前世界 || '', tasks: tasks.length, task: tasks[0]?.名称 || '', currency: s.当前货币 || '', amount: s.持有金额 ?? '' };
 }
+
 
 export class Features {
     constructor(app) { this.app = app; this.disposers = []; this.hud = null; this.dead = false; }
@@ -45,6 +51,52 @@ export class Features {
             c.chatMetadata.world_info = WORLD_NAME; await c.saveMetadata();
         }
         return this.worldbookStatus();
+    }
+    /** Is this an 诸天 chat? (ledger variable or a status-bar block in any floor) */
+    isZhutianChat() {
+        const c = this.ctx;
+        return !!c.chatMetadata?.variables?.诸天系统 || (c.chat || []).some(m => typeof m?.mes === 'string' && m.mes.includes('<ZhuTianPanel>'));
+    }
+    /** Replaces the manual "import the worldbook and select it" step of v1.1: on an 诸天 chat the book is installed
+     *  (never overwritten) and bound to the chat — unless it is already active globally / on the character, or the
+     *  chat already has another chat book. Returns what happened, for diagnostics. */
+    async autoWorldbook() {
+        if (this.dead || this.app.settings.get('worldbookAuto') === false) return this.wbAuto = 'off';
+        const c = this.ctx;
+        if (!this.app.adapter.currentIdentity() || !this.isZhutianChat()) return this.wbAuto = 'not-zhutian';
+        if (c.chatMetadata?.world_info) return this.wbAuto = c.chatMetadata.world_info === WORLD_NAME ? 'chat' : 'other-chat-book';
+        let wi = null; try { wi = await import('/scripts/world-info.js'); } catch { /* older layout: fall back to chat binding */ }
+        const ch = c.characters?.[c.characterId];
+        const charBooks = [ch?.data?.extensions?.world, ...(wi?.world_info?.charLore?.find?.(e => e.name === ch?.avatar)?.extraBooks || [])];
+        if ((wi?.selected_world_info || []).includes(WORLD_NAME)) return this.wbAuto = 'global';
+        if (charBooks.includes(WORLD_NAME)) return this.wbAuto = 'character';
+        const st = await this.installWorldbook('chat');
+        if (st.chatBound) this.toast('info', `已自动安装并绑定“${WORLD_NAME}”世界书（${st.count} 条）到当前聊天。可在设置中关闭自动绑定。`);
+        const b = await this.worldbookBudget().catch(() => null);
+        if (b && !b.ok) this.toast('warning', `世界书预算只有 ${b.budget} token，诸天常驻规则需要约 ${b.need}，酒馆会整批跳过它们。打开“兼容诊断”可一键调整。`);
+        return this.wbAuto = st.chatBound ? 'auto-bound' : 'failed';
+    }
+    /** The 11 constant 诸天 rules (~12k characters) must fit SillyTavern's world-info budget, otherwise ST silently
+     *  drops them. Returns {need, budget, ok} in tokens, or null when the host does not expose the numbers. */
+    async worldbookBudget() {
+        const c = this.ctx; let wi = null; try { wi = await import('/scripts/world-info.js'); } catch { return null; }
+        const max = c.mainApi === 'openai' && c.chatCompletionSettings?.openai_max_context ? Number(c.chatCompletionSettings.openai_max_context) : Number(c.maxContext), pct = Number(wi.world_info_budget), cap = Number(wi.world_info_budget_cap) || 0;
+        if (!Number.isFinite(max) || !Number.isFinite(pct)) return null;
+        let budget = Math.max(1, Math.round(max * pct / 100)); if (cap > 0) budget = Math.min(budget, cap);
+        const text = this.app.original.ZhuTianBuiltinRules.filter(r => r.constant && !r.disable).map(r => r.content).join('\n');
+        let need = Math.ceil(text.length * 0.9);
+        try { if (typeof c.getTokenCountAsync === 'function') need = await c.getTokenCountAsync(text); } catch { /* estimate */ }
+        return this.wbBudget = { need, budget, max, pct, cap, ok: budget >= need };
+    }
+    /** Raises the world-info budget through SillyTavern's own controls (so ST saves it the normal way). */
+    fixWorldbookBudget() {
+        const b = this.wbBudget; if (!b || b.ok) return false;
+        const pct = Math.min(100, Math.ceil((b.need * 1.25) / b.max * 100));
+        const set = (id, v) => { const el = document.getElementById(id); if (!el) return false; el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; };
+        const done = set('world_info_budget', pct);
+        if (b.cap > 0 && b.cap < b.need) set('world_info_budget_cap', 0);
+        if (pct >= 100 && b.max * 1.0 < b.need * 1.25) this.toast('warning', '上下文长度太小，即使预算 100% 也放不下诸天常驻规则，请在 API 设置中调大上下文。');
+        return done;
     }
     async openWorldbook() {
         const st = await this.worldbookStatus();
@@ -95,13 +147,40 @@ export class Features {
             } catch (err) { out.textContent = '未完成：' + err.message; }
         });
     }
-    openDiagnostics() {
+    async openDiagnostics() {
+        await this.worldbookBudget().catch(() => null);
         const a = this.app.adapter, caps = a.capabilities || [], sb = this.app.statusbar?.state || {};
         this.popup(`<h3>兼容诊断 · ${VERSION}</h3>
 <p>SillyTavern <b>${esc(a.version)}</b>：${esc(a.support?.reason)}</p><p>已验收版本：${HOST_TESTED.join(' / ')}（每个版本均在隔离真实宿主上跑过浏览器验收）。</p>
 <table class="zt-table"><tr><th>接口</th><th>状态</th></tr>${caps.map(x => `<tr><td>${esc(x.label)}</td><td>${x.ok ? '✅' : '❌ 相关功能自动停用'}</td></tr>`).join('')}</table>
 <p>原生状态栏：${esc(sb.mode)} — ${esc(sb.reason)}</p><p>莉莉丝助手：${(h => h ? (h.ok ? '运行中（原版代码 + 原生桥接）' : '⚠ 窗口已创建但原版未完全启动：' + esc(h.text)) : esc(this.app.assistantError || '未启动'))(this.app.assistant?.health?.())}</p>
-<p>立绘：${esc(this.app.portrait?.describe?.() || '原版分层参数动画')}</p>`, true);
+<p>立绘：${esc(this.app.portrait?.describe?.() || '原版分层参数动画')}</p>
+<h4>原版 v1.1 取代情况</h4><table class="zt-table"><tr><th>原版组件</th><th>插件接管</th></tr>${this.replacementRows().map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('')}</table>
+<div class="zt-popup-actions"><div class="menu_button" data-diag="takeover">一键接管旧版</div><div class="menu_button" data-diag="api">API 中心</div>${this.wbBudget && !this.wbBudget.ok ? '<div class="menu_button" data-diag="budget">调整世界书预算</div>' : ''}</div>`, true)
+            .addEventListener('click', e => { const act = e.target.closest('[data-diag]')?.dataset.diag; if (act === 'takeover') this.app.runTakeover?.(); if (act === 'api') this.app.openApiCenter?.(); if (act === 'budget' && this.fixWorldbookBudget()) { this.toast('success', '已调整世界书预算。'); this.worldbookBudget(); } });
+    }
+    /** One row per piece of the original v1.1 install: what replaces it now and what is still left over. */
+    replacementRows() {
+        const app = this.app, st = app.settings, sb = app.statusbar, legacy = (() => { try { return detectLegacy(this.ctx); } catch { return []; } })();
+        const left = kind => legacy.filter(i => i.kind === kind);
+        const on = (k, yes, no = '已关闭') => st.get(k) === false ? '⏸ ' + no : '✅ ' + yes;
+        let api = { status: {}, assistant: {} }; try { api = readConfigs(app.bridge, app.original.ZhuTianMemoryCore?.NS); } catch { /* bridge gone */ }
+        const apiText = c => c?.url ? (isMainApi(c.url) ? '酒馆主 API' : esc(new URL(c.url).host) + (c.model ? ' · ' + esc(c.model) : '')) : '⚠ 未设置（打开 API 中心）';
+        const counts = sb?.counts || {};
+        return [
+            ['世界书「诸天万界最强系统」', ({ chat: '✅ 已绑定到当前聊天', 'auto-bound': '✅ 已自动安装并绑定到当前聊天', global: '✅ 已作为全局世界书启用', character: '✅ 已绑定在角色卡上', 'other-chat-book': '⚠ 当前聊天绑定了别的世界书，未自动替换（可在“世界书安装/绑定”手动处理）', 'not-zhutian': '… 当前聊天还不是诸天存档（有账本或状态栏后自动绑定）', off: '⏸ 自动绑定已关闭' })[this.wbAuto] || esc(this.wbAuto || '检查中') + '（内置 35 条，逐条与原版一致）'],
+            ['世界书预算', !this.wbBudget ? '… 未检测' : this.wbBudget.ok ? `✅ ${this.wbBudget.budget} token ≥ 常驻规则约 ${this.wbBudget.need}` : `⚠ 仅 ${this.wbBudget.budget} token，常驻规则需要约 ${this.wbBudget.need}：酒馆会跳过诸天规则 — 点“调整世界书预算”`],
+            ['正则 · 状态栏 3.1', sb ? (sb.state.mode === 'native' ? '✅ 原生渲染（8 分页全部功能）' : '⏸ ' + esc(sb.state.reason)) : '❌ ' + esc(app.statusbarError || '未启动')],
+            ['正则 · 旧楼层精简显示', on('compactHistory', `原生精简卡（本页已显示 ${counts.compact || 0} 张），点击展开完整状态栏`)],
+            ['正则 · 旧楼层不发给AI', on('promptStripPanels', `生成拦截器（保留最新 ${esc(st.get('promptPanelKeepDepth'))} 层；已处理 ${promptFilterStats.runs} 次生成 / ${promptFilterStats.floors} 层）`)],
+            ['正则 · 莉莉丝专属语音框', on('voiceBox', `原生语音框（已渲染 ${counts.voices || 0} 条），语气头像、不写情绪词`, '已关闭（台词按普通正文显示）')],
+            ['酒馆助手 · 变量宏', st.get('macroLike') === false ? '⏸ 已关闭' : tavernHelperMacrosActive(this.ctx) ? '↪ 酒馆助手在运行，由它处理（插件让位）' : !app.macros ? '⚠ 未启动（见控制台）' : /缺少/.test(app.macros.state || '') ? `⚠ ${esc(app.macros.state)}` : `✅ 原生处理 {{get_chat_variable::…}}（${app.macros?.stats?.prompts || 0} 次生成）`],
+            ['酒馆助手脚本 · 莉莉丝契约空间', app.assistant ? '✅ 原版代码经原生桥接运行（记忆、工作台、私聊、连接、立绘）' : '❌ ' + esc(app.assistantError || '未启用')],
+            ['真实触摸互动', app.touch?.stage ? on('touchGestures', `轻点 + 抚摸 + 长按 + 视线跟随（轻点 ${app.touch.stats.taps} / 抚摸 ${app.touch.stats.strokes} / 长按 ${app.touch.stats.holds}）`) : '… 打开莉莉丝窗口后挂载'],
+            ['API · 状态栏', apiText(api.status)],
+            ['API · 莉莉丝助手 / 私聊', apiText(api.assistant)],
+            ['仍启用的旧版内容', legacy.length ? '⚠ ' + legacy.map(i => esc(`${i.kind === 'regex' ? '正则' : '脚本'}：${i.name}`)).join('；') + ' — 点“一键接管旧版”停用' + (left('script').length ? '（旧助手脚本与插件同时运行会出现两个莉莉丝）' : '') : '✅ 无，已完全由插件接管'],
+        ];
     }
 
     // ---------- HUD ----------
@@ -178,8 +257,12 @@ export class Features {
         this.mountHud(); this.mountHotkeys(); this.registerCommands();
         this.disposers.push(this.app.adapter.subscribe(() => this.refreshHud()));
         this.disposers.push(this.app.bridge.onChange(() => this.refreshHud()));
-        this.disposers.push(this.app.settings.onChange(k => { if (k === 'hud') this.refreshHud(); }));
+        this.disposers.push(this.app.settings.onChange(k => { if (k === 'hud') this.refreshHud(); if (k === 'worldbookAuto') this.scheduleWorldbook(); }));
+        const c = this.ctx, ev = c.eventTypes, run = () => this.scheduleWorldbook();
+        for (const key of ['CHAT_CHANGED', 'MESSAGE_RECEIVED']) if (ev[key]) { c.eventSource.on(ev[key], run); this.disposers.push(() => c.eventSource.removeListener(ev[key], run)); }
+        this.scheduleWorldbook();
     }
-    dispose() { this.dead = true; this.disposers.splice(0).forEach(f => f()); this.hud?.remove(); this.hud = null; }
+    scheduleWorldbook() { clearTimeout(this.wbTimer); this.wbTimer = setTimeout(() => this.autoWorldbook().catch(e => { this.wbAuto = 'error: ' + e.message; console.warn('[诸天] 世界书自动绑定失败', e); }), 800); }
+    dispose() { this.dead = true; clearTimeout(this.wbTimer); this.disposers.splice(0).forEach(f => f()); this.hud?.remove(); this.hud = null; }
 }
 export { STORAGE };

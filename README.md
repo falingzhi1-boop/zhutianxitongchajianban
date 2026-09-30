@@ -1,14 +1,39 @@
 # 诸天 · 莉莉丝契约终端
 
-**0.3.0 原生 SillyTavern 扩展｜支持 SillyTavern 1.16–1.19｜需要模型的原版功能尚未完成模型验收**
+**0.4.0 原生 SillyTavern 扩展｜支持 SillyTavern 1.16–1.19｜只装本插件即可取代「诸天万界最强系统」v1.1 的全部安装内容**
 
-原版状态栏 v3.1、原版莉莉丝助手、沉浸终端、真实正文互动和原版结算内核，都直接跑在原生扩展里，**不需要酒馆助手，也不需要正则脚本**；另外提供真 Live2D 和 AI 差分立绘。不使用概念样机的虚构经济规则。
+v1.1 需要装世界书、4 个正则脚本和 1 个酒馆助手脚本；现在这些全部由本插件原生完成，**不需要酒馆助手，也不需要正则脚本**：
+- 状态栏 8 个分页及其全部 AI 功能；
+- 莉莉丝助手、私聊、触摸互动；
+- 可开关的莉莉丝语音美化；
+- 旧楼层精简显示，以及旧楼层面板不发给 AI；
+- 变量宏；
+- 外挂世界书的自动安装和绑定。
 
-> 本版本新增已有账本的结算写入能力，**默认关闭**。先在隔离副本中验收并备份，再停用旧状态栏和旧助手。不得同时启用两个结算引擎。此版本尚不能替换原版全套功能。
+另外还提供真 Live2D、AI 差分立绘，以及 API 中心（可选独立 API 或酒馆主 API）。
 
-![隔离酒馆中的原生万界交易界面](docs/evidence/commerce-desktop.png)
+> 所有 AI 链路都已在真实 SillyTavern 上配合本地**模拟模型**完整跑通，但**还没有接真实模型验收**。第一次使用真实模型时，请先在备份的聊天上试用。见 [功能矩阵](docs/FEATURE_MATRIX.md)。
 
-*截图使用明确标记的隔离测试账本，不是为新用户自动生成的余额。*
+![隔离酒馆中的原生状态栏与莉莉丝语音卡](docs/evidence/r040-live-floor.png)
+
+*截图使用明确标记的隔离测试聊天和模拟模型，不是真实存档。*
+
+## 从 v1.1 迁移（一键接管）
+
+1. 安装本插件（见下一节），然后刷新页面。
+2. 打开诸天聊天。插件会自动安装并绑定外挂世界书；已存在的不覆盖。
+3. 在扩展设置里点「**一键接管旧版**」（也可以先点「兼容诊断」或输入 `/zt diag`，查看还有哪些旧版内容仍在启用）：
+   - 停用旧的 4 个正则和旧的酒馆助手脚本，只停用、不删除；
+   - 写盘后自动刷新页面。
+   - 想回到旧版时，点扩展设置里的「恢复旧版」。
+4. 在扩展设置里点「**API 中心**」，选一种接法：
+   - 独立 OpenAI 兼容接口；
+   - 直接用酒馆当前的主 API。
+
+   状态栏的所有 AI 按钮和莉莉丝读的是同一份配置。
+5. 如果「兼容诊断」提示“世界书预算不足”，点面板里的「一键调整」。ST 默认只把上下文的 25% 分给世界书；上下文太小时，诸天的常驻规则会被 ST 整体丢弃。
+
+逐项替代关系见 [CHANGES-0.4.0](docs/CHANGES-0.4.0.md)。
 
 ## Git 安装
 
@@ -24,6 +49,20 @@ https://github.com/falingzhi1-boop/zhutianxitongchajianban
 - 前端运行不需要 `npm install`，也不需要酒馆助手。如果仍然开着旧的状态栏正则或旧的莉莉丝助手脚本，本扩展会自动让位或提示停用，避免重复渲染和重复计费。
 - 请勿同时安装旧的 `zhutian-covenant-terminal` 手动副本和这个 Git 仓库副本。
 - **“扩展可以安装”不等于“全部原版功能已经迁完”。** Git 安装验收的具体结果以 `docs/INSTALL_ACCEPTANCE.md` 为准。
+
+## 0.4.0 新增
+
+完整变更见 [CHANGES-0.4.0](docs/CHANGES-0.4.0.md)，验收结果见 [ACCEPTANCE-0.4.0](docs/ACCEPTANCE-0.4.0.md)。
+
+- **取代 v1.1 全部安装内容**：世界书（自动安装和绑定，附预算检查）、4 个正则、酒馆助手脚本和变量宏。
+- **状态栏全部 AI 功能**：AI 进货、许愿、抽卡、背包整理、打手召唤、万物熔炉、实力评估、测试连接。两种接法都可用：
+  - 独立 API；
+  - 酒馆主 API。
+- **API 中心**：配置同时写回原版三处存储，原版界面读到的是同一份。
+- **莉莉丝语音美化（可开关）**、**旧楼层精简卡**、**旧楼层面板不发给 AI**（只影响提示词，不改存档）。
+- **真实触摸**：抚摸（逐级升温）、长按、点按、触觉反馈；支持移动端。
+- **一键接管和恢复旧版**，诊断面板提供 v1.1 替代对照表。
+- **新 AI 姿势**：抱臂、侧坐。
 
 ## 0.3.0 新增
 
@@ -68,16 +107,14 @@ https://github.com/falingzhi1-boop/zhutianxitongchajianban
 - 明确启用后使用原版回忆算法；不开启自动付费整理。
 - WebGL 不可用回退原图，关闭终端和减少动态效果偏好可暂停动画。
 
-## 尚未迁移
+## 尚未完成
 
-以下功能的原版界面和逻辑已经在原生桥接上运行，但都需要调用模型，而验收环境没有密钥、没有做真实模型调用，所以**尚未完成模型验收**：
-AI 进货、抽卡、许愿、神通和外挂的支付类动作、背包 AI 整理、自动记忆整理与补读、独立 API 私聊、工作台的模型请求、流式回复。不会用预设对白冒充 AI 回答。
+- **真实模型验收**：所有 AI 链路只用本地模拟模型跑通过。不会用预设对白冒充 AI 回答。
+- **莉莉丝本人的 Live2D 模型**：需要用导出的 PSD 在 Cubism Editor 里人工绑定。
+- **未逐项点击**：状态栏里不调用模型的本地动作（外挂和神通的支付类按钮），以及十连和自定义次数抽卡。
+- **群聊**：不支持。
 
-还没有完成的：莉莉丝本人的 Live2D 模型（需要用导出的 PSD 在 Cubism Editor 里人工绑定）、“抱臂”“侧坐”两个 AI 姿势的素材、移动端布局验收、群聊。
-
-全新聊天不会填入模拟余额。`/zt init` 按原版初始结构创建账本，但 0.3.0 只在已有账本的聊天上验证过它的幂等性，没有在全新空聊天上做浏览器验收。
-
-见 [功能矩阵](docs/FEATURE_MATRIX.md)、[验收报告](docs/ACCEPTANCE.md)、[接口固定点](docs/API_PINS.md)。
+见 [功能矩阵](docs/FEATURE_MATRIX.md)、[验收报告](docs/ACCEPTANCE-0.4.0.md)、[接口固定点](docs/API_PINS.md)。
 
 ## 数据位置
 
@@ -88,6 +125,9 @@ AI 进货、抽卡、许愿、神通和外挂的支付类动作、背包 AI 整�
 | 本扩展开关与原生凭据 | `chatMetadata.zhutianCovenantTerminal` |
 | 正文玩家互动 / 系统凭据标记 | `message.extra.zhutianCovenantTerminal` |
 | 回忆提示命名空间 | `zhutian-covenant-terminal/memory` |
+| 状态栏 API 配置（原版位置） | 全局变量 `诸天系统_API`，回落 `localStorage.sys_api_config` |
+| 莉莉丝 API 配置（原版位置） | 脚本变量 `诸天记忆助手_v1_API` |
+| 一键接管记录 | 扩展设置 `takeoverLog`（恢复旧版只处理这里记录的项） |
 
 已发送的消息和已执行交易不会在停用时删除或自动回滚。停用清理的是入口、UI 装饰、事件、动画及本扩展提示。退回 0.1 或旧状态栏不能自动撤销 0.2 已写入的真实账本，请使用事先备份。
 
@@ -103,19 +143,28 @@ npm run extract:ledger    # 从保留的原五文件中重建两个原版内核
 python tools/extract_original.py
 ```
 
-浏览器验收需要 Python Playwright、Chromium，以及运行中的隔离 SillyTavern（0.3.0 的四版本验收过程和结果见 `docs/ACCEPTANCE-0.3.0.md`）。
-
-**下列脚本会创建/重置“隔离验收”和“结算 QA”测试聊天，禁止指向生产酒馆；按顺序运行，不要并行。**
+浏览器验收需要 Python Playwright、Chromium，以及**一次性的**隔离 SillyTavern。`tests/qa/` 里有可复现的全套环境：
 
 ```bash
-python tests/native_acceptance.py --isolated-test-only
-python tests/native_guards.py --isolated-test-only
-python tests/native_views.py --isolated-test-only
-python tests/native_ledger.py --isolated-test-only
-python tests/native_ledger_guards.py --isolated-test-only
+git clone --depth 1 --branch 1.19.0 https://github.com/SillyTavern/SillyTavern /var/tmp/st-1.19.0
+(cd /var/tmp/st-1.19.0 && npm i --omit=dev)
+python3 tests/qa/setup_isolated_st.py /var/tmp/st-1.19.0 8019    # 配置 config.yaml，并把本仓库链接进 third-party
+python3 tests/qa/mock_model.py &                                  # 本地模拟模型 :5001，不需要任何密钥
+tests/qa/run_matrix.sh <旧版离线包-v1.1 目录> 1.19.0              # 依次启动每个宿主，跑全部浏览器验收
 ```
 
-默认宿主为 `http://127.0.0.1:8010`，支持 `--base-url`。前三个回归脚本可用 `--extension-folder` 指定安装文件夹名，默认是本仓库名。
+**下列脚本会创建或重置“隔离验收”“结算 QA”“诸天验收”测试聊天，禁止指向生产酒馆；按顺序运行，不要并行。**
+
+```bash
+python tests/native_replace040.py --isolated-test-only --base-url http://127.0.0.1:8019 --legacy-dir <旧版离线包-v1.1>
+python tests/native_acceptance.py --isolated-test-only --base-url http://127.0.0.1:8019
+python tests/native_guards.py --isolated-test-only --base-url http://127.0.0.1:8019
+python tests/native_views.py --isolated-test-only --base-url http://127.0.0.1:8019
+python tests/native_ledger.py --isolated-test-only --base-url http://127.0.0.1:8019
+python tests/native_ledger_guards.py --isolated-test-only --base-url http://127.0.0.1:8019
+```
+
+`--legacy-dir` 指向原版 v1.1 离线包，一键接管测试需要读取里面的旧正则。离线包不在本仓库里。
 
 ## 来源与交付原则
 
@@ -123,4 +172,4 @@ python tests/native_ledger_guards.py --isolated-test-only
 
 五个原文件完整同名保留于 `vendor/original/`，不执行旧宿主适配器。提取范围和哈希见两个 provenance JSON。原源码与素材权利归原权利人；星海背景来自前一轮 AI 概念美术，莉莉丝使用原版资源。
 
-**原项目的两个本地导入 JSON 不在本仓库，也不会上传。** 本轮未修改旧状态栏匹配规则或正则 HTML。宿主本体、隔离配置、账号数据、依赖目录和连接凭据均不随扩展交付。
+**原项目的两个本地导入 JSON 和 v1.1 离线包都不在本仓库，也不会上传。** 本轮未修改旧状态栏匹配规则或正则 HTML。宿主本体、隔离配置、账号数据、依赖目录和连接凭据均不随扩展交付。

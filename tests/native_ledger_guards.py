@@ -1,6 +1,22 @@
 from playwright.sync_api import sync_playwright,expect
 from pathlib import Path
 import argparse,json
+import sys,pathlib;sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent));from qa_host import host_info,extension_version
+
+def terminal_only(page):
+    """Terminal-only mode (the 0.2.0 layout these suites were written for), for THIS page only - nothing is persisted.
+    0.3.0+ makes the native status bar the sole panel-settlement engine and Lilith the memory-prompt owner, so both are
+    unloaded right after the page is ready and BEFORE any fixture is seeded (otherwise the status bar races the suite and
+    settles the fixture panel itself). Also shows the terminal's own launcher, which 0.3.0+ hides by default."""
+    page.wait_for_function('!!globalThis.__zhutianApp', timeout=60000)
+    page.evaluate("globalThis.__zhutianApp.settings.get('terminalLauncher') || globalThis.__zhutianApp.settings.set('terminalLauncher', true)")
+    page.evaluate("""()=>{const app=globalThis.__zhutianApp;if(app?.assistant?.hostElement?.isConnected){try{app.assistant.dispose();}catch(e){}}if(app?.statusbar){try{app.statusbar.dispose();}catch(e){}app.statusbar=null;}}""")
+
+def launcher(page):
+    terminal_only(page)
+    page.wait_for_timeout(700)
+    return page.locator('#zt-covenant-launcher')
+
 parser=argparse.ArgumentParser(description='Run after native_ledger.py on disposable QA fixtures only.')
 parser.add_argument('--isolated-test-only',action='store_true',required=True);parser.add_argument('--base-url',default='http://127.0.0.1:8010');args=parser.parse_args()
 out=Path(__file__).resolve().parents[1]/'docs/evidence'
@@ -8,7 +24,7 @@ with sync_playwright() as p:
  b=p.chromium.launch(args=['--no-sandbox','--disable-webgl']);context=b.new_context(reduced_motion='reduce');pages=[context.new_page(),context.new_page()];errors=[]
  def setup(page):
   page.on('pageerror',lambda e:errors.append(str(e)));page.goto(args.base_url);page.wait_for_function("()=>{try{return SillyTavern.getContext().eventSource.autoFireLastArgs.has(SillyTavern.getContext().eventTypes.APP_READY)}catch{return false}}",timeout=60000)
-  page.evaluate("async()=>{const c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='结算 QA · 非生产账本'));}");page.locator('#zt-covenant-launcher').click();page.locator('#zhutian-covenant-terminal nav [data-page="commerce"]').click()
+  terminal_only(page);page.evaluate("async()=>{const c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='结算 QA · 非生产账本'));}");launcher(page).click();page.locator('#zhutian-covenant-terminal nav [data-page="commerce"]').click()
  for page in pages:setup(page)
  a,z=pages;ra=a.locator('#zhutian-covenant-terminal');rz=z.locator('#zhutian-covenant-terminal')
  def persisted_count(page):return page.evaluate("async()=>{const c=SillyTavern.getContext();const r=await fetch('/api/chats/get',{method:'POST',headers:c.getRequestHeaders(),body:JSON.stringify({avatar_url:c.characters[c.characterId].avatar,file_name:c.getCurrentChatId()})});const d=await r.json();return Object.keys(d[0].chat_metadata.zhutianCovenantTerminal.ledgerReceipts||{}).length;}")
@@ -31,5 +47,5 @@ with sync_playwright() as p:
  assert a.evaluate('SillyTavern.getContext().chat.some(m=>m.extra?.zhutianCovenantTerminal?.kind==="ledger-receipt")')==False
  a.evaluate("async()=>{const c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='结算 QA · 非生产账本'));}");assert persisted_count(a)==before+2
  assert not errors,errors
- result={'host':'SillyTavern 1.19.0','extension':'0.2.0','tests':['same-origin Web Lock rejects competing tab without writing','stale second-tab preview cannot overwrite first receipt','captured save target survives mid-response real chat switch; no metadata injected into other chat'],'pageErrors':errors,'receiptCountBefore':before,'receiptCountAfter':before+2,'transportNote':'For chat-switch test route.fetch performs the real save; its response is delayed until a real selectCharacterById call completes.'}
+ result={**host_info(args.base_url),'extension':extension_version(),'tests':['same-origin Web Lock rejects competing tab without writing','stale second-tab preview cannot overwrite first receipt','captured save target survives mid-response real chat switch; no metadata injected into other chat'],'pageErrors':errors,'receiptCountBefore':before,'receiptCountAfter':before+2,'transportNote':'For chat-switch test route.fetch performs the real save; its response is delayed until a real selectCharacterById call completes.'}
  (out/'native-ledger-guards.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));b.close()

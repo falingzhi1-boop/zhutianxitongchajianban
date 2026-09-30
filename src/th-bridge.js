@@ -29,6 +29,13 @@ export function toThMessage(m, i) {
         extra: clone(m.extra || {}), swipe_id: m.swipe_id ?? 0, swipes: Array.isArray(m.swipes) ? [...m.swipes] : [m.mes || ''],
     };
 }
+/** Opt-in sentinel chosen in the API center: "use SillyTavern's currently connected main API". It is an https URL on
+ *  the reserved .invalid TLD, so the original validators accept it and no real request can ever leave the browser;
+ *  the bridge and the assistant fetch shim answer it through SillyTavern generateRaw. Never used unless selected. */
+export const MAIN_API_HOST = 'st-main.zhutian.invalid';
+export const MAIN_API_URL = `https://${MAIN_API_HOST}/v1`;
+export const MAIN_API_MODEL = '酒馆当前主API';
+export function isMainApi(url) { try { return new URL(String(url || '').trim()).hostname === MAIN_API_HOST; } catch { return false; } }
 /** Chat-completions endpoint normalisation shared by the status bar and the assistant. */
 export function endpointOf(url) {
     const raw = String(url || '').trim().replace(/\/+$/, '');
@@ -153,6 +160,8 @@ export class Bridge {
     // ---------- generation ----------
     /** OpenAI-compatible request: direct first (identical to the original), then through the user's own ST server if CORS blocks. */
     async customChat(config, messages, { signal, maxTokens = 1800, temperature, plain = false } = {}) {
+        const cap0 = Number(config.maxTokens); if (Number.isInteger(cap0) && cap0 >= 64 && cap0 <= 65536) maxTokens = cap0;
+        if (isMainApi(config.url || config.apiurl)) return { text: await this.mainChat(messages, { maxTokens, signal }), via: 'st-main' };
         const { chat, base } = endpointOf(config.url || config.apiurl);
         const model = String(config.model || '').trim();
         if (!model) throw Error('请先设置独立 API 的模型名称');
@@ -178,6 +187,7 @@ export class Bridge {
         return { text, via: direct ? 'direct' : 'st-proxy' };
     }
     async listModels(url, key) {
+        if (isMainApi(url)) return [MAIN_API_MODEL];
         const { base } = endpointOf(url); let error = null;
         for (const u of [base + '/models', ...(/\/v\d+$/.test(base) ? [] : [base + '/v1/models'])]) {
             try {
@@ -191,20 +201,34 @@ export class Bridge {
         if (r?.ok) { const d = await r.json(); const list = (d?.data || []).map(x => x.id || x.name).filter(Boolean); if (list.length) return list; }
         throw error || Error('没有拉取到模型');
     }
-    /** Subset of Tavern Helper generateRaw used by the 3.1 status bar (AI 进货 / 抽卡 / 许愿 / 天眼 …). */
+    /** SillyTavern's currently connected main API (generateRaw), for the API center's explicit "酒馆主API" choice and
+     *  for status-bar calls without an independent API. Messages keep their roles (system prompts stay separate). */
+    async mainChat(messages, { maxTokens, signal } = {}) {
+        const raw = this.adapter.host?.generateRaw;
+        if (typeof raw !== 'function') throw Error('当前酒馆没有 generateRaw，无法使用主 API');
+        if (signal?.aborted) throw Error('请求已取消或超时');
+        const list = (messages || []).filter(m => m && typeof m.content === 'string' && m.content);
+        const system = list.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+        const rest = list.filter(m => m.role !== 'system');
+        const options = { prompt: rest.length === 1 && rest[0].role === 'user' ? rest[0].content : rest, systemPrompt: system };
+        if (Number.isInteger(Number(maxTokens)) && Number(maxTokens) > 0) options.responseLength = Number(maxTokens);
+        const text = await raw(options);
+        if (typeof text !== 'string' || !text.trim()) throw Error('酒馆主 API 未返回文字内容');
+        return text;
+    }
+    /** Subset of Tavern Helper generateRaw used by the 3.1 status bar (AI 进货 / 抽卡 / 许愿 / 天眼 …).
+     *  The status bar passes its limits inside custom_api (max_tokens, temperature 0.7) — both are honoured. */
     async generateRaw({ user_input = '', ordered_prompts, custom_api, max_tokens } = {}) {
         const prompts = Array.isArray(ordered_prompts) ? ordered_prompts : [{ role: 'system', content: '' }, 'user_input'];
         const messages = prompts.map(p => p === 'user_input' ? { role: 'user', content: String(user_input) } : (p && typeof p === 'object' && typeof p.content === 'string' ? { role: p.role || 'system', content: p.content } : null)).filter(m => m && m.content);
-        if (custom_api?.apiurl) {
+        const limit = Number(custom_api?.max_tokens) || Number(max_tokens) || 4096;
+        if (custom_api?.apiurl && !isMainApi(custom_api.apiurl)) {
             const control = new AbortController(), timer = setTimeout(() => control.abort(), 90000);
-            try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model }, messages, { signal: control.signal, maxTokens: max_tokens || 4096, plain: true })).text; }
+            const temperature = Number.isFinite(Number(custom_api.temperature)) ? Number(custom_api.temperature) : undefined;
+            try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
             finally { clearTimeout(timer); }
         }
-        const raw = this.adapter.host?.generateRaw;
-        if (typeof raw !== 'function') throw Error('当前酒馆没有 generateRaw');
-        const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
-        const rest = messages.filter(m => m.role !== 'system');
-        return raw({ prompt: rest.length === 1 ? rest[0].content : rest, systemPrompt: system });
+        return this.mainChat(messages, { maxTokens: limit });
     }
 
     // ---------- Tavern Helper script storage import (old saves) ----------

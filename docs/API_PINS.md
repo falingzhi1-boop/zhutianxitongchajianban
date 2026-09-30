@@ -63,3 +63,31 @@
 
 - PixiJS 6.5.10、pixi-live2d-display 0.4.0（`cubism4.min.js`），版本、哈希和许可证见 `vendor/live2d/LICENSES.md`。
 - Cubism Core 不打包，默认地址为 `https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js`，可以在设置里改成 `user/files` 里的副本。
+
+## 0.4.0 新增依赖
+
+验收宿主与 0.3.0 相同：1.16.0 `e3b866b5`、1.17.0 `e3f41666`、1.18.0 `51ad27fb`、1.19.0 `7e8663cd`。本轮在四个版本上都从官方仓库重新安装，结果见 `docs/ACCEPTANCE-0.4.0.md`。
+
+- **生成拦截器**：`manifest.json` 中 `generate_interceptor: "zhutianGenerateInterceptor"`。拦截器拿到的 `chat` 不含隐藏消息，而且是宿主对象，所以本扩展先克隆再修改。只影响发给模型的提示词，不改存档。
+- **变量宏**：
+  - 语义照搬 TH 的 `macro_like`。
+  - 提示词侧：在 `GENERATE_AFTER_DATA` 里替换（跳过 dry run）。1.16–1.19 都有这个事件；缺失时只在显示侧替换，并在诊断面板写明原因。
+  - 显示侧：由本扩展的消息渲染器直接调用 `replaceMacroLike()`，与 TH 的剧情渲染器做法一致。
+  - `getLocalVariable` 没有点号路径，所以嵌套路径由本扩展自己解析。
+- **世界书**：
+  - 聊天绑定：`chatMetadata.world_info`。
+  - 全局选择：`/scripts/world-info.js` 的 `selected_world_info`。
+  - 预算：同一模块的 `world_info_budget`、`world_info_budget_cap`；token 计数用 `getTokenCountAsync`。
+  - 上下文大小：Chat Completion 读 `chatCompletionSettings.openai_max_context`（`mainApi === 'openai'` 时），其他接法读 `maxContext`。
+  - 一键调整：通过 `#world_info_budget` 和 `#world_info_budget_cap` 控件触发 `input`/`change` 事件，由 ST 自己保存。
+- **正则**：`extensionSettings.regex[]`，按 id 停用或恢复。ST 的正则引擎会对整段替换文本执行 `substituteParams`，所以原生渲染不经过正则，也就不会被宏误替换。
+- **酒馆助手存储**：
+  - 全局：`extensionSettings.tavern_helper.script.scripts[]`。
+  - 角色：`data.extensions.tavern_helper`，通过 `writeExtensionField` 写回。
+- **设置写盘**：
+  - 一键接管调用 `/script.js` 的 `saveSettings()`（会 await），拿不到时退回 `saveSettingsDebounced`。
+  - E2E 用 `POST /api/settings/get` 从服务器读回，确认刷新前已经落盘。
+- **主 API 通道**：
+  - 原版代码里的网址会换成哨兵地址 `https://st-main.zhutian.invalid/v1`，模型为 `酒馆当前主API`。
+  - 请求改由 `generateRaw` 发出，哨兵地址从不会被真正请求（E2E 检查了 mock 日志）。
+  - 这种模式下，温度等参数取自 ST 当前预设。

@@ -9,6 +9,14 @@ import {StatusBarHost} from './src/statusbar-host.js';
 import {AssistantHost} from './src/assistant-host.js';
 import {Features} from './src/features.js';
 import {Portrait} from './src/portrait.js';
+import {MacroLikeHost} from './src/macro-like.js';
+import {installInterceptor} from './src/prompt-filter.js';
+import {TouchLayer} from './src/touch.js';
+import {openApiCenter} from './src/api-center.js';
+import {Takeover} from './src/takeover.js';
+
+// manifest.generate_interceptor is looked up on globalThis at generation time: define it as soon as the module loads.
+installInterceptor();
 
 const base=new URL('./',import.meta.url).href;
 let app=null,starting=null,disposed=false,abortStart=0,pending=null,hooked=false;
@@ -23,25 +31,58 @@ class App {
         a.statusbarActive=()=>!!this.statusbar?.active;
         this.terminal=new Terminal(a,original,base);this.terminal.mount();this.parts.push(this.terminal);
         const syncLauncher=()=>{if(this.terminal.launcher)this.terminal.launcher.hidden=!this.settings.get('terminalLauncher')&&!!this.assistant;};
-        try{this.statusbar=new StatusBarHost(a,this.bridge,this.settings,base);await this.statusbar.start();this.parts.push(this.statusbar);}
+        this.macros=new MacroLikeHost(a,this.settings);try{this.macros.start();this.parts.push(this.macros);}catch(e){console.warn('[诸天] 变量宏未启动',e);}
+        const V=original.ZhuTianLilithVoice,voiceKit=V?{cardStyle:V.cardStyle,labelStyle:V.labelStyle,avatarStyle:V.avatarStyle,decorate:V.decorate,avatars:original.ZhuTianLilithAvatars}:null;
+        this.takeover=new Takeover(a,this.settings);
+        try{this.statusbar=new StatusBarHost(a,this.bridge,this.settings,base,{macros:this.macros,voice:voiceKit});await this.statusbar.start();this.parts.push(this.statusbar);}
         catch(e){this.statusbarError=e.message;console.error('[诸天] 原生状态栏未启动',e);this.statusbar=null;}
         if(this.settings.get('assistant')){
             try{this.assistant=new AssistantHost({adapter:a,bridge:this.bridge,original,settings:this.settings,openTerminal:()=>this.openTerminal()}).start();this.parts.push(this.assistant);}
             catch(e){this.assistantError=e.message;this.assistant=null;console.warn('[诸天] 莉莉丝助手未启动：',e.message);globalThis.toastr?.warning(e.message,'诸天 · 莉莉丝');}
         }
         syncLauncher();
+        if(this.assistant){
+            // Lilith's entry is draggable and dodges the send form, so a fixed CSS spot for the optional terminal launcher collides with it.
+            // Keep the launcher docked just above wherever the entry currently sits.
+            const dock=()=>{const l=this.terminal.launcher;if(!l||l.hidden)return;const e=this.assistant.shadow?.getElementById('entry');if(!e)return;
+                const r=e.getBoundingClientRect();if(!r.width)return;const h=l.offsetHeight||56;
+                const top=r.top-h-10>=8?r.top-h-10:Math.min(innerHeight-h-8,r.bottom+10);l.style.top=Math.round(top)+'px';l.style.left=Math.round(Math.max(8,r.left))+'px';l.style.bottom='auto';};
+            const t=setInterval(dock,600);addEventListener('resize',dock);dock();
+            this.launcherDock={dock,dispose(){clearInterval(t);removeEventListener('resize',dock);}};this.parts.push(this.launcherDock);
+        }
+        this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
+        if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
         try{await this.portrait.start();}catch(e){console.warn('[诸天] 立绘模式回退到原版分层动画：',e.message);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
-        this.settings.onChange(k=>{if(k==='terminalLauncher')syncLauncher();if(k==='assistant')globalThis.toastr?.info('刷新页面后生效','诸天');});
+        this.settings.onChange(k=>{if(k==='terminalLauncher'){syncLauncher();this.launcherDock?.dock();}if(k==='assistant')globalThis.toastr?.info('刷新页面后生效','诸天');});
         this.settings.mountDrawer({
             open:()=>this.assistant?this.assistant.open():this.openTerminal(),terminal:()=>this.openTerminal(),live2d:()=>this.portrait.openSettings(),
+            api:()=>this.openApiCenter(),takeover:()=>this.runTakeover(),restore:()=>this.restoreLegacy(),
             worldbook:()=>this.features.openWorldbook(),migrate:()=>this.features.openMigration(),diagnose:()=>this.features.openDiagnostics(),
             init:()=>this.features.initChat().then(r=>globalThis.toastr?.success(r.created?`已按原版规则初始化账本（系统点 ${r.points}）`:'账本已存在；已按原版规则补齐缺失字段','诸天')).catch(e=>globalThis.toastr?.error(e.message,'诸天')),
         });
         globalThis.__zhutianApp=this;
     }
     openTerminal(){this.terminal?.open();}
+    openApiCenter(){return openApiCenter({bridge:this.bridge,ns:original.ZhuTianMemoryCore?.NS,notify:()=>this.adapter.notify?.()});}
+    async runTakeover(){
+        const t=globalThis.toastr,list=this.takeover.pending();
+        if(!list.length){t?.info('没有发现仍在启用的旧版正则或酒馆助手脚本；世界书由插件自动安装绑定。','诸天 · 接管');return {items:[],reload:false};}
+        const names=list.map(i=>`${i.kind==='regex'?'正则':'酒馆助手脚本'}（${i.scope==='global'?'全局':'角色卡'}）：${i.name}`).join('\n');
+        if(!globalThis.confirm(`将停用以下 ${list.length} 项旧版内容，由本插件接管（不会删除，可随时“恢复旧版”）：\n\n${names}`))return {items:[],reload:false,cancelled:true};
+        try{const r=await this.takeover.run();this.statusbar?.rebuild();
+            if(r.reload){t?.success('旧版已停用。页面将在 2 秒后刷新，让酒馆助手卸载旧脚本。','诸天 · 接管');setTimeout(()=>location.reload(),2000);}
+            else t?.success(`已停用 ${r.items.length} 个旧正则，现由插件原生接管。`,'诸天 · 接管');
+            return r;}catch(e){t?.error(e.message,'诸天 · 接管');throw e;}
+    }
+    async restoreLegacy(){
+        const t=globalThis.toastr;
+        try{const r=await this.takeover.restore();
+            if(!r.items.length){t?.info('没有可恢复的记录（角色卡里的项目需要先打开对应角色）。','诸天 · 恢复');return r;}
+            t?.warning('旧版已重新启用。为避免两个莉莉丝和重复状态栏，请在扩展列表里停用本插件后刷新。','诸天 · 恢复',{timeOut:12000});
+            this.statusbar?.rebuild();return r;}catch(e){t?.error(e.message,'诸天 · 恢复');throw e;}
+    }
     dispose(){if(globalThis.__zhutianApp===this)globalThis.__zhutianApp=null;for(const p of this.parts.splice(0).reverse()){try{p.dispose();}catch(e){console.warn('[诸天] 卸载',e);}}this.settings?.dispose();}
 }
 

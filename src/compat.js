@@ -49,6 +49,7 @@ export function loadHostModule() {
                 return !!button && getComputedStyle(button).display === 'none' && !!document.getElementById('mes_stop') && getComputedStyle(document.getElementById('mes_stop')).display !== 'none';
             },
             generateRaw: typeof ns.generateRaw === 'function' ? ns.generateRaw : (context()?.generateRaw || null),
+            saveSettings: typeof ns.saveSettings === 'function' ? ns.saveSettings : null,   // immediate save (takeover before reload)
             context,
         };
     });

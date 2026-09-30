@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -44,6 +44,11 @@ export const CAPABILITIES = [
     {name:'其他角色的正文互动',state:'implemented',scope:'读取当前角色及原账本角色名；不伪造对方回复'},
     {name:'原账本、任务、背包与角色档案',state:'read-only',scope:'读取现有 chatMetadata.variables；新聊天可用 /zt init 按原版结构创建，不填模拟余额'},
     {name:'原版记忆回忆提示',state:'implemented',scope:'明确启用后使用原版回忆算法；不启用自动付费整理'},
+    {name:'原版 4 个正则全部原生取代',state:'implemented',scope:'状态栏 3.1、旧楼层精简显示（点击展开）、旧楼层不发给AI（生成拦截器，同 minDepth 2）、莉莉丝专属语音框（原正则逐字节、可开关）；无需导入正则'},
+    {name:'世界书变量宏 {{get_chat_variable::…}}',state:'implemented',scope:'无需酒馆助手：生成前替换提示词、渲染时替换正文；酒馆助手宏开启时自动让位'},
+    {name:'真实触摸互动',state:'implemented',scope:'原版轻点反应之上加入抚摸（三档）、长按、手机视线跟随手指与震动反馈；可开关'},
+    {name:'API 中心与酒馆主 API',state:'implemented',scope:'一处配置状态栏与莉莉丝助手（写入原版同一存储）；可选直接使用酒馆当前主 API；修复状态栏 max_tokens / temperature 被忽略'},
+    {name:'一键接管 / 恢复旧版',state:'implemented',scope:'停用（不删除）旧正则与旧酒馆助手脚本并记录，可一键恢复；角色卡内项目经 writeExtensionField 保存'},
     {name:'外挂世界书安装与聊天绑定',state:'implemented',scope:'35 条内置规则；已存在同名世界书时只绑定不覆盖；不依赖角色卡 MVU'},
     {name:'原版自动记忆整理、补读及独立 API',state:'pending',scope:'界面已迁移·待模型验收：原逻辑已运行，但没有凭据，未完成真实模型请求验收'},
     {name:'原版工作台完整工具与建议接续',state:'pending',scope:'界面已迁移·待模型验收'},

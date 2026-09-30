@@ -29,17 +29,19 @@
 | 文件 | 姿势 | 状态 |
 | --- | --- | --- |
 | `pose-heart.webp` | 比心（哥特长裙） | 已生成：AI 以 #00FF00 纯色底整图生成 → `tools/lilith_variants_key.py` 抠像 + 去溢色 → 424×632 RGBA |
-| `pose-arms.webp` | 抱臂 | **尚未生成**；选择后自动回落到标准站姿表情组 |
-| `pose-sit.webp` | 侧坐 | **尚未生成**；选择后自动回落到标准站姿表情组 |
+| `pose-arms.webp` | 抱臂（哥特长裙） | 0.4.0 已生成：参考图 = 原版脸部裁切 + `pose-heart` 垫绿底（锁定角色与服装）→ AI 以 #00FF00 纯色底整图生成 → `tools/lilith_variants_key.py` 抠像 + 去溢色 → 424×632 RGBA |
+| `pose-sit.webp` | 侧坐（哥特长裙） | 0.4.0 已生成：同上流程 |
 
-姿势图是重新绘制的全身像，服装为哥特长裙，与原版立绘不是同一张底图，因此只作为可选姿势，不参与自动表情切换。
+姿势图是重新绘制的全身像（抠像后绿色溢边像素为 0，不透明区域上下贴边，不留大块空白），服装为哥特长裙，与原版立绘不是同一张底图，因此只作为可选姿势，不参与自动表情切换。
 背景使用原版分层素材里的 `ZhuTianLilithLayers.plate`（去掉角色的静止背景），不做任何动画。
 
 ## SHA-256
 
 ```
 2645ed0364130ee5bb3437fffa2ffb5da9342ed874a5b9791767223132fff72e  neutral.webp
+32dc286ecc9bd50a7334fba266fac67eafc7676ad8d32374ec201d982b60ddb6  pose-arms.webp
 07c4342ab892885c1b9588897f2b60f13f5e176c5dfc2c61999e3423cd53d2b4  pose-heart.webp
+57f6871fe83048e35fd6e39dc8999ee892b39e92b13cce2ed4c829dcf471b6df  pose-sit.webp
 144db189e3d622b0b75ea32b5cc6310cb260befaeca7a52ee1ddb7beb8cb1e96  pout.webp
 c6c5a1cad30ab637e32676473926f2c0d89fdae61359f8a1a8617b255515f587  sad.webp
 292470438a425694de22993ea3517b4cfd1d1d5f6177f7a95f95f4518cacb8be  shy.webp

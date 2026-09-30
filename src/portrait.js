@@ -19,8 +19,8 @@ export const VARIANTS = [
 ];
 export const POSES = [
     { id: 'pose-heart', label: '比心', file: 'pose-heart.webp' },
-    { id: 'pose-arms', label: '抱臂', file: 'pose-arms.webp', pending: true },
-    { id: 'pose-sit', label: '侧坐', file: 'pose-sit.webp', pending: true },
+    { id: 'pose-arms', label: '抱臂', file: 'pose-arms.webp' },
+    { id: 'pose-sit', label: '侧坐', file: 'pose-sit.webp' },
 ];
 // Heuristic mood -> model expression names (Cubism samples use f00…, many community models use words).
 const MOOD_HINTS = {

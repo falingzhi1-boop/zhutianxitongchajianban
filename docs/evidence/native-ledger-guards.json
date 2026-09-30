@@ -1,6 +1,7 @@
 {
   "host": "SillyTavern 1.19.0",
-  "extension": "0.2.0",
+  "commit": "7e8663c",
+  "extension": "0.4.0",
   "tests": [
     "same-origin Web Lock rejects competing tab without writing",
     "stale second-tab preview cannot overwrite first receipt",

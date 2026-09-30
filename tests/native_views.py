@@ -3,6 +3,22 @@ from pathlib import Path
 import json
 
 import argparse
+import sys,pathlib;sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent));from qa_host import host_info,extension_version
+
+def terminal_only(page):
+    """Terminal-only mode (the 0.2.0 layout these suites were written for), for THIS page only - nothing is persisted.
+    0.3.0+ makes the native status bar the sole panel-settlement engine and Lilith the memory-prompt owner, so both are
+    unloaded right after the page is ready and BEFORE any fixture is seeded (otherwise the status bar races the suite and
+    settles the fixture panel itself). Also shows the terminal's own launcher, which 0.3.0+ hides by default."""
+    page.wait_for_function('!!globalThis.__zhutianApp', timeout=60000)
+    page.evaluate("globalThis.__zhutianApp.settings.get('terminalLauncher') || globalThis.__zhutianApp.settings.set('terminalLauncher', true)")
+    page.evaluate("""()=>{const app=globalThis.__zhutianApp;if(app?.assistant?.hostElement?.isConnected){try{app.assistant.dispose();}catch(e){}}if(app?.statusbar){try{app.statusbar.dispose();}catch(e){}app.statusbar=null;}}""")
+
+def launcher(page):
+    terminal_only(page)
+    page.wait_for_timeout(700)
+    return page.locator('#zt-covenant-launcher')
+
 parser=argparse.ArgumentParser(description='DESTRUCTIVE TO QA FIXTURES: isolated SillyTavern only; never use production data.')
 parser.add_argument('--isolated-test-only',action='store_true',required=True,help='Acknowledge that this server contains disposable test data only.')
 parser.add_argument('--base-url',default='http://127.0.0.1:8010')
@@ -16,9 +32,9 @@ with sync_playwright() as p:
  b=p.chromium.launch(args=['--no-sandbox','--disable-webgl'])
  page=b.new_page(viewport={'width':390,'height':844},reduced_motion='reduce');errs=[];page.on('pageerror',lambda e:errs.append(str(e)))
  page.add_init_script('window.__ztTestBase='+json.dumps('/scripts/extensions/third-party/'+args.extension_folder))
- page.goto(args.base_url.rstrip('/')+'/');page.wait_for_function("typeof SillyTavern !== 'undefined' && SillyTavern.getContext().eventSource.autoFireLastArgs.has(SillyTavern.getContext().eventTypes.APP_READY)",timeout=60000)
+ page.goto(args.base_url.rstrip('/')+'/');page.wait_for_function("typeof SillyTavern !== 'undefined' && SillyTavern.getContext().eventSource.autoFireLastArgs.has(SillyTavern.getContext().eventTypes.APP_READY)",timeout=60000);terminal_only(page)
  page.evaluate("async()=>{const c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='莉莉丝 · 隔离验收'));}")
- page.locator('#zt-covenant-launcher').click();root=page.locator('#zhutian-covenant-terminal');views={}
+ launcher(page).click();root=page.locator('#zhutian-covenant-terminal');views={}
  for name in ['home','book','ledger','interact','commerce','memory','diagnostics']:
   root.locator(f'nav [data-page="{name}"]').click()
   overflow=root.locator('#content').evaluate('(e)=>e.scrollWidth>e.clientWidth')
@@ -36,7 +52,7 @@ with sync_playwright() as p:
  page.evaluate("async()=>{const c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='叶清寒 · 隔离验收'));}")
  expect(root.locator('#action-text')).to_have_value('')
  page.evaluate("async()=>{const m=await import(window.__ztTestBase+'/index.js');m.deactivate();m.activate();m.deactivate();m.activate();}")
- expect(page.locator('#zt-covenant-launcher')).to_have_count(1);expect(page.locator('#zhutian-covenant-terminal')).to_have_count(1)
+ expect(launcher(page)).to_have_count(1);expect(page.locator('#zhutian-covenant-terminal')).to_have_count(1)
  assert not errs,errs
- result={'host':'SillyTavern 1.19.0','viewport':'390x844','mobileViews':views,'builtinRules':35,'tests':['all seven mobile views','worldbook search','task to unsent player draft','inventory to unsent observation draft','WebGL unavailable original-art fallback','focused draft cleared on chat switch','launcher works from initial mobile load','missing consent blocks send','rapid disable/enable lifecycle'],'pageErrors':errs}
+ result={**host_info(args.base_url),'extension':extension_version(),'viewport':'390x844','mobileViews':views,'builtinRules':35,'tests':['all seven mobile views','worldbook search','task to unsent player draft','inventory to unsent observation draft','WebGL unavailable original-art fallback','focused draft cleared on chat switch','launcher works from initial mobile load','missing consent blocks send','rapid disable/enable lifecycle'],'pageErrors':errs}
  (ARTIFACTS/'views.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));b.close()

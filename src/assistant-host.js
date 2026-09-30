@@ -5,7 +5,7 @@
 //   window     -> the real window, except `pagehide` which is routed to our own dispose (extension disable hook)
 //   fetch      -> the real fetch, falling back to the user's own SillyTavern server when CORS blocks the API
 import mountOriginalAssistant from '../vendor/original/assistant-runtime.js';
-import { NATIVE_SCRIPT_ID } from './th-bridge.js';
+import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL } from './th-bridge.js';
 
 const LEGACY_DOM_ID = 'zt-memory-assistant-v1';
 
@@ -25,7 +25,19 @@ export function stContextProxy(getContext) {
 }
 export function proxiedFetch(bridge) {
     const real = globalThis.fetch.bind(globalThis);
+    const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
     return async function fetch(url, init = {}) {
+        // API center "酒馆当前主API": answered locally through SillyTavern generateRaw, never sent to the network.
+        if (isMainApi(url)) {
+            const u = new URL(String(url)), method = String(init.method || 'GET').toUpperCase();
+            if (/\/models$/.test(u.pathname)) return json({ data: [{ id: MAIN_API_MODEL }] });
+            if (method === 'POST' && /\/chat\/completions$/.test(u.pathname)) {
+                const body = JSON.parse(init.body || '{}');
+                try { const text = await bridge.mainChat(body.messages || [], { maxTokens: body.max_tokens, signal: init.signal }); return json({ id: 'st-main', object: 'chat.completion', model: MAIN_API_MODEL, choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: text } }] }); }
+                catch (e) { return json({ error: { message: '酒馆主 API：' + (e?.message || e) } }, 502); }
+            }
+            return json({ error: { message: '不支持的主 API 路径' } }, 404);
+        }
         try { return await real(url, init); }
         catch (error) {
             if (init?.signal?.aborted) throw error;
@@ -52,7 +64,7 @@ export function proxiedFetch(bridge) {
 export class AssistantHost {
     constructor({ adapter, bridge, original, settings, openTerminal }) {
         Object.assign(this, { adapter, bridge, original, settings, openTerminal });
-        this.disposeOriginal = null; this.hostElement = null; this.shadow = null;
+        this.disposeOriginal = null; this.hostElement = null; this.shadow = null; this.motion = null; this.onMotion = null;
     }
     legacyRunning() { const el = document.getElementById(LEGACY_DOM_ID); return !!el && !el.dataset.ztNative; }
     start() {
@@ -60,6 +72,13 @@ export class AssistantHost {
         this.importLegacyConfig();
         const b = this.bridge, a = this.adapter;
         const G = Object.create(this.original);          // original modules stay shared and untouched
+        // 语音美化 is one switch: when the native voice box is off, the original story-assist painter stays off too
+        // (it would otherwise still wrap 莉莉丝：“…” paragraphs into voice cards). Tone avatars keep working.
+        const Voice = this.original.ZhuTianLilithVoice;
+        if (Voice?.mountStory) G.ZhuTianLilithVoice = Object.create(Voice, { mountStory: { enumerable: true, value: (doc, allowed, avatars) => Voice.mountStory(doc, () => this.settings.get('voiceBox') !== false && !!allowed?.(), avatars) } });
+        // Hand the original portrait stage (speak / rig / bubble / zones) to the native touch layer, unmodified.
+        const Motion = this.original.ZhuTianLilithMotion;
+        if (Motion?.mount) G.ZhuTianLilithMotion = Object.create(Motion, { mount: { enumerable: true, value: opts => { const m = Motion.mount(opts); this.motion = m; try { this.onMotion?.(m); } catch (e) { console.warn('[诸天] 触摸层挂载失败', e); } return m; } } });
         Object.assign(G, {
             getVariables: o => b.getVariables(o), updateVariablesWith: (f, o) => b.updateVariablesWith(f, o),
             replaceVariables: (v, o) => b.replaceVariables(v, o), insertOrAssignVariables: (v, o) => b.insertOrAssignVariables(v, o),
@@ -122,5 +141,6 @@ export class AssistantHost {
     }
     open() { this.shadow?.getElementById('entry')?.click(); }
     portraitHost() { return this.shadow?.getElementById('lilith-portrait') || null; }
+    stage() { return this.motion?.stages?.[0] || null; }
     dispose() { try { this.disposeOriginal?.(); } finally { this.adapter.assistantOwnsPrompt = null; this.hostElement?.remove(); this.hostElement = null; } }
 }

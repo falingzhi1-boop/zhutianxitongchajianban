@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 
 import argparse
+import sys,pathlib;sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent));from qa_host import host_info,extension_version
 parser=argparse.ArgumentParser(description='DESTRUCTIVE TO QA FIXTURES: isolated SillyTavern only; never use production data.')
 parser.add_argument('--isolated-test-only',action='store_true',required=True,help='Acknowledge that this server contains disposable test data only.')
 parser.add_argument('--base-url',default='http://127.0.0.1:8010')
@@ -41,5 +42,5 @@ with sync_playwright() as p:
  assert failedReceipt=={'ambiguous':True,'reused':True,'onlyOne':True},failedReceipt
  page.unroute('**/api/chats/get')
  run('()=>{__qaAdapter.dispose();delete window.__qaAdapter;}')
- result={'realHost':'SillyTavern 1.19.0','pageErrors':errors,'modelRequests':requests,'cases':{'pendingAttachmentRejected':attachment,'editedHistoryInvalidatesDraft':stale,'generationLockViaRealLifecycleEvent':generation,'duplicateAndMarkup':duplicate,'readbackFailureNoAutomaticRetry':failedReceipt},'faultInjection':'Only /api/chats/get readback was made to return HTTP503 for the failure test. sendMessageAsUser, context, chat persistence were not mocked.'}
+ result={'realHost':host_info(args.base_url)['host'],'commit':host_info(args.base_url)['commit'],'extension':extension_version(),'pageErrors':errors,'modelRequests':requests,'cases':{'pendingAttachmentRejected':attachment,'editedHistoryInvalidatesDraft':stale,'generationLockViaRealLifecycleEvent':generation,'duplicateAndMarkup':duplicate,'readbackFailureNoAutomaticRetry':failedReceipt},'faultInjection':'Only /api/chats/get readback was made to return HTTP503 for the failure test. sendMessageAsUser, context, chat persistence were not mocked.'}
  (ARTIFACTS/'guards.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));print(json.dumps(result,ensure_ascii=False));b.close()
