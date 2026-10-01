@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.6.0';
+export const VERSION = '0.7.0';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -44,7 +44,7 @@ export const CAPABILITIES = [
     {name:'其他角色的正文互动',state:'implemented',scope:'读取当前角色及原账本角色名；不伪造对方回复'},
     {name:'原账本、任务、背包与角色档案',state:'read-only',scope:'读取现有 chatMetadata.variables；新聊天可用 /zt init 按原版结构创建，不填模拟余额'},
     {name:'原版记忆回忆提示',state:'implemented',scope:'明确启用后使用原版回忆算法；不启用自动付费整理'},
-    {name:'原版 4 个正则全部原生取代',state:'implemented',scope:'状态栏 3.1、旧楼层精简显示（点击展开）、旧楼层不发给AI（生成拦截器，同 minDepth 2）、莉莉丝专属语音框（原正则逐字节、可开关）；无需导入正则'},
+    {name:'原版 4 个正则全部原生取代',state:'implemented',scope:'状态栏 3.1（0.7.0 起只在终端内显示，楼层留“系统已记录”小标签；旧兼容模式不再在设置中提供）、旧楼层不发给AI（生成拦截器，同 minDepth 2）、莉莉丝专属语音框（原正则逐字节、可开关）；无需导入正则'},
     {name:'世界书变量宏 {{get_chat_variable::…}}',state:'implemented',scope:'无需酒馆助手：生成前替换提示词、渲染时替换正文；酒馆助手宏开启时自动让位'},
     {name:'真实触摸互动',state:'implemented',scope:'原版轻点反应之上加入抚摸（三档）、长按、手机视线跟随手指与震动反馈；可开关'},
     {name:'API 中心与酒馆主 API',state:'implemented',scope:'一处配置状态栏与莉莉丝助手（写入原版同一存储）；可选直接使用酒馆当前主 API；修复状态栏 max_tokens / temperature 被忽略'},
@@ -55,5 +55,10 @@ export const CAPABILITIES = [
     {name:'原剧情结算、已有商城库存购买、单件使用与回收',state:'implemented',scope:'默认关闭；预览确认、原版规则、Web Locks、服务器存档凭据及正文系统记录；分支变化冻结交易'},
     {name:'AI 商城进货、许愿、抽取、外挂与神通支付动作',state:'pending',scope:'界面已迁移·待模型验收：原版状态栏按钮已在原生桥接上运行，模型结果回写未验收'},
     {name:'私聊 API 与真实模型生成',state:'pending',scope:'没有密钥，不进行收费请求；主聊天互动仅完成发送与保存验证'},
+    {name:'世界主题（仙侠 / 赛博 / 诡异）',state:'implemented',scope:'0.7.0：按 当前世界 / 世界类型 / 货币自动判断，可在设置固定；只换颜色与装饰，控件位置不变；减少动态效果时静止；万界足迹记录到访世界'},
+    {name:'莉莉丝界面角色与镜头',state:'implemented',scope:'0.7.0：选中任务 / 物品 / 功法、结算成败时用原版部位反应（动作 + 表情）配账本台词；系统页半身、工作台全身、私聊面部特写、剧情提示胸像；不新增动作、不伪造 Live2D'},
+    {name:'图谱：事件线、羁绊图、星图、能力树',state:'implemented',scope:'0.7.0：节点全部来自账本记录，详情显示原始字段与来源路径，可跳回任务页 / 聊天群 / 外挂 / 楼层；星图可加锁记录穿越'},
+    {name:'演出：穿越、突破、契约、任务完成、抽取、奖励入库',state:'implemented',scope:'0.7.0：只在账本保存并读回后播放，播放前再次核对，回滚的标为未入账；≤2.1 秒可跳过，结果卡片可跳转记录；可只显示卡片或关闭'},
+    {name:'AI 自动写入 当前世界 / 世界类型',state:'pending',scope:'0.7.0：已注入提示并由原版 变量更新 写入；仅用模拟模型验收，真实模型遵循度未验证'},
     {name:'旧存档迁移、账本备份与回滚',state:'pending',scope:'迁移报告、旧助手配置导入与回滚界面已提供；尚未完成浏览器点击验收'}
 ];

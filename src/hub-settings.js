@@ -17,10 +17,8 @@ export class HubSettings {
         const app = this.app;
         return [
             { title: '显示', sub: '终端就是诸天系统；聊天楼层保持干净。', items: [
-                sel('statusbar', '聊天楼层里的系统数据块', [['terminal', '终端记账，楼层只留小标签（推荐）'], ['native', '兼容：楼层内仍显示原版状态栏'], ['off', '关闭（不处理数据块）']], '终端模式下 AI 输出的 <ZhuTianPanel> 由终端记账，楼层里不再出现状态栏。'),
+                sel('statusbar', '聊天楼层里的系统数据块', [['terminal', '终端记账，楼层只留小标签（推荐）'], ['off', '关闭（不处理数据块）'], ...(this.s.get('statusbar') === 'native' ? [['native', '旧兼容模式（0.7.0 起不再提供，切走后不再显示）']] : [])], '终端模式下 AI 输出的 <ZhuTianPanel> 由终端记账，楼层里不再出现状态栏。'),
                 sw('floorTag', '楼层小标签“系统已记录”', '点击标签直接打开终端。'),
-                sw('compactHistory', '兼容模式：旧楼层精简显示', '只在“楼层内显示原版状态栏”时生效。'),
-                num('statusbarMaxDepth', '兼容模式：完整状态栏显示到第几层', 0, 6, '0 = 只有最新楼层。'),
                 sw('voiceBox', '莉莉丝专属语音框（语音美化）'),
                 sw('hud', '输入框上方账本速览'),
                 sw('hotkeys', '快捷键 Alt+Z / Alt+X 开关终端 · Alt+S 总览'),
@@ -47,6 +45,16 @@ export class HubSettings {
                 sw('haptics', '触摸震动反馈（手机）'),
                 sel('portrait.mode', '立绘模式', [['rig', '原版分层动画（伪 Live2D）'], ['variants', '原版 + 表情差分（随语气切换）'], ['live2d', '真 Live2D（需自备 Cubism 模型）']]),
                 act('live2d', '立绘 / Live2D 设置…'),
+                sw('lilith.react', '界面角色：对选中任务 / 物品 / 功法和结算成败作出反应', '只用原版表情与分层动作；台词来自账本数据。'),
+                sw('lilith.pageLines', '进入系统页时说一句（每页每次会话一次）'),
+                sw('lilith.camera', '镜头：系统页半身 · 工作台全身 · 私聊面部特写'),
+            ] },
+            { title: '世界与演出', sub: '主题只换颜色和装饰，按钮位置不变。', items: [
+                sel('world.theme', '界面主题', [['auto', '跟随当前世界（自动判断）'], ['default', '诸天（默认）'], ['xianxia', '仙侠 · 玉简 / 星图 / 阵纹'], ['cyber', '赛博 · 全息终端'], ['eerie', '诡异 · 异常与侵蚀']], this.worldDesc()),
+                sw('world.prompt', '提示 AI 记录穿越（当前世界 / 世界类型）', '穿越时 AI 在数据块「变量更新」里写一行；星图也可以手动记录。'),
+                sel('fx.mode', '演出', [['full', '完整演出（≤2 秒，可跳过）'], ['brief', '只显示结果卡片'], ['off', '关闭']], '只在账本写入并读回后播放；失败则显示失败。系统开启“减少动态效果”时自动只显示卡片。'),
+                sw('fx.outside', '终端关闭时在聊天角落显示剧情提示卡片'),
+                act('fx-preview', '预览演出', '播放一段示例（不写账本，卡片会标明“预览”）。'),
             ] },
             ...this.extra.map(x => (typeof x === 'function' ? x(app) : x)),
             { title: '兼容与维护', items: [
@@ -55,6 +63,10 @@ export class HubSettings {
                 act('restore', '恢复旧版', '', 'danger'),
             ] },
         ];
+    }
+    worldDesc() {
+        const w = this.app.world?.current?.(); if (!w) return '';
+        return `当前：${w.name || '未记录世界'}${w.type ? '（' + w.type + '）' : ''} → 自动判断为「${({ default: '诸天', xianxia: '仙侠', cyber: '赛博', eerie: '诡异' })[w.auto]}」`;
     }
     read(k) { return k.split('.').reduce((o, x) => o?.[x], this.s.all); }
     write(k, v) { const [head, tail] = k.split('.'); if (tail) this.s.patch(head, { [tail]: v }); else this.s.set(head, v); }
@@ -82,6 +94,7 @@ export class HubSettings {
             worldbook: () => app.features.openWorldbook(), migrate: () => app.features.openMigration(), diagnose: () => app.features.openDiagnostics(),
             api: () => app.openApiCenter(), 'go-api': () => app.hub.go('api'), live2d: () => app.portrait?.openSettings(),
             takeover: () => app.runTakeover(), restore: () => app.restoreLegacy(),
+            'fx-preview': () => app.fx?.preview(),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(e.message, '诸天')),
         };
         try { const r = map[id]?.(); r?.catch?.(e => t?.error(e.message, '诸天')); } catch (e) { t?.error(e.message, '诸天'); }

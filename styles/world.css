@@ -1,0 +1,97 @@
+/* 诸天终端 0.7.0 · 世界主题 + 布局.  Loaded after hub.css inside the Lilith window's shadow root.
+   Rule of this file: themes change colour, texture and decoration only — no rule here moves, hides or resizes a
+   control based on the theme (positions stay fixed across worlds). Motion is off under prefers-reduced-motion. */
+
+/* ---------- shell surfaces as variables (defaults = the original Lilith window colours) ---------- */
+:host{--zt-win:#15101e;--zt-win-line:#ac79c064;--zt-head:linear-gradient(110deg,#281c32,#1b1425);--zt-side:#1b1325;--zt-main:radial-gradient(ellipse at 100% 0,#7e426315,transparent 60%);--zt-deco:#c59bee;--zt-deco2:#d2b992;--zt-title-font:Georgia,"Songti SC",serif}
+:host([data-zt-world]) dialog{background:var(--zt-win)!important;border-color:var(--zt-win-line)!important;transition:background-color .5s,border-color .5s}
+:host([data-zt-world]) #drag-handle{background:var(--zt-head)!important}
+:host([data-zt-world]) .sidebar{background:var(--zt-side)!important}
+:host([data-zt-world]) .portrait::after{background:linear-gradient(0deg,var(--zt-side) 1%,transparent 55%)!important}
+:host([data-zt-world]) .main{background:var(--zt-main)!important}
+:host([data-zt-world]) .nav-button{color:var(--zt-nav)}
+:host([data-zt-world]) .nav-button[aria-selected=true]{background:linear-gradient(90deg,color-mix(in srgb,var(--zt-sel) 17%,transparent),color-mix(in srgb,var(--zt-sel) 2%,transparent))!important;border-color:color-mix(in srgb,var(--zt-sel) 20%,transparent)!important;color:var(--zt-ink2)!important}
+:host([data-zt-world]) .nav-button[aria-selected=true]::before{background:var(--zt-sel-bar)!important}
+
+/* ---------- 仙侠 · 玉简 / 星图 / 阵纹 ---------- */
+:host([data-zt-world=xianxia]){--accent:#8fd6b2;--gold:#dcc48a;--ink:#eef5ec;--muted:#a3bcae;--line:#d9f0e11a;
+  --zt-win:#0d1714;--zt-win-line:#8fd6b255;--zt-head:linear-gradient(110deg,#17291f,#0f1b17);--zt-side:#101d18;--zt-main:radial-gradient(ellipse at 100% 0,#8fd6b212,transparent 60%),radial-gradient(ellipse at 0 100%,#dcc48a0c,transparent 55%);
+  --zt-surface:#18302a;--zt-surface-h:#224238;--zt-input:#08110e;--zt-top-a:#14261f;--zt-top-b:#0f1c17;--zt-bar:#12211b;--zt-primary-a:#3f8f6c;--zt-primary-b:#8a9a4e;--zt-nav:#9fbcae;--zt-ink2:#eaf6ee;--zt-text2:#cfe0d6;--zt-panel2:#15271f;--zt-sel:#8fd6b2;--zt-sel-bar:#dcc48a;--zt-switch:#4f9f7c;--zt-switch-off:#233a31;--zt-deco:#8fd6b2;--zt-deco2:#dcc48a;--zt-title-font:"Songti SC","STKaiti","KaiTi",Georgia,serif}
+:host([data-zt-world=xianxia]) .zt-card{background:linear-gradient(180deg,#dcc48a08,#8fd6b204);border-color:#dcc48a26;border-radius:4px 14px 4px 14px}
+:host([data-zt-world=xianxia]) .zt-card h3{font-family:var(--zt-title-font)}
+:host([data-zt-world=xianxia]) .zt-hub-top{border-bottom-color:#dcc48a2e}
+/* 玉简: bamboo-slip ruling on the sidebar */
+:host([data-zt-world=xianxia]) .sidebar nav.zt-hub-nav{background-image:repeating-linear-gradient(90deg,transparent 0 31px,#dcc48a0d 31px 32px)}
+
+/* ---------- 赛博 · 全息终端 ---------- */
+:host([data-zt-world=cyber]){--accent:#4fe3ff;--gold:#ffd166;--ink:#e8f8ff;--muted:#8db3c6;--line:#5fe3ff1c;
+  --zt-win:#060e16;--zt-win-line:#4fe3ff66;--zt-head:linear-gradient(110deg,#0b1d2b,#07121c);--zt-side:#08131d;--zt-main:radial-gradient(ellipse at 100% 0,#4fe3ff10,transparent 60%),radial-gradient(ellipse at 0 100%,#ff5fae0a,transparent 55%);
+  --zt-surface:#0e2536;--zt-surface-h:#143550;--zt-input:#040a10;--zt-top-a:#0b1c2a;--zt-top-b:#08141f;--zt-bar:#0a1824;--zt-primary-a:#0f8fb3;--zt-primary-b:#8a3fd1;--zt-nav:#86b0c4;--zt-ink2:#e9fbff;--zt-text2:#c7e2ee;--zt-panel2:#0c1d2b;--zt-sel:#4fe3ff;--zt-sel-bar:#4fe3ff;--zt-switch:#1aa6cc;--zt-switch-off:#17303f;--zt-deco:#4fe3ff;--zt-deco2:#ff5fae;--zt-title-font:"Consolas","SF Mono",ui-monospace,monospace}
+:host([data-zt-world=cyber]) .zt-card{position:relative;background:#4fe3ff05;border-color:#4fe3ff24;border-radius:2px;clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+:host([data-zt-world=cyber]) .zt-card h3{font-family:var(--zt-title-font);letter-spacing:.04em}
+:host([data-zt-world=cyber]) .zt-btn{border-radius:3px}
+:host([data-zt-world=cyber]) .zt-hub-top b{font-family:var(--zt-title-font)}
+:host([data-zt-world=cyber]) .zt-hub-top{border-bottom-color:#4fe3ff33;box-shadow:inset 0 -1px 0 #4fe3ff14}
+
+/* ---------- 诡异 · 克制的异常与侵蚀 ---------- */
+:host([data-zt-world=eerie]){--accent:#c27a6a;--gold:#bba77c;--ink:#ebe4de;--muted:#a39990;--line:#ffffff10;
+  --zt-win:#0e0c0c;--zt-win-line:#8a3a3a55;--zt-head:linear-gradient(110deg,#1a1414,#110e0e);--zt-side:#131010;--zt-main:radial-gradient(ellipse at 50% 120%,#5a1f1f14,transparent 60%);
+  --zt-surface:#221a1a;--zt-surface-h:#2f2222;--zt-input:#090707;--zt-top-a:#181313;--zt-top-b:#120f0f;--zt-bar:#151111;--zt-primary-a:#7a3030;--zt-primary-b:#5a4a3a;--zt-nav:#a39990;--zt-ink2:#efe6df;--zt-text2:#d4cac2;--zt-panel2:#1a1515;--zt-sel:#b86a5c;--zt-sel-bar:#c27a6a;--zt-switch:#8a4a40;--zt-switch-off:#2a2020;--zt-deco:#8a2f2f;--zt-deco2:#bba77c}
+:host([data-zt-world=eerie]) .zt-card{background:#ffffff03;border-color:#ffffff0f}
+:host([data-zt-world=eerie]) #zt-top-world{animation:zt-glitch 11s steps(1) infinite}
+@keyframes zt-glitch{0%,96.4%,100%{transform:none;text-shadow:none;clip-path:none}96.6%{transform:translateX(1px);text-shadow:-2px 0 #c27a6a88,2px 0 #6aa2c255}96.9%{transform:translateX(-2px);clip-path:inset(20% 0 35% 0)}97.2%{transform:none;text-shadow:1px 0 #c27a6a66}}
+
+/* ---------- decoration layer (on top, pointer-events none, very low opacity) ---------- */
+.zt-world-deco{position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden;border-radius:inherit;display:none}
+:host([data-zt-world=xianxia]) .zt-world-deco,:host([data-zt-world=cyber]) .zt-world-deco,:host([data-zt-world=eerie]) .zt-world-deco{display:block}
+.zt-world-deco>*{position:absolute;display:none}
+.zt-deco-array{width:min(460px,70%);height:auto;right:-90px;bottom:-110px;fill:none;stroke:var(--zt-deco);stroke-width:.6;opacity:.07}
+:host([data-zt-world=xianxia]) .zt-deco-array{display:block;animation:zt-spin 120s linear infinite}
+:host([data-zt-world=xianxia]) .zt-deco-rot{display:block;inset:62px 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,#dcc48a55,transparent);opacity:.8}
+.zt-deco-grid{inset:0;background-image:linear-gradient(#4fe3ff09 1px,transparent 1px),linear-gradient(90deg,#4fe3ff09 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(ellipse at 70% 30%,#000,transparent 75%)}
+.zt-deco-scan{left:0;right:0;height:120px;top:-120px;background:linear-gradient(180deg,transparent,#4fe3ff0d 60%,#4fe3ff1a,transparent)}
+:host([data-zt-world=cyber]) .zt-deco-grid{display:block}
+:host([data-zt-world=cyber]) .zt-deco-scan{display:block;animation:zt-scan 7s linear infinite}
+/* 诡异: the edges slowly creep in and recede; the centre (where you read) is never covered */
+:host([data-zt-world=eerie]) .zt-deco-rot{display:block;inset:0;background:radial-gradient(ellipse at 50% 50%,transparent 58%,#0000 62%,#3a0e0e38 88%,#1a0505aa 100%);animation:zt-creep 18s ease-in-out infinite}
+:host([data-zt-world=eerie]) .zt-deco-grid{display:block;background:repeating-radial-gradient(circle at 12% 88%,#8a2f2f0a 0 2px,transparent 2px 9px);mask-image:radial-gradient(circle at 0 100%,#000,transparent 40%)}
+@keyframes zt-spin{to{transform:rotate(360deg)}}
+@keyframes zt-scan{to{transform:translateY(900px)}}
+@keyframes zt-creep{0%,100%{opacity:.55;transform:scale(1.04)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.zt-world-deco>*{animation:none!important}:host([data-zt-world=eerie]) #zt-top-world{animation:none}}
+
+/* ---------- top bar: world badge ---------- */
+.zt-top-world{cursor:pointer}
+.zt-world-badge:empty{display:none}
+.zt-world-badge{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;font-size:9.5px;letter-spacing:.08em;line-height:14px;border:1px solid color-mix(in srgb,var(--zt-deco) 45%,transparent);color:var(--zt-deco);vertical-align:1px}
+.zt-hub-top{background:linear-gradient(90deg,var(--zt-top-a),var(--zt-top-b))!important;position:relative}
+.zt-hub-top::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--zt-deco) 55%,transparent),transparent);opacity:.7}
+
+/* ---------- layout pass: named navigation groups, calmer rhythm ---------- */
+@media (min-width:721px){
+  .zt-nav-title{display:block;font-size:10px;letter-spacing:.24em;color:color-mix(in srgb,var(--zt-muted) 80%,transparent);padding:2px 6px 3px;text-transform:uppercase}
+  .zt-nav-group{padding-top:6px;margin-top:4px}
+}
+.zt-hub-page h2.zt-h,.zt-atlas-head b{font-family:var(--zt-title-font)}
+.zt-card{transition:border-color .3s,background-color .3s}
+
+/* ---------- camera (镜头): the box clips the same original stage; the rig itself is never scaled ---------- */
+.sidebar .portrait{transition:aspect-ratio .45s cubic-bezier(.2,.7,.2,1)}
+:host([data-zt-cam]) .sidebar .portrait .zt-stage{position:absolute!important;left:0;right:0;top:0;bottom:auto!important;height:auto!important;aspect-ratio:424/632}
+:host([data-zt-cam=mid]) .sidebar .portrait{aspect-ratio:424/400}
+:host([data-zt-cam=mid]) .sidebar .portrait .zt-stage{top:-4%}
+:host([data-zt-cam=mid]) .sidebar .portrait .portrait-caption{bottom:4px}
+@media (prefers-reduced-motion:reduce){.sidebar .portrait{transition:none}}
+
+/* 私聊 close-up strip under the chat header (expression stills; cross-fade like the variants mode) */
+.zt-lc-cam{position:relative;height:118px;flex:none;overflow:hidden;border-bottom:1px solid var(--zt-line);background:var(--zt-side)}
+/* face rect of the 424×632 art is (118,30)-(278,190); shown at 1.4× and centred in the strip */
+.zt-lc-cam i{position:absolute;left:50%;top:-92px;width:594px;height:885px;margin-left:-277px;background-repeat:no-repeat;background-size:100% auto;opacity:0;transition:opacity .6s}
+.zt-lc-cam i.on{opacity:1}
+.zt-lc-cam::after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,var(--zt-side),transparent 40%),linear-gradient(90deg,var(--zt-side),transparent 22%,transparent 78%,var(--zt-side))}
+dialog[data-compact=true] .zt-lc-cam{height:92px}
+dialog[data-compact=true] .zt-lc-cam i{top:-105px}
+@media (prefers-reduced-motion:reduce){.zt-lc-cam i{transition:none}}
+dialog[data-compact=true] .zt-top-world{max-width:none!important;flex:none}
+dialog[data-compact=true] .zt-top-world small{white-space:nowrap}
+dialog[data-compact=true] .zt-top-world b{max-width:9em}

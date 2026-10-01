@@ -17,6 +17,10 @@ import {installInterceptor} from './src/prompt-filter.js';
 import {TouchLayer} from './src/touch.js';
 import {openApiCenter} from './src/api-center.js';
 import {Takeover} from './src/takeover.js';
+import {World} from './src/world.js';
+import {HubAtlas} from './src/hub-atlas.js';
+import {FX} from './src/fx.js';
+import {LilithStage} from './src/lilith-stage.js';
 
 // manifest.generate_interceptor is looked up on globalThis at generation time: define it as soon as the module loads.
 installInterceptor();
@@ -46,10 +50,15 @@ class App {
         try{this.hub=new Hub(this).start();this.parts.push(this.hub);}catch(e){this.hubError=e.message;console.error('[诸天] 终端未启动',e);}
         try{this.plugins=new HubPlugins(this).start();this.parts.push(this.plugins);}catch(e){console.warn('[诸天] 外挂管理未启动',e);}
         try{this.group=new HubGroup(this).start();this.parts.push(this.group);}catch(e){console.warn('[诸天] 聊天群未启动',e);}
+        // 0.7.0: world themes, 图谱, 演出 (each optional; the terminal works without them).
+        try{this.world=new World(this).start();this.parts.push(this.world);}catch(e){console.warn('[诸天] 世界主题未启动',e);}
+        try{this.atlas=new HubAtlas(this).start();this.parts.push(this.atlas);}catch(e){console.warn('[诸天] 图谱未启动',e);}
+        try{this.fx=new FX(this).start();this.parts.push(this.fx);}catch(e){console.warn('[诸天] 演出未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
         try{await this.portrait.start();}catch(e){console.warn('[诸天] 立绘模式回退到原版分层动画：',e.message);}
+        try{this.lilith=new LilithStage(this).start();this.parts.push(this.lilith);}catch(e){console.warn('[诸天] 莉莉丝界面角色未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
         this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
         globalThis.__zhutianApp=this;

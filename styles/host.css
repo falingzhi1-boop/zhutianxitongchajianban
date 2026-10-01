@@ -19,3 +19,7 @@
 .zt-floor-tag-mark{color:#c59bee}
 .zt-floor-tag-v{opacity:.75;max-width:16em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .zt-floor-tag-go{opacity:.6}
+
+/* 0.7.0: 图谱 → 定位楼层 — brief outline on the chat message a node came from */
+#chat .mes.zt-floor-flash{outline:2px solid #d1a2ed;outline-offset:-2px;border-radius:8px;transition:outline-color 1.6s ease}
+@media (prefers-reduced-motion:reduce){#chat .mes.zt-floor-flash{transition:none}}

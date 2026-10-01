@@ -170,8 +170,8 @@ export class Features {
         return [
             ['世界书「诸天万界最强系统」', ({ chat: '✅ 已绑定到当前聊天', 'auto-bound': '✅ 已自动安装并绑定到当前聊天', global: '✅ 已作为全局世界书启用', character: '✅ 已绑定在角色卡上', 'other-chat-book': '⚠ 当前聊天绑定了别的世界书，未自动替换（可在“世界书安装/绑定”手动处理）', 'not-zhutian': '… 当前聊天还不是诸天存档（有账本或状态栏后自动绑定）', off: '⏸ 自动绑定已关闭' })[this.wbAuto] || esc(this.wbAuto || '检查中') + '（内置 35 条，逐条与原版一致）'],
             ['世界书预算', !this.wbBudget ? '… 未检测' : this.wbBudget.ok ? `✅ ${this.wbBudget.budget} token ≥ 常驻规则约 ${this.wbBudget.need}` : `⚠ 仅 ${this.wbBudget.budget} token，常驻规则需要约 ${this.wbBudget.need}：酒馆会跳过诸天规则 — 点“调整世界书预算”`],
-            ['正则 · 状态栏 3.1', sb ? (sb.state.mode === 'native' ? '✅ 原生渲染（8 分页全部功能）' : '⏸ ' + esc(sb.state.reason)) : '❌ ' + esc(app.statusbarError || '未启动')],
-            ['正则 · 旧楼层精简显示', on('compactHistory', `原生精简卡（本页已显示 ${counts.compact || 0} 张），点击展开完整状态栏`)],
+            ['正则 · 状态栏 3.1', sb ? (sb.state.mode === 'terminal' ? '✅ 终端内原生渲染（8 分页全部功能），楼层只留小标签' : sb.state.mode === 'native' ? '✅ 旧兼容模式：楼层内原生渲染（0.7.0 起设置里不再提供）' : '⏸ ' + esc(sb.state.reason)) : '❌ ' + esc(app.statusbarError || '未启动')],
+            ['正则 · 旧楼层精简显示', sb?.state.mode === 'native' ? on('compactHistory', `原生精简卡（本页已显示 ${counts.compact || 0} 张），点击展开完整状态栏`) : '✅ 终端模式下楼层不再显示状态栏，由“系统已记录”小标签取代（点击打开终端）'],
             ['正则 · 旧楼层不发给AI', on('promptStripPanels', `生成拦截器（保留最新 ${esc(st.get('promptPanelKeepDepth'))} 层；已处理 ${promptFilterStats.runs} 次生成 / ${promptFilterStats.floors} 层）`)],
             ['正则 · 莉莉丝专属语音框', on('voiceBox', `原生语音框（已渲染 ${counts.voices || 0} 条），语气头像、不写情绪词`, '已关闭（台词按普通正文显示）')],
             ['酒馆助手 · 变量宏', st.get('macroLike') === false ? '⏸ 已关闭' : tavernHelperMacrosActive(this.ctx) ? '↪ 酒馆助手在运行，由它处理（插件让位）' : !app.macros ? '⚠ 未启动（见控制台）' : /缺少/.test(app.macros.state || '') ? `⚠ ${esc(app.macros.state)}` : `✅ 原生处理 {{get_chat_variable::…}}（${app.macros?.stats?.prompts || 0} 次生成）`],

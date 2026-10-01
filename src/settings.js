@@ -26,6 +26,9 @@ const DEFAULTS = Object.freeze({
     hud: true,                   // compact ledger HUD above the input bar
     hotkeys: true,               // Alt+Z Lilith, Alt+X terminal, Alt+S latest status bar
     portrait: { mode: 'rig', variant: 'default', autoMood: true },   // rig | variants | live2d
+    fx: { mode: 'full', outside: true },                   // 0.7.0 演出: full | brief (result card only) | off; outside = 剧情提示 card when the terminal is closed
+    world: { enabled: true, theme: 'auto', prompt: true },  // 0.7.0 世界主题: auto | default | xianxia | cyber | eerie; prompt = ask the model to record 当前世界/世界类型
+    lilith: { react: true, pageLines: true, camera: true }, // 0.7.0 莉莉丝界面角色: reactions, one line per page per session, camera framing
     live2d: { accepted: false, coreUrl: LIVE2D_CORE_URL, model: '', scale: 1, x: 0, y: 0, follow: true, lipsync: true, idle: true, moodMap: {} },
     scriptVariables: {},
     legacyImported: false,
@@ -53,6 +56,9 @@ export class Settings {
         const store = this.ctx().extensionSettings;
         if (!store[ID] || typeof store[ID] !== 'object') store[ID] = {};
         fillDefaults(store[ID], DEFAULTS);
+        // 0.7.0: the old in-message status bar is no longer offered in the settings (terminal-only UI). A stored
+        // 'native' is moved to 'terminal' exactly once; the code path stays for hosts/tests that set it explicitly.
+        if (store[ID].migrated070 !== true) { if (store[ID].statusbar === 'native') store[ID].statusbar = 'terminal'; store[ID].migrated070 = true; }
         return store[ID];
     }
     get(key) { return this.all[key]; }

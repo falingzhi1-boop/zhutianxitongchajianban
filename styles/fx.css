@@ -1,0 +1,75 @@
+/* 诸天终端 0.7.0 · 演出. Used inside the terminal (Lilith window shadow root) and by the standalone story-hint host.
+   Every performance is ≤ 2.1 s, skippable (click / Esc / 跳过), and ends in a result card. Reduced motion: card only. */
+:host{--fx-a:var(--zt-accent,#c59bee);--fx-g:var(--zt-gold,#d8bf92);--fx-ink:var(--zt-ink,#f3edf7);--fx-muted:var(--zt-muted,#ac9bbd);--fx-bg:#150f1dee}
+:host([data-zt-world=xianxia]){--fx-a:#8fd6b2;--fx-g:#dcc48a;--fx-bg:#0d1714ee}
+:host([data-zt-world=cyber]){--fx-a:#4fe3ff;--fx-g:#ffd166;--fx-bg:#060e16ee}
+:host([data-zt-world=eerie]){--fx-a:#c27a6a;--fx-g:#bba77c;--fx-bg:#0e0c0cf0}
+
+.zt-fx{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 45%,color-mix(in srgb,var(--fx-a) 16%,transparent),#000000c0 70%);backdrop-filter:blur(3px);cursor:pointer;animation:fx-in .22s ease-out}
+.zt-fx.zt-fx-leave{animation:fx-out .2s ease-in forwards}
+.zt-fx-stage{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;pointer-events:none;max-width:86%}
+.zt-fx-svg{width:min(220px,46vw);height:auto;overflow:visible;fill:none;stroke:var(--fx-a);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 10px color-mix(in srgb,var(--fx-a) 60%,transparent))}
+.zt-fx-title{font:700 28px/1.2 var(--zt-title-font,Georgia,"Songti SC",serif);color:var(--fx-ink);letter-spacing:.3em;text-indent:.3em;animation:fx-rise .5s .25s both;text-shadow:0 0 18px color-mix(in srgb,var(--fx-a) 70%,transparent)}
+.zt-fx-detail{font-size:14px;color:var(--fx-g);animation:fx-rise .5s .45s both;max-width:36em}
+.zt-fx-skip{position:absolute;right:16px;bottom:14px;background:#00000066;border:1px solid #ffffff33;color:#fff;border-radius:999px;padding:5px 14px;font:inherit;font-size:12px;cursor:pointer}
+.zt-fx[data-grade=神品] .zt-fx-svg,.zt-fx[data-grade=禁忌] .zt-fx-svg{stroke:var(--fx-g)}
+.zt-fx[data-kind=fail] .zt-fx-svg{stroke:#e07a7a;filter:none}
+.zt-fx[data-kind=fail] .zt-fx-title{text-shadow:none;color:#f0c0c0}
+
+/* kind-specific motion */
+.a-ring{transform-origin:100px 100px;animation:fx-spin 2s cubic-bezier(.3,.1,.2,1) both}
+.a-ring .thin{stroke-width:1;opacity:.6}.a-ring .dash{stroke-dasharray:4 8;stroke-width:1}
+.a-stars line{stroke-width:1.2;stroke-dasharray:80;stroke-dashoffset:80;animation:fx-warp .9s calc(var(--i) * 30ms + .2s) ease-out both}
+.a-core{fill:color-mix(in srgb,var(--fx-a) 60%,transparent);animation:fx-pulse 1s ease-in-out infinite alternate}
+.a-pillar{fill:color-mix(in srgb,var(--fx-g) 30%,transparent);stroke:none;transform-origin:100px 200px;animation:fx-pillar 1.4s ease-out both}
+.a-steps path{stroke-width:2.5;stroke-dasharray:90;stroke-dashoffset:90;animation:fx-draw .35s calc(var(--i) * 140ms) ease-out forwards}
+.a-star{fill:color-mix(in srgb,var(--fx-g) 70%,transparent);stroke:var(--fx-g);transform-origin:100px 60px;animation:fx-pop .6s .8s cubic-bezier(.2,1.6,.4,1) both}
+.a-draw{stroke-dasharray:520;stroke-dashoffset:520;animation:fx-draw 1s ease-out forwards}
+.a-draw.d2{animation-delay:.25s;stroke-width:1}.a-draw.d3{animation-delay:.5s;stroke-width:1.2}
+.a-seal{transform-origin:100px 100px;animation:fx-stamp .5s cubic-bezier(.2,1.4,.4,1) both}
+.a-seal .thin{stroke-width:1;opacity:.6}
+.a-check{stroke:var(--fx-g);stroke-width:6;stroke-dasharray:110;stroke-dashoffset:110;animation:fx-draw .45s .45s ease-out forwards}
+.a-crack{animation:fx-shake .5s ease-in-out both}
+.a-crack path{stroke-dasharray:200;stroke-dashoffset:200;animation:fx-draw .6s .2s ease-out forwards}
+.a-card{transform-origin:100px 94px;animation:fx-flip .8s ease-out both}
+.a-rays line{stroke:var(--fx-g);stroke-width:1.2;opacity:0;animation:fx-ray .7s calc(.7s + var(--i) * 25ms) ease-out both}
+.a-bag{stroke-width:2.4}
+.a-drop{transform-origin:100px 32px;animation:fx-drop .9s cubic-bezier(.5,0,.8,.4) both;fill:color-mix(in srgb,var(--fx-g) 60%,transparent);stroke:var(--fx-g)}
+@keyframes fx-in{from{opacity:0}}@keyframes fx-out{to{opacity:0}}
+@keyframes fx-rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes fx-spin{from{transform:rotate(-120deg) scale(.4);opacity:0}to{transform:rotate(0) scale(1);opacity:1}}
+@keyframes fx-warp{to{stroke-dashoffset:0;opacity:.2}}
+@keyframes fx-pulse{to{transform:scale(1.15);transform-origin:100px 100px}}
+@keyframes fx-pillar{from{transform:scaleY(0)}60%{transform:scaleY(1);opacity:1}to{transform:scaleY(1);opacity:.4}}
+@keyframes fx-draw{to{stroke-dashoffset:0}}
+@keyframes fx-pop{from{transform:scale(0);opacity:0}}
+@keyframes fx-stamp{from{transform:scale(1.8);opacity:0}}
+@keyframes fx-shake{20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes fx-flip{from{transform:perspective(400px) rotateY(90deg)}to{transform:none}}
+@keyframes fx-ray{from{opacity:0;stroke-dasharray:0 200}to{opacity:.8;stroke-dasharray:200 0}}
+@keyframes fx-drop{from{transform:translateY(-30px);opacity:0}70%{opacity:1}to{transform:translateY(78px);opacity:0}}
+
+/* result cards (inside the terminal: bottom-right of the window) */
+.zt-fx-cards{position:absolute;right:14px;bottom:52px;z-index:59;display:flex;flex-direction:column;gap:8px;width:min(330px,calc(100% - 28px));pointer-events:none}
+.zt-fx-card{pointer-events:auto;display:flex;gap:10px;align-items:flex-start;background:var(--fx-bg);border:1px solid color-mix(in srgb,var(--fx-a) 45%,transparent);border-left:3px solid var(--fx-a);border-radius:12px;padding:9px 10px 9px 12px;box-shadow:0 10px 30px #0008;color:var(--fx-ink);font-size:12.5px;animation:fx-card .3s ease-out}
+.zt-fx-card[data-kind=fail]{border-left-color:#e07a7a}
+.zt-fx-card[data-kind=task],.zt-fx-card[data-kind=draw],.zt-fx-card[data-kind=reward]{border-left-color:var(--fx-g)}
+.zt-fx-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.zt-fx-card-body b{font-size:13px}
+.zt-fx-card-body span{color:var(--fx-muted);word-break:break-word}
+.zt-fx-card-body q{color:var(--fx-ink);font-size:12px;quotes:'「' '」'}
+.zt-fx-card-body small{color:var(--fx-g);font-size:10.5px}
+.zt-fx-card-act{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.zt-fx-card-act button{background:none;border:1px solid #ffffff26;color:var(--fx-ink);border-radius:7px;padding:2px 8px;font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.zt-fx-card-act button[data-fx=close]{border:0;color:var(--fx-muted);padding:0 4px}
+.zt-fx-bust{flex:none;width:56px;height:64px;border-radius:10px;background-repeat:no-repeat;border:1px solid color-mix(in srgb,var(--fx-a) 40%,transparent);background-color:#1b1325}
+@keyframes fx-card{from{opacity:0;transform:translateX(16px)}}
+
+/* 剧情提示 (terminal closed): a small card in the corner of the chat, with a short sweep */
+.zt-fx-out{position:fixed;right:16px;bottom:120px;z-index:2147482990;width:min(340px,calc(100vw - 24px));font:13px/1.55 system-ui,"PingFang SC","Microsoft YaHei",sans-serif;color-scheme:dark}
+.zt-fx-out .zt-fx-cards{position:static;width:100%}
+.zt-fx-out .zt-fx-card{position:relative;overflow:hidden}
+.zt-fx-out .zt-fx-card::before{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,var(--fx-a) 22%,transparent),transparent 70%);transform:translateX(-100%);animation:fx-sweep 1.2s .1s ease-out forwards;pointer-events:none}
+@keyframes fx-sweep{to{transform:translateX(100%)}}
+@media (max-width:720px){.zt-fx-out{right:8px;left:8px;width:auto;bottom:84px}.zt-fx-title{font-size:22px}.zt-fx-cards{bottom:12px}}
+@media (prefers-reduced-motion:reduce){.zt-fx,.zt-fx *,.zt-fx-card,.zt-fx-out .zt-fx-card::before{animation:none!important}.zt-fx-out .zt-fx-card::before{display:none}}

@@ -33,6 +33,7 @@ export const NAV = [
     { group: '系统', items: [['ov', '总览', 'grid'], ['task', '任务', 'task'], ['bond', '羁绊', 'heart'], ['cult', '修行', 'lotus']] },
     { group: '交易', items: [['shop', '商城', 'shop'], ['bag', '背包', 'bag']] },
     { group: '能力', items: [['plug', '外挂', 'plug'], ['art', '神通', 'art']] },
+    { group: '图谱', items: [] },
     { group: '万界', items: [] },
     { group: '莉莉丝', items: [['work'], ['memory'], ['rules']] },
     { group: '终端', items: [['api'], ['env'], ['set', '设置', 'gear']] },
@@ -43,6 +44,8 @@ const ORIGINAL_LABEL = { work: '工作台', memory: '记忆', rules: '规则', a
 export class Hub {
     constructor(app) { this.app = app; this.pages = new Map(); this.disposers = []; this.page = 'ov'; this.dead = false; this.engineSig = ''; this.engineFrame = null; this.engineTimer = 0; this.passClose = false; this.historyArmed = false; }
     get a() { return this.app.adapter; }
+    /** Chains a hook (onEngine, onPage, onEngineTab, onOpen, onClose, onTop …) without replacing earlier listeners. */
+    hook(name, fn) { const prev = this[name]; this[name] = (...args) => { try { prev?.(...args); } catch (e) { console.warn('[诸天终端]', name, e); } return fn(...args); }; }
     get settings() { return this.app.settings; }
     on(target, type, fn, opt) { target.addEventListener(type, fn, opt); this.disposers.push(() => target.removeEventListener(type, fn, opt)); }
 
@@ -51,8 +54,10 @@ export class Hub {
         this.shell = sh ? this.fromAssistant(sh) : this.fallbackShell();
         this.shadow = this.shell.shadow;
         const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = this.app.base + 'styles/hub.css'; this.shadow.append(link); this.css = link;
+        // 0.7.0: world themes + layout, 图谱, 演出 (each its own file so a theme never touches layout rules).
+        this.extraCss = ['world.css', 'atlas.css', 'fx.css'].map(f => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = this.app.base + 'styles/' + f; this.shadow.append(l); return l; });
         this.marker = document.createElement('div'); this.marker.id = ID; this.marker.hidden = true; document.body.append(this.marker);
-        this.buildNav(); this.buildTop(); this.buildEngine();
+        this.buildNav(); this.buildTop(); this.buildEngine(); this.buildDeco();
         const title = this.shadow.getElementById('title'); if (title) { this.oldTitle = [title.textContent, title.nextElementSibling?.textContent]; title.textContent = '诸天终端'; if (title.nextElementSibling) title.nextElementSibling.textContent = 'ZHUTIAN TERMINAL · LILITH'; }
         const pill = this.shadow.querySelector('.version-pill'); if (pill) pill.textContent = VERSION;
         this.register('set', { title: '设置', render: el => this.app.hubSettings?.render(el) });
@@ -137,9 +142,16 @@ export class Hub {
     }
     buildTop() {
         const top = document.createElement('div'); top.className = 'zt-hub-top'; top.setAttribute('role', 'status');
-        top.innerHTML = `<div class="zt-top-world"><small>当前世界</small><b id="zt-top-world">—</b></div><div class="zt-top-pts"><small>系统点</small><b id="zt-top-pts">—</b></div><div class="zt-top-res" id="zt-top-res"></div><div class="zt-top-shop"><small>商城</small><b id="zt-top-shop">—</b></div>`;
+        top.innerHTML = `<div class="zt-top-world" title="打开星图"><small>当前世界 <span class="zt-world-badge" id="zt-top-theme"></span></small><b id="zt-top-world">—</b></div><div class="zt-top-pts"><small>系统点</small><b id="zt-top-pts">—</b></div><div class="zt-top-res" id="zt-top-res"></div><div class="zt-top-shop"><small>商城</small><b id="zt-top-shop">—</b></div>`;
         this.shell.main.insertBefore(top, this.shell.main.firstChild); this.top = top;
-        this.on(top, 'click', e => { if (e.target.closest('.zt-top-pts,.zt-top-res')) this.go('ov'); if (e.target.closest('.zt-top-shop')) this.go('shop'); });
+        this.on(top, 'click', e => { if (e.target.closest('.zt-top-pts,.zt-top-res')) this.go('ov'); if (e.target.closest('.zt-top-shop')) this.go('shop'); if (e.target.closest('.zt-top-world') && this.pages.has('stars')) this.go('stars'); });
+    }
+    /** Theme decoration layer (阵纹 / 全息网格 / 侵蚀). Purely visual, pointer-events none, never moves a control. */
+    buildDeco() {
+        const d = this.shell.dialog; if (!d || d.querySelector(':scope > .zt-world-deco')) return;
+        const deco = document.createElement('div'); deco.className = 'zt-world-deco'; deco.setAttribute('aria-hidden', 'true');
+        deco.innerHTML = `<svg class="zt-deco-array" viewBox="0 0 200 200"><circle cx="100" cy="100" r="96"/><circle cx="100" cy="100" r="78"/><circle cx="100" cy="100" r="40"/><path d="M100 4 L183 148 L17 148 Z M100 196 L17 52 L183 52 Z"/>${Array.from({ length: 24 }, (_, i) => { const a = i / 24 * Math.PI * 2; return `<line x1="${(100 + Math.cos(a) * 78).toFixed(1)}" y1="${(100 + Math.sin(a) * 78).toFixed(1)}" x2="${(100 + Math.cos(a) * 96).toFixed(1)}" y2="${(100 + Math.sin(a) * 96).toFixed(1)}"/>`; }).join('')}</svg><i class="zt-deco-grid"></i><i class="zt-deco-scan"></i><i class="zt-deco-rot"></i>`;
+        d.prepend(deco); this.disposers.push(() => deco.remove());
     }
     ledger() { try { const v = this.app.bridge.getVariables({ type: 'chat' }).诸天系统; return v && typeof v === 'object' ? v : null; } catch { return null; } }
     refreshTop() {
@@ -150,6 +162,8 @@ export class Hub {
         const r = l?.专属资源 && typeof l.专属资源 === 'object' ? l.专属资源 : {};
         $('zt-top-res').innerHTML = RES_KEYS.map(k => `<span title="${k}"><small>${k}</small><b>${fmtNum(r[k] ?? 0)}</b></span>`).join('');
         $('zt-top-shop').textContent = 'Lv.' + shopLevel(l);
+        const th = this.app.world?.theme || 'default', badge = $('zt-top-theme');
+        if (badge) { badge.textContent = { default: '', xianxia: '玉简', cyber: '全息', eerie: '异常' }[th] || ''; badge.dataset.theme = th; }
         this.onTop?.(l);
     }
 
@@ -328,4 +342,13 @@ html[data-zt-hub] .zt-page-heading{margin-top:0!important}
 html[data-zt-hub] [data-zt-off="1"]{display:none!important}
 html[data-zt-hub] ::-webkit-scrollbar{width:8px;height:8px}html[data-zt-hub] ::-webkit-scrollbar-thumb{background:#8a6aa055;border-radius:8px}
 @media (max-width:560px){html[data-zt-hub] .mvu-container{padding:10px 10px 40px!important}}
+/* 0.7.0 world themes: colours only (the engine layout never changes) */
+html[data-zt-hub][data-zt-world=xianxia],html[data-zt-hub][data-zt-world=xianxia] body{background:#0f1915!important}
+html[data-zt-hub][data-zt-world=xianxia] .mvu-sys{--bg:#0f1915;--bg2:#12201b;--panel:#152621;--panel2:#1b3029;--input:#0b1411;--text:#ecf3ea;--muted:#a9c0b3;--faint:#83a092;--hair:#cfe9d81a;--border:#cfe9d826;--gold:#dcc48a;--jade:#8fd6b2;--violet:#9fd0bd;--v-task:#8fd6b2;--accent-soft:#1d3a30;--accent-line:#4f8a70;--btn-hover-bg:#274a3d;--btn-hover-text:#e8fff2;--c-hl:#dcc48a}
+html[data-zt-hub][data-zt-world=cyber],html[data-zt-hub][data-zt-world=cyber] body{background:#071019!important}
+html[data-zt-hub][data-zt-world=cyber] .mvu-sys{--bg:#071019;--bg2:#0a1622;--panel:#0d1c2a;--panel2:#122536;--input:#050c13;--text:#e6f6ff;--muted:#8fb3c6;--faint:#6a8fa3;--hair:#5fe3ff1f;--border:#5fe3ff2e;--gold:#ffd166;--jade:#4fe3ff;--violet:#7fb8ff;--pink:#ff5fae;--v-task:#4fe3ff;--accent-soft:#0f2a3b;--accent-line:#2f7fa3;--btn-hover-bg:#12405a;--btn-hover-text:#eaffff;--c-hl:#4fe3ff}
+html[data-zt-hub][data-zt-world=cyber] .mvu-container{background-image:repeating-linear-gradient(0deg,#5fe3ff06 0 1px,transparent 1px 3px)!important}
+html[data-zt-hub][data-zt-world=eerie],html[data-zt-hub][data-zt-world=eerie] body{background:#100e0e!important}
+html[data-zt-hub][data-zt-world=eerie] .mvu-sys{--bg:#100e0e;--bg2:#141111;--panel:#191515;--panel2:#201a1a;--input:#0b0909;--text:#e9e2dc;--muted:#a79d95;--faint:#857a72;--hair:#ffffff12;--border:#b0484826;--gold:#bba77c;--jade:#b9a58a;--violet:#b39a9a;--pink:#c07070;--v-task:#c27a6a;--accent-soft:#2a1a1a;--accent-line:#6d3a3a;--btn-hover-bg:#3a2222;--btn-hover-text:#ffe9e2;--c-hl:#c9776b}
+html[data-zt-hub] .zt-flash{outline:2px solid var(--gold);outline-offset:2px;transition:outline-color 1.4s}
 `;

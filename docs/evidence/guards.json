@@ -1,7 +1,7 @@
 {
-  "realHost": "SillyTavern 1.18.0",
-  "commit": "51ad27f",
-  "extension": "0.6.0",
+  "realHost": "SillyTavern 1.17.0",
+  "commit": "e3f4166",
+  "extension": "0.7.0",
   "pageErrors": [],
   "modelRequests": [],
   "cases": {

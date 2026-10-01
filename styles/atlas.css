@@ -1,0 +1,91 @@
+/* 诸天终端 0.7.0 · 图谱 (事件线 / 羁绊图 / 星图 / 能力树). Colours come from the theme variables. */
+.zt-atlas-page{height:100%}
+.zt-atlas{display:flex;flex-direction:column;gap:12px}
+.zt-atlas-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.zt-atlas-head b{font-size:20px;color:var(--zt-ink);display:block;line-height:1.3}
+.zt-atlas-head small{color:var(--zt-muted);font-size:11.5px}
+.zt-atlas-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--zt-muted)}
+.zt-atlas-legend span{display:inline-flex;align-items:center;gap:5px}
+.zt-atlas-legend i{width:10px;height:10px;border-radius:3px;border:1px solid var(--zt-accent);background:color-mix(in srgb,var(--zt-accent) 25%,transparent)}
+.zt-atlas-legend [data-k=receipt] i,.zt-atlas-legend [data-k=current] i{border-color:var(--zt-gold);background:color-mix(in srgb,var(--zt-gold) 30%,transparent)}
+.zt-atlas-legend [data-k=fail] i{border-color:#e07a7a;background:#e07a7a33}
+.zt-atlas-legend [data-k=cause] i,.zt-atlas-legend [data-k=rumor] i,.zt-atlas-legend [data-k=leaf] i{border-style:dashed;background:transparent}
+.zt-atlas-legend [data-k=love] i{border-color:#f08ab8;background:#f08ab833}
+.zt-atlas-legend [data-k=summon] i{border-color:var(--zt-gold)}
+.zt-atlas-body{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
+.zt-atlas-canvas{position:relative;border:1px solid var(--zt-line);border-radius:14px;background:color-mix(in srgb,var(--zt-input) 70%,transparent);max-height:62vh;overflow:auto;scrollbar-width:thin}
+.zt-atlas[data-atlas=bonds] .zt-atlas-canvas,.zt-atlas[data-atlas=stars] .zt-atlas-canvas{overflow:hidden}
+.zt-atlas-empty{position:absolute;inset:auto 0 0 0;padding:14px 18px;font-size:12px}
+.zt-atlas-svg{display:block;width:100%!important;height:auto!important;font-family:inherit;user-select:none;stroke:none;fill:none;stroke-width:1}
+.zt-atlas-svg text{stroke:none!important;paint-order:normal}
+.zt-atlas-detail{border:1px solid var(--zt-line);border-radius:14px;padding:12px 14px;background:#ffffff04;position:sticky;top:0;max-height:62vh;overflow:auto;scrollbar-width:thin}
+.zt-atlas-tip b{color:var(--zt-ink);font-size:13px}.zt-atlas-tip p{color:var(--zt-muted);font-size:12px;line-height:1.7;margin:6px 0 0}
+.zt-atlas-rec small{color:var(--zt-muted);font-size:10.5px}
+.zt-atlas-rec code{font-size:10.5px;color:var(--zt-gold);word-break:break-all}
+.zt-atlas-rec h4{margin:4px 0 8px;font-size:15px;color:var(--zt-ink);font-family:var(--zt-title-font,inherit)}
+.zt-kvs{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.zt-kv{display:grid;grid-template-columns:5.2em 1fr;gap:6px;font-size:12px;line-height:1.55}
+.zt-kv span{color:var(--zt-muted)}.zt-kv b{font-weight:400;color:var(--zt-text2);word-break:break-word}
+.zt-atlas-links{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px}
+.zt-atlas-links small{width:100%;color:var(--zt-muted);font-size:10.5px}
+.zt-atlas-links .zt-chip{cursor:pointer}
+.zt-atlas-links .zt-chip:hover{border-color:var(--zt-accent)}
+.zt-atlas-hist .zt-row{flex-wrap:wrap}
+.zt-atlas-hist .zt-row[data-state=dropped]{opacity:.55}
+.zt-atlas-hist .zt-row span:first-child{flex:1;min-width:180px}
+
+/* ---- svg ---- */
+.zt-edge{fill:none;stroke:color-mix(in srgb,var(--zt-accent) 38%,transparent);stroke-width:1.3;transition:stroke .2s,opacity .2s}
+.zt-edge[data-kind=chain]{stroke-dasharray:4 4;stroke:color-mix(in srgb,var(--zt-gold) 55%,transparent)}
+.zt-edge[data-kind=fail]{stroke:#e07a7a88}
+.zt-edge[data-kind=future]{stroke-dasharray:2 5}
+.zt-edge[data-kind=love]{stroke:#f08ab899}.zt-edge[data-kind=summon]{stroke:color-mix(in srgb,var(--zt-gold) 60%,transparent)}
+.zt-edge[data-kind=system]{stroke-dasharray:1 5;stroke-linecap:round}
+.zt-edge[data-dark="1"]{stroke:#c0404099;stroke-dasharray:6 3}
+.zt-edge[data-kind=path]{stroke:color-mix(in srgb,var(--zt-gold) 45%,transparent);stroke-dasharray:3 6;animation:zt-flow 3s linear infinite}
+.zt-edge[data-hot="1"]{stroke:var(--zt-gold);opacity:1}
+@keyframes zt-flow{to{stroke-dashoffset:-18}}
+.zt-node{cursor:pointer;outline:none}
+.zt-node rect,.zt-node circle{fill:var(--zt-panel2);stroke:color-mix(in srgb,var(--zt-accent) 55%,transparent);stroke-width:1.2;transition:stroke .15s,fill .15s}
+.zt-node text{fill:var(--zt-ink);text-anchor:middle;pointer-events:none}
+.zt-node text.l{font-size:13px;font-weight:600}
+.zt-node text.s{font-size:10.5px;fill:var(--zt-muted)}
+.zt-node:hover rect,.zt-node:hover circle{stroke:var(--zt-accent)}
+.zt-node:focus-visible rect,.zt-node:focus-visible circle{stroke:var(--zt-gold);stroke-width:2.2}
+.zt-node[data-sel="1"] rect,.zt-node[data-sel="1"] circle:first-of-type{stroke:var(--zt-gold);stroke-width:2.2;fill:color-mix(in srgb,var(--zt-gold) 16%,var(--zt-panel2))}
+.zt-node[data-far="1"]{opacity:.42}
+.zt-node[data-dim="1"]{opacity:.55}
+.zt-node[data-type=cause] rect{stroke-dasharray:3 3;fill:transparent}
+.zt-node[data-type=receipt] rect{stroke:var(--zt-gold);fill:color-mix(in srgb,var(--zt-gold) 12%,var(--zt-panel2))}
+.zt-node[data-type=fail] rect{stroke:#e07a7a;fill:#e07a7a1a}
+.zt-node[data-type=pending] rect{stroke:var(--zt-gold);stroke-dasharray:4 3}
+.zt-node[data-type=reward] rect{stroke-dasharray:2 4}
+.zt-node[data-state=已完成] rect{stroke:var(--zt-gold)}
+.zt-node[data-state=已失败] rect{stroke:#e07a7a}
+.zt-node[data-type=host] circle{fill:color-mix(in srgb,var(--zt-accent) 20%,var(--zt-panel2));stroke:var(--zt-accent);stroke-width:2}
+.zt-node[data-type=lilith] circle{stroke:var(--zt-sel-bar)}
+.zt-node[data-type=love] circle{stroke:#f08ab8}
+.zt-node[data-type=summon] circle{stroke:var(--zt-gold)}
+.zt-halo{fill:none!important;stroke:var(--zt-gold)!important;stroke-width:1!important;opacity:.7;animation:zt-halo 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes zt-halo{50%{opacity:.15;transform:scale(1.25)}}
+.zt-dust{fill:var(--zt-ink);opacity:.25}
+.zt-node[data-type=world] circle:first-of-type{fill:color-mix(in srgb,var(--zt-accent) 25%,var(--zt-panel2))}
+.zt-node[data-theme=xianxia] circle:first-of-type{stroke:#8fd6b2}.zt-node[data-theme=cyber] circle:first-of-type{stroke:#4fe3ff}.zt-node[data-theme=eerie] circle:first-of-type{stroke:#c27a6a}
+.zt-node[data-current="1"] circle:first-of-type{fill:color-mix(in srgb,var(--zt-gold) 35%,var(--zt-panel2));stroke:var(--zt-gold)}
+.zt-node[data-type=rumor] circle{stroke-dasharray:2 3;fill:transparent}
+.zt-node[data-type=root] rect{fill:color-mix(in srgb,var(--zt-accent) 20%,var(--zt-panel2));stroke:var(--zt-accent)}
+.zt-node[data-type=branch] rect{stroke:var(--zt-gold)}
+.zt-node[data-main="1"] rect{stroke:var(--zt-gold);stroke-width:2}
+.zt-band rect{fill:color-mix(in srgb,var(--zt-accent) 4%,transparent);stroke:color-mix(in srgb,var(--zt-accent) 12%,transparent);stroke-dasharray:2 4}
+.zt-band text{fill:var(--zt-muted);font-size:9.5px;letter-spacing:.1em}
+@media (prefers-reduced-motion:reduce){.zt-edge[data-kind=path],.zt-halo{animation:none}}
+
+/* ---- mobile: detail under the canvas ---- */
+dialog[data-compact=true] .zt-atlas-body{grid-template-columns:1fr}
+dialog[data-compact=true] .zt-atlas-detail{position:static;max-height:none}
+dialog[data-compact=true] .zt-atlas-canvas{max-height:52vh}
+dialog[data-compact=true] .zt-atlas-head b{font-size:17px}
+@media (max-width:720px){.zt-atlas-body{grid-template-columns:1fr}.zt-atlas-detail{position:static;max-height:none}}
+dialog[data-compact=true] .zt-atlas[data-atlas=events] .zt-atlas-svg,dialog[data-compact=true] .zt-atlas[data-atlas=tree] .zt-atlas-svg{min-width:540px}
+dialog[data-compact=true] .zt-atlas[data-atlas=bonds] .zt-atlas-svg,dialog[data-compact=true] .zt-atlas[data-atlas=stars] .zt-atlas-svg{min-width:460px}
+dialog[data-compact=true] .zt-atlas .zt-atlas-canvas{overflow:auto!important;-webkit-overflow-scrolling:touch}
