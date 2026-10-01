@@ -1,7 +1,7 @@
 # 新仓库 Git 安装验收 · 已通过
 
 > **历史记录（0.2.0 检查点）。** 本文记录的是 2026-09-29 用酒馆原生接口从 Git 安装 0.2.0 的过程，下方「限制」描述的也是当时的状态（例如当时 AI 进货/抽卡/工作台尚未迁移，这些在 0.4.0 起已迁移并在四个宿主版本上验收）。
-> 当前版本的验收见 [ACCEPTANCE-0.8.0](ACCEPTANCE-0.8.0.md)：1.16 与 1.19 上 `native_v080` 33/33、`native_world070` 40/40；1.19 上 `native_terminal050` 58/58、`native_group060` 44/44、`native_guards` 通过；纯逻辑测试 92/92；1.17 / 1.18 与 `native_replace040`（需要 v1.1 原版文件）本轮未运行。安装方式没有变化，仍是扩展面板「Install extension」填仓库地址。
+> 当前版本的验收见 [ACCEPTANCE-0.8.1](ACCEPTANCE-0.8.1.md)：1.16 与 1.19 上 `native_v081` 20/20、`native_group060` 44/44；1.19 上 `native_v080` 33/33、`native_world070` 40/40、`native_terminal050` 58/58、`native_guards` 通过；纯逻辑测试 101/101；1.17 / 1.18 与 `native_replace040`（需要 v1.1 原版文件）本轮未运行。安装方式没有变化，仍是扩展面板「Install extension」填仓库地址。
 
 日期：2026-09-29
 

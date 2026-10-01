@@ -59,13 +59,13 @@ def run(page):
     tab(page, 'members'); before = len(mock_requests()); p0 = z(page)['系统点']
     click(page, '[data-g=recruit]', 2500)
     c = grp(page).get('候选') or {}
-    ok('招募令: 200 charged, AI card parsed (name/world/tier/personality/specialty)', z(page)['系统点'] == p0 - 200 and c.get('名称') == '叶清寒' and c.get('档') == 2 and len(fired('你是诸天万界聊天群的招募系统。', before)) == 1, str(c))
+    ok('招募令: 100 charged (0.8.1), AI card parsed (name/world/tier/personality/specialty)', z(page)['系统点'] == p0 - 100 and c.get('名称') == '叶清寒' and c.get('档') == 2 and len(fired('你是诸天万界聊天群的招募系统。', before)) == 1, str(c))
     p0 = z(page)['系统点']; click(page, '[data-g=invite]', 1200)
     g = grp(page)
-    ok('邀请入群: join fee by tier (武道宗师 = 10,000) booked, member added', z(page)['系统点'] == p0 - 10000 and [m['名称'] for m in g['成员']] == ['叶清寒'], f"{p0}->{z(page)['系统点']}")
+    ok('邀请入群: join fee by tier (武道宗师 = 1,500 since 0.8.1) booked, member added', z(page)['系统点'] == p0 - 1500 and [m['名称'] for m in g['成员']] == ['叶清寒'], f"{p0}->{z(page)['系统点']}")
     fill(page, '[data-f=rmode]', 'world'); fill(page, '[data-f=rhint]', '青丘'); click(page, '[data-g=recruit]', 2500)
     p0 = z(page)['系统点']; click(page, '[data-g=invite]', 1200)
-    ok('指定世界 招募 → 白浅 (城市级, 1,000,000)', z(page)['系统点'] == p0 - 1000000 and grp(page)['成员'][-1]['名称'] == '白浅')
+    ok('指定世界 招募 → 白浅 (城市级, 30,000 since 0.8.1)', z(page)['系统点'] == p0 - 30000 and grp(page)['成员'][-1]['名称'] == '白浅')
     fill(page, '[data-f=rmode]', 'rand'); fill(page, '[data-f=rhint]', ''); click(page, '[data-g=recruit]', 2500); click(page, '[data-g=invite]', 1200)
     ok('third member joins (苏小蛮)', [m['名称'] for m in grp(page)['成员']] == ['叶清寒', '白浅', '苏小蛮'])
     page.screenshot(path=str(SHOTS / 'g060-members.png'))

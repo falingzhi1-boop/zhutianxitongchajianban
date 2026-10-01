@@ -53,7 +53,8 @@ export function proxiedFetch(bridge) {
                     max_tokens: body.max_tokens, temperature: body.temperature ?? 1, stream: false, custom_include_headers: extra }) });
             }
             if (method === 'GET' && /\/models$/.test(u.pathname)) {
-                const list = await bridge.listModels(u.href.replace(/\/(v1\/)?models$/, ''), key);
+                // Keep the user's base path (…/v1): stripping it made the server-side relay ask the wrong URL.
+                const list = await bridge.listModels(u.href.replace(/\/models$/, ''), key);
                 return new Response(JSON.stringify({ data: list.map(id => ({ id })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
             }
             throw error;
@@ -97,8 +98,11 @@ export class AssistantHost {
                 const v = Reflect.get(target, key, target); return typeof v === 'function' && !/^[A-Z]/.test(String(key)) ? v.bind(target) : v;
             },
         });
+        // The original connection page calls `root.fetch(…/models)` where root is this private globalThis — not the
+        // module-level `fetch`. Without this the call threw a TypeError and the page always reported "CORS" (0.8.1 fix).
+        const shimFetch = proxiedFetch(b); G.fetch = shimFetch;
         mountOriginalAssistant({
-            globalThis: G, window: windowShim, fetch: proxiedFetch(b),
+            globalThis: G, window: windowShim, fetch: shimFetch,
             getTavernVersion: async () => a.version + '（原生扩展）',
             getTavernHelperVersion: async () => '不需要 · 原生桥接（' + (a.support?.tested ? '已验收宿主' : '能力探测') + '）',
         });

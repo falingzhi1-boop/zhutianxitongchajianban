@@ -42,8 +42,9 @@ export function endpointOf(url) {
     if (!raw) throw Error('请先填写 API 地址');
     const u = new URL(raw);
     if (u.username || u.password) throw Error('API 地址不能包含用户名或密码');
-    if (/\/chat\/completions$/.test(u.pathname)) return { chat: u.href, base: u.href.replace(/\/chat\/completions$/, '') };
-    return { chat: u.href + '/chat/completions', base: u.href };
+    const href = u.href.replace(/\/+$/, '');   // a bare domain parses as "https://x/" — avoid "https://x//models"
+    if (/\/chat\/completions$/.test(u.pathname)) return { chat: href, base: href.replace(/\/chat\/completions$/, '') };
+    return { chat: href + '/chat/completions', base: href };
 }
 
 export class Bridge {
@@ -197,8 +198,15 @@ export class Bridge {
                 if (list.length) return list;
             } catch (e) { error = e; }
         }
-        const r = await fetch('/api/backends/chat-completions/status', { method: 'POST', headers: this.ctx().getRequestHeaders(), body: JSON.stringify({ chat_completion_source: 'custom', custom_url: base, custom_include_headers: key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '' }) }).catch(() => null);
-        if (r?.ok) { const d = await r.json(); const list = (d?.data || []).map(x => x.id || x.name).filter(Boolean); if (list.length) return list; }
+        // Browser blocked (CORS) → ask the user's own SillyTavern server, which is not subject to CORS. ST appends
+        // /models to custom_url itself, so try the base as written and, for a bare domain, base + /v1.
+        for (const custom of [base, ...(/\/v\d+$/.test(base) ? [] : [base + '/v1'])]) {
+            const r = await fetch('/api/backends/chat-completions/status', { method: 'POST', headers: this.ctx().getRequestHeaders(), body: JSON.stringify({ chat_completion_source: 'custom', custom_url: custom, custom_include_headers: key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '' }) }).catch(() => null);
+            if (!r?.ok) { error = Error('酒馆服务器转发失败（HTTP ' + (r?.status ?? '无响应') + '）'); continue; }
+            const d = await r.json().catch(() => null); const list = (d?.data?.data || d?.data || []).map(x => typeof x === 'string' ? x : x?.id || x?.name).filter(Boolean);
+            if (list.length) return list;
+            if (d?.error) error = Error('浏览器直连被拦截（CORS），经酒馆服务器转发也没拿到模型列表：请检查地址和 Key');
+        }
         throw error || Error('没有拉取到模型');
     }
     /** SillyTavern's currently connected main API (generateRaw), for the API center's explicit "酒馆主API" choice and

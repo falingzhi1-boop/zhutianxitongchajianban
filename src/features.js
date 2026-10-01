@@ -7,6 +7,7 @@ import { promptFilterStats } from './prompt-filter.js';
 import { readConfigs } from './api-center.js';
 import { isMainApi } from './th-bridge.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
+import { latestRules, mergeWorldbook, WORLDBOOK_REV } from './worldbook.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -38,12 +39,40 @@ export class Features {
         const c = this.ctx; let book = null;
         try { book = await c.loadWorldInfo(WORLD_NAME); } catch { book = null; }
         const count = book?.entries ? Object.keys(book.entries).length : 0;
-        return { exists: !!count, count, chatBound: c.chatMetadata?.world_info === WORLD_NAME, builtin: this.app.original.ZhuTianBuiltinRules.length };
+        const latest = this.latestRules();
+        const current = count ? latest.every(r => Object.values(book.entries).some(e => e.comment === r.comment && e.content === r.content)) : false;
+        return { exists: !!count, count, chatBound: c.chatMetadata?.world_info === WORLD_NAME, builtin: latest.length, current };
+    }
+    /** Once per session: an older copy of the book (e.g. imported from v1.1) is never overwritten automatically. */
+    async staleNotice() {
+        if (this.staleShown) return; this.staleShown = true;
+        const st = await this.worldbookStatus().catch(() => null);
+        if (st?.exists && !st.current) this.toast('info', `“${WORLD_NAME}”世界书不是插件最新版（缺少聊天群衔接等条目）。可在 设置 → 世界书安装 / 绑定 → 更新到最新版（会先备份）。`);
+    }
+    latestRules() { return latestRules(this.app.original.ZhuTianBuiltinRules).rules; }
+    /** Brings an existing book up to this version: backup first (a separate book), then built-in entries replaced,
+     *  the user's own entries and on/off choices kept. */
+    async updateWorldbook() {
+        const c = this.ctx; let book = null;
+        try { book = await c.loadWorldInfo(WORLD_NAME); } catch { book = null; }
+        if (!book?.entries || !Object.keys(book.entries).length) return { ...(await this.installWorldbook('none')), created: true };
+        const stamp = new Date().toLocaleString('sv-SE').replace(/[-: ]/g, '').slice(0, 12), backup = `${WORLD_NAME}-备份-${stamp}`;
+        await c.saveWorldInfo(backup, structuredClone(book), true);
+        const r = mergeWorldbook(book, this.latestRules());
+        await c.saveWorldInfo(WORLD_NAME, r.book, true);
+        await c.updateWorldInfoList?.();
+        return { ...(await this.worldbookStatus()), backup, replaced: r.replaced, added: r.added, kept: r.kept };
+    }
+    /** The same book as a SillyTavern world-info JSON file (for manual import / sharing). */
+    exportWorldbook() {
+        const blob = new Blob([JSON.stringify(buildWorldbook(this.latestRules()), null, 2)], { type: 'application/json' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${WORLD_NAME}-插件${WORLDBOOK_REV}.json`;
+        document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     }
     async installWorldbook(bind) {
         const c = this.ctx, st = await this.worldbookStatus();
         if (!st.exists) {
-            await c.saveWorldInfo(WORLD_NAME, buildWorldbook(this.app.original.ZhuTianBuiltinRules), true);
+            await c.saveWorldInfo(WORLD_NAME, buildWorldbook(this.latestRules()), true);
             await c.updateWorldInfoList?.();
         }
         if (bind === 'chat') {
@@ -64,7 +93,8 @@ export class Features {
         if (this.dead || this.app.settings.get('worldbookAuto') === false) return this.wbAuto = 'off';
         const c = this.ctx;
         if (!this.app.adapter.currentIdentity() || !this.isZhutianChat()) return this.wbAuto = 'not-zhutian';
-        if (c.chatMetadata?.world_info) return this.wbAuto = c.chatMetadata.world_info === WORLD_NAME ? 'chat' : 'other-chat-book';
+        if (c.chatMetadata?.world_info === WORLD_NAME) { this.staleNotice(); return this.wbAuto = 'chat'; }
+        if (c.chatMetadata?.world_info) return this.wbAuto = 'other-chat-book';
         let wi = null; try { wi = await import('/scripts/world-info.js'); } catch { /* older layout: fall back to chat binding */ }
         const ch = c.characters?.[c.characterId];
         const charBooks = [ch?.data?.extensions?.world, ...(wi?.world_info?.charLore?.find?.(e => e.name === ch?.avatar)?.extraBooks || [])];
@@ -83,7 +113,7 @@ export class Features {
         const max = c.mainApi === 'openai' && c.chatCompletionSettings?.openai_max_context ? Number(c.chatCompletionSettings.openai_max_context) : Number(c.maxContext), pct = Number(wi.world_info_budget), cap = Number(wi.world_info_budget_cap) || 0;
         if (!Number.isFinite(max) || !Number.isFinite(pct)) return null;
         let budget = Math.max(1, Math.round(max * pct / 100)); if (cap > 0) budget = Math.min(budget, cap);
-        const text = this.app.original.ZhuTianBuiltinRules.filter(r => r.constant && !r.disable).map(r => r.content).join('\n');
+        const text = this.latestRules().filter(r => r.constant && !r.disable).map(r => r.content).join('\n');
         let need = Math.ceil(text.length * 0.9);
         try { if (typeof c.getTokenCountAsync === 'function') need = await c.getTokenCountAsync(text); } catch { /* estimate */ }
         return this.wbBudget = { need, budget, max, pct, cap, ok: budget >= need };
@@ -101,11 +131,17 @@ export class Features {
     async openWorldbook() {
         const st = await this.worldbookStatus();
         const el = this.popup(`<h3>诸天世界书（外挂，不依赖角色卡 MVU）</h3>
-<p>内置规则 ${st.builtin} 条。当前酒馆：${st.exists ? `已存在“${esc(WORLD_NAME)}”（${st.count} 条，不会覆盖）` : '尚未安装'}；当前聊天${st.chatBound ? '<b>已绑定</b>' : '未绑定'}。</p>
-<div class="zt-popup-actions"><div class="menu_button" data-wb="install">仅安装世界书</div><div class="menu_button" data-wb="chat">安装并绑定到当前聊天</div></div>
+<p>内置规则 ${st.builtin} 条（插件 ${WORLDBOOK_REV} 版）。当前酒馆：${st.exists ? `已存在“${esc(WORLD_NAME)}”（${st.count} 条，${st.current ? '<b>已是最新</b>' : '<b>不是最新版</b>，可点「更新到最新版」'}）` : '尚未安装'}；当前聊天${st.chatBound ? '<b>已绑定</b>' : '未绑定'}。</p>
+<div class="zt-popup-actions"><div class="menu_button" data-wb="install">仅安装世界书</div><div class="menu_button" data-wb="chat">安装并绑定到当前聊天</div><div class="menu_button" data-wb="update">更新到最新版（先备份）</div><div class="menu_button" data-wb="export">导出 JSON</div></div>
 <p class="zt-note">绑定为“聊天世界书”（chat_metadata.world_info），只影响当前聊天，与其他角色卡隔离。已存在同名世界书时只绑定，不覆盖你改过的条目。</p><p class="zt-out"></p>`);
         el.addEventListener('click', async e => {
             const act = e.target.closest('[data-wb]')?.dataset.wb; if (!act) return;
+            if (act === 'export') { this.exportWorldbook(); return; }
+            if (act === 'update') {
+                try { const r = await this.updateWorldbook(); el.querySelector('.zt-out').textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', '世界书已更新到插件最新版'); }
+                catch (err) { el.querySelector('.zt-out').textContent = '未完成：' + err.message; }
+                return;
+            }
             try { const r = await this.installWorldbook(act === 'chat' ? 'chat' : 'none'); el.querySelector('.zt-out').textContent = `完成：世界书 ${r.count} 条；当前聊天${r.chatBound ? '已绑定' : '未绑定'}。`; this.toast('success', '世界书已就绪'); }
             catch (err) { el.querySelector('.zt-out').textContent = '未完成：' + err.message; }
         });

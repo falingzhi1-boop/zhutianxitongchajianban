@@ -40,6 +40,8 @@ with sync_playwright() as p:
 
     # ---- navigation + world theme ----
     js(page, "h.open('ov');return 1"); page.wait_for_timeout(1200)
+    # a phone phase of another suite may have saved a small window in the server-side prefs (compact = no portrait)
+    js(page, "sr.getElementById('reset-window')?.click();return 1"); page.wait_for_timeout(400)
     groups = js(page, "return [...sr.querySelectorAll('.zt-nav-group[data-group=\"图谱\"] .nav-button')].map(b=>b.dataset.page)")
     ok('图谱 group has 事件线 / 羁绊图 / 星图 / 能力树', groups == ['events', 'bonds', 'stars', 'tree'], str(groups))
     ok('太初仙域 → 仙侠 theme on the terminal', js(page, "return sr.host.getAttribute('data-zt-world')") == 'xianxia')

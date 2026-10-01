@@ -13,6 +13,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('--port', type=int, default=5001)
 ap.add_argument('--host', default='127.0.0.1')
 ap.add_argument('--log', default='/var/tmp/qa/mock.jsonl')
+ap.add_argument('--no-cors', action='store_true', help='send no CORS headers (a provider that blocks browsers; only server-side relays work)')
 args = ap.parse_args()
 
 STORY = ('夜色压着城头，你握紧了掌心那枚刚兑换来的引气丹。\n\n'
@@ -58,6 +59,7 @@ def group_reply(allt):
     a, b = names[0], names[1 % len(names)]
     out = [f'@{a}: 群主好！今天{("你那边" if said else "")}的剧情挺热闹啊。']
     if '发红包' in said: out.append(f'@{a}: [红包] 系统点 3000 3 | 见者有份')
+    elif '【测试】贪心' in allt: out.append(f'@{a}: [红包] 系统点 500 3 | 又来发红包啦')   # ignores the rhythm rule on purpose
     if '物品红包' in said: out.append(f'@{b}: [红包] 物品 青丘桃花酿/仙品/消耗品/饮后心神安宁 3 | 尝尝我们青丘的酒')
     if '送礼' in said: out.append(f'@{b}: [赠礼] 太虚剑谱残卷/神品/功法/记载太虚剑意的前三式 | 这个你用得上')
     if len(names) > 1: out.append(f'@{b}: 我在呢，有事说事。')
@@ -68,7 +70,11 @@ def group_reply(allt):
 def route(allt):
     if '你是诸天万界聊天群的招募系统。' in allt:
         if '青丘' in allt: return '白浅|青丘|4|清冷护短|青丘桃花酿'
-        return '叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗' if '叶清寒' not in allt.split('已有群员：', 1)[-1].split('（', 1)[0] else '苏小蛮|东海渔村|1|活泼话多|东海咸鱼干'
+        avoid = allt.split('【不要选】', 1)[1].split('（', 1)[0] if '【不要选】' in allt else allt.split('已有群员：', 1)[-1].split('（', 1)[0]
+        if '刚刚出现过或已在群里' in allt: return '陆千帆|天机阁|2|心思缜密|天机算筹'   # second try after a rejected repeat: the model listened
+        for card in ('叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗', '苏小蛮|东海渔村|1|活泼话多|东海咸鱼干', '林小禾|青石镇|1|憨厚老实|青石镇米糕'):
+            if card.split('|', 1)[0] not in avoid: return card
+        return '叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗'
     if '你是诸天万界聊天群的任务发布系统。' in allt: return '寻找失落剑谱|前往问剑宗后山寻回《太虚剑谱》残卷|5000 系统点'
     if '你是诸天万界聊天群的群直播。' in allt: return '问剑宗山门前，数百弟子列阵练剑。\n剑光汇成一条银河，直冲云霄。\n掌门立于峰顶，目光望向镜头。'
     if '你是诸天万界聊天群的群员私聊' in allt: return '（剑穗轻晃）群主找我何事？若是切磋，随时奉陪。'
@@ -96,6 +102,10 @@ def route(allt):
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
+
+    def send_header(self, k, v):
+        if args.no_cors and k.lower().startswith('access-control-'): return
+        super().send_header(k, v)
 
     def _json(self, obj, code=200):
         b = json.dumps(obj, ensure_ascii=False).encode()

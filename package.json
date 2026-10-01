@@ -1,6 +1,6 @@
 {
   "name": "zhutian-covenant-terminal",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "type": "module",
   "description": "SillyTavern 1.16–1.19 native extension that replaces the whole 诸天万界最强系统 v1.1 install: worldbook, 4 regexes, Tavern Helper script, status bar with every AI feature, Lilith assistant, private chat, touch, voice box; see docs/FEATURE_MATRIX.md",

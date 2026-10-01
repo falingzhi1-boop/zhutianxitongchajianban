@@ -17,9 +17,50 @@ const num = (x, d = 0) => { const n = Number(x); return Number.isFinite(n) ? n :
 export const DEFAULT_RULES = ['红包和赠礼的物品品阶不得高于宿主商城等级，也不得高于赠送者自身实力', '禁忌品禁止在群内流通', '群员不得泄露宿主的系统身份'];
 export const POINTS_CAP_BY_SHOP = [0, 2000, 20000, 200000, 2e6, 2e7];
 export const QTY_CAP = { 凡品: 5, 灵品: 5, 仙品: 2, 神品: 1, 禁忌: 0 };
-export const RECRUIT_FEE = 200;
+export const RECRUIT_FEE = 100;
+// 入群费 (0.8.1): its own curve. 0.6–0.8 reused the 神通 复刻 prices (1e3…1e11), so a 星系级 member cost billions.
+export const JOIN_PRICE = [0, 300, 1500, 6000, 30000, 200000, 2e6, 3e7, 5e8];
+/** Highest 实力档 whose 入群费 fits the budget (at least 1). */
+export function affordableTier(points) { let t = 1; for (let i = 1; i < JOIN_PRICE.length; i++) if (JOIN_PRICE[i] <= num(points)) t = i; return t; }
+// Inspiration for random recruits, picked locally so two recruits never send the model the same prompt.
+export const RECRUIT_SEEDS = ['东方玄幻', '仙侠修真', '武侠江湖', '都市异能', '赛博朋克', '蒸汽朋克', '西幻魔法', '克苏鲁诡异', '末日废土', '星际科幻', '日式动漫', '历史架空', '神话传说', '宫廷权谋', '机甲战争', '校园日常', '海贼冒险', '忍者世界', '魔法少女', '吸血鬼暗夜', '无限流', '游戏异界', '灵异民俗', '妖怪百鬼'];
+/** 红包/赠礼 rhythm: members may hand things over only every 3–4 group rounds, unless the host asks for it. */
+export const PACKET_ASK = /红包|发包|赠礼|送礼|礼物|送点|给点|打赏/;
+export function packetAllowed(g, userText) {
+    if (userText && PACKET_ASK.test(userText)) return 'asked';
+    return num(g.节奏?.距上次, 99) + 1 >= num(g.节奏?.间隔, 3) ? 'due' : '';
+}
 export const DAILY_IN = 6, DAILY_OUT = 10;
 
+/** Recruit prompt (0.8.1). Random mode draws the genre and the target 实力档 locally — the model only fills in a person
+ *  — so consecutive recruits really differ, and the target never exceeds what the host can pay for. */
+export function recruitPrompt(g, { mode = 'rand', hint = '', budget = 0, maxTier = 1, rand = Math.random } = {}) {
+    const tiers = L.TIERS.slice(1).map((t, i) => `${i + 1}=${t.n}`).join('，');
+    const seen = [...g.成员.map(m => m.名称), ...(g.候选历史 || [])];
+    let want, target = 0, seed = '';
+    if (mode === 'char') want = `角色「${clip(hint, 30)}」本人`;
+    else {
+        const lo = Math.max(1, maxTier - 2); target = lo + Math.floor(rand() * (maxTier - lo + 1));
+        seed = RECRUIT_SEEDS[Math.floor(rand() * RECRUIT_SEEDS.length)];
+        want = mode === 'world' ? `来自世界「${clip(hint, 30)}」的一名角色` : `一名来自「${seed}」类型世界的角色（知名作品或原创都可以，不要总选最有名的那几个）`;
+    }
+    const text = `为宿主的聊天群招募${want}。
+【不要选】${seen.join('、') || '无'}（已在群里或刚刚出现过，必须换人）
+${target ? `【实力档】必须是 ${target}（${(L.TIERS[target] || L.TIERS[1]).n}）。宿主只有 ${fmtNum(num(budget))} 系统点，入群费 ${fmtNum(JOIN_PRICE[target])} 点；不要招募更强的人。` : '按原作设定如实评估实力档。'}
+实力档参考：${tiers}。只输出一行，用竖线分隔：名称|出处世界|实力档数字|性格（20字内）|特产（该世界可以当礼物的一种物品，20字内）`;
+    return { text, target, seed };
+}
+/** Story-side prompt: who is in the group, what reached the host through it, and how the story should treat that. */
+export function groupStoryPrompt(g, tierName = t => String(t)) {
+    const lines = [];
+    if (g.成员.length) lines.push(`【诸天聊天群】宿主拥有跨世界聊天群「${g.群名}」（${g.成员.length} 人）：${g.成员.map(m => `${m.名称}（${m.世界}·${tierName(m.档)}）`).join('、')}。群员身处各自的世界，只能通过聊天群（宿主意识里的系统界面）交流、发红包和赠礼。`);
+    const got = g.入库记录.slice(-8);
+    if (got.length) lines.push(`【聊天群 · 真实入库记录】以下东西是宿主通过聊天群获得、系统已入库的：${got.map(r => `${r.what}（${r.src}，${r.how}）`).join('；')}。正文里宿主拿出、使用或提到这些东西时，来历就是诸天聊天群（经系统空间送达），不得改写成捡到、买到、当面赠送等其他来源。`);
+    const recent = g.消息.filter(m => m.kind !== 'sys').slice(-4).map(m => `${m.from === 'me' ? '宿主' : (g.成员.find(x => x.id === m.from)?.名称 || '群员')}：${String(m.text).slice(0, 60)}`);
+    if (recent.length) lines.push('最近群聊：' + recent.join(' / '));
+    if (lines.length) lines.push('聊天群里发生的事是真实的，剧情可以自然衔接（例如宿主看一眼群消息、提起某位群友）；但不要替群员编造没有记录的群聊、红包或赠礼。');
+    return lines.join('\n');
+}
 export function normGroup(g) {
     const x = g && typeof g === 'object' && !Array.isArray(g) ? g : {};
     return {
@@ -36,6 +77,9 @@ export function normGroup(g) {
         设置: { 自动闲聊: !!x.设置?.自动闲聊, 摘要注入: x.设置?.摘要注入 !== false },
         私聊: x.私聊 && typeof x.私聊 === 'object' ? x.私聊 : {},
         候选: x.候选 && x.候选.名称 ? x.候选 : null,
+        候选历史: Array.isArray(x.候选历史) ? x.候选历史.map(n => clip(n, 20)).filter(Boolean).slice(-12) : [],
+        节奏: { 距上次: num(x.节奏?.距上次, 99), 间隔: Math.max(3, Math.min(4, num(x.节奏?.间隔, 3))) },
+        入库记录: Array.isArray(x.入库记录) ? x.入库记录.filter(r => r && r.what).slice(-20) : [],
     };
 }
 /** 招募: 名称|世界|实力档|性格|特产 */
@@ -126,6 +170,8 @@ export class HubGroup {
         }, z => [z[KEY]?.rev, z.系统点, (z.背包 || []).length, Object.keys(z.任务库 || {}).length]);
     }
     say(g, from, text, extra = {}) { g.消息.push({ id: rid('g'), t: Date.now(), from, text: clip(text, 400), ...extra }); if (g.消息.length > MAX_MSG) g.消息.splice(0, g.消息.length - MAX_MSG); }
+    /** What reached the host through the group — injected into the story prompt so the AI keeps the real source. */
+    booked(g, what, src, how) { g.入库记录.push({ t: Date.now(), what: clip(what, 40), src: clip(src, 40), how }); if (g.入库记录.length > 20) g.入库记录.splice(0, g.入库记录.length - 20); }
     toast(t, ms = 3200, a) { this.hub?.toast(t, ms, a); }
     fail(e) { this.toast(e.message || String(e), 4500); globalThis.toastr?.warning?.(e.message || String(e), '诸天 · 聊天群'); }
     async ask(system, user, maxTokens = 1200) {
@@ -143,15 +189,13 @@ export class HubGroup {
     syncPrompt() {
         try {
             const z = this.ledger(), g = z ? normGroup(z[KEY]) : null, parts = [];
-            if (g && g.设置.摘要注入 && g.成员.length) {
-                parts.push(`【诸天聊天群】宿主拥有跨世界聊天群「${g.群名}」（${g.成员.length} 人）：${g.成员.map(m => `${m.名称}（${m.世界}·${this.tierName(m.档)}）`).join('、')}。群员身处各自的世界，只能通过聊天群交流、发红包和赠礼；群员送出的物品只有系统记录“已入库”后才算宿主拥有。`);
-                const recent = g.消息.filter(m => m.kind !== 'sys').slice(-4).map(m => `${m.from === 'me' ? '宿主' : (g.成员.find(x => x.id === m.from)?.名称 || '群员')}：${String(m.text).slice(0, 60)}`);
-                if (recent.length) parts.push('最近群聊：' + recent.join(' / '));
+            if (g && g.设置.摘要注入 && (g.成员.length || g.入库记录.length)) {
+                parts.push(groupStoryPrompt(g, t => this.tierName(t)));
             }
             if (g?.降临) parts.push(`【诸天聊天群 · 群员降临】${g.降临.名称}（${g.降临.世界}·${this.tierName(g.降临.档)}·${g.降临.性格 || ''}）通过聊天群降临到宿主身边，接下来 ${g.降临.轮} 轮剧情中作为同伴登场，按其性格和原世界能力行动。`);
             const text = parts.join('\n');
             if (text === this.lastPrompt) return; this.lastPrompt = text;
-            this.bridge.injectPrompts([{ id: 'group', content: text, position: 'in_chat', depth: 4, role: 'system' }]);
+            this.bridge.injectPrompts([{ id: 'group', content: text, position: 'in_chat', depth: 2, role: 'system' }]);
         } catch (e) { console.warn('[诸天聊天群] 注入失败', e); }
     }
     async onStoryReply(id) {
@@ -168,12 +212,15 @@ export class HubGroup {
         const z0 = this.ledger(); if (!z0) throw Error('当前聊天没有诸天账本。');
         const g0 = normGroup(z0[KEY]); const speakers = g0.成员.filter(m => num(m.禁言轮) <= 0);
         if (!speakers.length) throw Error(g0.成员.length ? '群员都被禁言了。' : '群里还没有群员，先去「群员」页招募。');
-        const shop = L.shopLevel(z0), cap = L.GRADES[Math.min(shop, 4) - 1];
+        const shop = L.shopLevel(z0), cap = L.GRADES[Math.min(shop, 4) - 1], allow = packetAllowed(g0, userText);
+        const packetRule = allow === 'asked' ? '2. 宿主这次主动要了，可以按宿主的要求发红包或赠礼（最多 3 个），格式：'
+            : allow ? '2. 本轮可以（不是必须）由 1 位群员发红包或赠礼，最多 1 个，格式：'
+            : '2. 本轮【禁止】发红包和赠礼（群里刚发过，节奏是三四轮一次），只聊天。下面的格式本轮不要用：';
         const recent = g0.消息.slice(-16).map(m => `${m.from === 'me' ? this.hostName() + '（宿主）' : m.from === 'sys' ? '系统' : (g0.成员.find(x => x.id === m.from)?.名称 || '群员')}: ${String(m.text).slice(0, 120)}`).join('\n');
         const sys = `你是诸天万界聊天群。群里的每位群员来自不同的世界，性格、说话方式和见识都符合原世界。宿主是群主，拥有诸天系统。
 回复规则：
 1. 选 1–6 位与话题最相关的群员发言（被禁言的不能发言），每条一行，格式严格为：@名称: 内容
-2. 可以偶尔（不要每次）发红包或赠礼，最多 1 个，格式：
+${packetRule}
 @名称: [红包] 系统点 数额 个数 | 祝福语
 @名称: [红包] 物品 名称/品级/分类/效果 数量 | 祝福语
 @名称: [赠礼] 名称/品级/分类/效果 | 附言
@@ -192,8 +239,11 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const text = await this.ask(sys, user, 1200);
             let got = 0, dropped = 0;
             const res = await this.write((g, z) => {
-                const parsed = parseGroupReply(text, g.成员, { cap, shop });
+                const parsed = parseGroupReply(text, g.成员, { cap, shop }); let handed = 0;
                 for (const p of parsed) {
+                    // Hard floor for the rhythm: the model may ignore the rule, the ledger does not.
+                    if ((p.packet || p.gift) && (!allow || handed >= (allow === 'asked' ? 3 : 1))) { dropped++; continue; }
+                    if (p.packet || p.gift) handed++;
                     if (p.packet) {
                         if (g.日计.收 >= DAILY_IN) { this.say(g, p.who.id, p.text + '（今日红包已达上限，被群规拦下）'); dropped++; continue; }
                         const id = rid('rp'), total = p.packet.kind === 'points' ? p.packet.amount : p.packet.qty;
@@ -207,10 +257,11 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
                     } else this.say(g, p.who.id, p.text);
                 }
                 for (const m of g.成员) if (num(m.禁言轮) > 0) m.禁言轮 = num(m.禁言轮) - 1;
+                if (got) g.节奏 = { 距上次: 0, 间隔: Math.random() < 0.5 ? 3 : 4 }; else g.节奏.距上次 = Math.min(99, num(g.节奏.距上次) + 1);
                 return parsed.length;
             });
             if (!res) this.toast('群员这次没有按格式回复（模型输出无法解析），可以再发一次。', 4200);
-            else if (got) this.toast(dropped ? '有红包/赠礼到达，部分超出今日上限。' : '群里有红包或赠礼，点开领取。', 3200);
+            else if (got) this.toast(dropped ? '有红包/赠礼到达，部分超出今日上限或节奏。' : '群里有红包或赠礼，点开领取。', 3200);
         } finally { this.busy = ''; this.syncPrompt(); this.paint(); }
     }
     async send(text) {
@@ -234,7 +285,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             if (p.kind === 'points') { L.earn(z, mine); } else L.bagAdd(z, { ...p.item, 来源: src, 价格: L.TIER_PRICE[p.item.品级] }, mine);
             const what = p.kind === 'points' ? `${fmtNum(mine)} 系统点` : `${p.item.名称}（${p.item.品级}）×${mine}`;
             const best = Math.max(...p.grabs.map(x => x.v)) === mine;
-            this.say(g, 'sys', `你抢到了 ${src} 的红包：${what}${best ? ' · 手气最佳' : ''} · 已入库`, { kind: 'sys' });
+            this.say(g, 'sys', `你抢到了 ${src} 的红包：${what}${best ? ' · 手气最佳' : ''} · 已入库`, { kind: 'sys' }); this.booked(g, what, src, '红包');
             return { what, src };
         });
         this.toast(`已入库：${out.what}（来源 ${out.src}）`, 3600); this.app.fx?.play?.({ kind: 'reward', title: '红包已入库', detail: `${out.what} · ${out.src}` });
@@ -246,7 +297,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const x = g.待领取.splice(i, 1)[0], src = `${x.名称}@${x.世界}`;
             L.bagAdd(z, { ...x.item, 来源: src }, 1);
             const m = g.成员.find(mm => mm.id === x.from); if (m) m.好感 = Math.min(100, num(m.好感, 20) + 1);
-            this.say(g, 'sys', `你领取了 ${src} 的赠礼：${x.item.名称}（${x.item.品级}）· 已入库`, { kind: 'sys' });
+            this.say(g, 'sys', `你领取了 ${src} 的赠礼：${x.item.名称}（${x.item.品级}）· 已入库`, { kind: 'sys' }); this.booked(g, `${x.item.名称}（${x.item.品级}）`, src, '赠礼');
             return { what: `${x.item.名称}（${x.item.品级}）`, src };
         });
         this.toast(`已入库：${out.what}（来源 ${out.src}）`, 3600); this.app.fx?.play?.({ kind: 'reward', title: '赠礼已入库', detail: `${out.what} · ${out.src}` });
@@ -285,26 +336,34 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
     async recruit(mode, hint) {
         const z = this.ledger(); if (!z) throw Error('当前聊天没有诸天账本。');
         const g = normGroup(z[KEY]); if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量} 人），先扩建。`);
-        await this.write((gg, zz) => { L.spend(zz, RECRUIT_FEE); gg.候选 = null; });
+        await this.write((gg, zz) => { L.spend(zz, RECRUIT_FEE); if (gg.候选) gg.候选历史 = [...gg.候选历史, gg.候选.名称].slice(-12); gg.候选 = null; });
         this.busy = '正在向诸天万界发布招募令…'; this.paint();
         try {
-            const tiers = L.TIERS.slice(1).map((t, i) => `${i + 1}=${t.n}`).join('，');
-            const want = mode === 'world' ? `来自世界「${clip(hint, 30)}」的一名角色` : mode === 'char' ? `角色「${clip(hint, 30)}」本人` : '任意一个知名或原创世界的一名角色';
-            const text = await this.ask('你是诸天万界聊天群的招募系统。', `为宿主的聊天群招募${want}。已有群员：${g.成员.map(m => m.名称).join('、') || '无'}（不要重复）。
-按原作设定评估实力档（${tiers}）。只输出一行，用竖线分隔：名称|出处世界|实力档数字|性格（20字内）|特产（该世界可以当礼物的一种物品，20字内）`, 300);
-            const card = parseRecruit(text); if (!card) throw Error('招募令没有得到有效回应（模型输出无法解析）。');
-            await this.write(gg => { gg.候选 = { ...card, t: Date.now() }; });
+            const g1 = this.group(), budget = num(this.ledger()?.系统点), maxTier = affordableTier(budget);
+            const prompt = recruitPrompt(g1, { mode, hint, budget, maxTier });
+            const avoid = new Set([...g1.成员.map(m => m.名称), ...(mode === 'char' ? [] : g1.候选历史)]);   // 指定角色: asking again for the same person is fine
+            let card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text, 300));
+            // Real randomness has a floor: never hand back someone already in the group or just shown (one retry).
+            if (card && (avoid.has(card.名称) || (prompt.target && card.档 > maxTier))) {
+                const why = avoid.has(card.名称) ? `「${card.名称}」刚刚出现过或已在群里，必须换一个完全不同的人` : `「${card.名称}」实力档 ${card.档} 超出了要求的 ${prompt.target} 档`;
+                card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text + `\n上一次的回答不合格：${why}。`, 300)) || card;
+            }
+            if (!card) throw Error('招募令没有得到有效回应（模型输出无法解析）。');
+            if (avoid.has(card.名称)) throw Error(`模型两次都给了重复的人（${card.名称}）。`);
+            await this.write(gg => { gg.候选 = { ...card, t: Date.now(), 超预算: card.档 > maxTier }; });
         } catch (e) {
             await this.write((gg, zz) => { L.earn(zz, RECRUIT_FEE); }).catch(() => {});
             throw Error(e.message + `（${RECRUIT_FEE} 点招募令已退回）`);
         } finally { this.busy = ''; this.paint(); }
     }
-    joinPrice(c) { return (L.TIERS[c.档] || L.TIERS[1]).p; }
+    joinPrice(c) { return JOIN_PRICE[Math.max(1, Math.min(8, c.档 | 0))] || JOIN_PRICE[1]; }
     async invite() {
         const out = await this.write((g, z) => {
             const c = g.候选; if (!c) throw Error('没有候选人。');
             if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量} 人）。`);
-            L.spend(z, this.joinPrice(c));
+            const price = this.joinPrice(c);
+            if (num(z.系统点) < price) throw Error(`入群费 ${fmtNum(price)} 点，当前只有 ${fmtNum(num(z.系统点))} 点。可以「放弃」再招募一位实力档低一些的。`);
+            L.spend(z, price);
             const m = { id: rid('m'), 名称: c.名称, 世界: c.世界, 档: c.档, 性格: c.性格, 特产: c.特产, 好感: 20, 身份: '群员', 禁言轮: 0, 加入: Date.now() };
             g.成员.push(m); g.候选 = null; this.say(g, 'sys', `${m.名称}（${m.世界}·${this.tierName(m.档)}）加入了群聊。`, { kind: 'sys' });
             return m;
@@ -352,7 +411,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const y = new Date(Date.now() - 864e5).toLocaleDateString('sv-SE');
             g.签到.streak = g.签到.day === y ? g.签到.streak + 1 : 1; g.签到.day = today(); g.签到.total++;
             const pts = signReward(g.签到.streak, g.成员.length); L.earn(z, pts);
-            this.say(g, 'sys', `签到成功：连续 ${g.签到.streak} 天，+${pts} 系统点 · 已入库`, { kind: 'sys' }); return { pts, streak: g.签到.streak };
+            this.say(g, 'sys', `签到成功：连续 ${g.签到.streak} 天，+${pts} 系统点 · 已入库`, { kind: 'sys' }); this.booked(g, `${pts} 系统点`, '群签到', '签到'); return { pts, streak: g.签到.streak };
         });
         this.toast(`签到 +${out.pts} 系统点（连续 ${out.streak} 天）· 已入库`); this.paint();
     }
@@ -366,7 +425,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         const out = await this.write((g, z) => {
             const list = this.marketList(g, z), i = list.findIndex(x => x.id === id); if (i < 0) throw Error('这件货已经卖掉了。');
             const x = list[i]; L.spend(z, x.price); L.bagAdd(z, { ...x.item, 来源: `${x.名称}@${x.世界}`, 价格: x.price }, 1); list.splice(i, 1);
-            this.say(g, 'sys', `你从 ${x.名称}@${x.世界} 买下 ${x.item.名称}（${x.item.品级}）· ${fmtNum(x.price)} 点 · 已入库`, { kind: 'sys' }); return x;
+            this.say(g, 'sys', `你从 ${x.名称}@${x.世界} 买下 ${x.item.名称}（${x.item.品级}）· ${fmtNum(x.price)} 点 · 已入库`, { kind: 'sys' }); this.booked(g, `${x.item.名称}（${x.item.品级}）`, `${x.名称}@${x.世界}`, '集市购买'); return x;
         });
         this.toast(`已入库：${out.item.名称}（来源 ${out.名称}@${out.世界}）`); this.paint();
     }
@@ -386,7 +445,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             if (!g.成员.length) throw Error('群里没人能买。');
             if (s.price > s.value * 1.3) { const m = g.成员[Math.floor(Math.random() * g.成员.length)]; this.say(g, m.id, `${s.item.名称}？这价格有点高了，便宜点再说。`); return { sold: false, who: m.名称 }; }
             const m = g.成员[Math.floor(Math.random() * g.成员.length)]; g.挂单.splice(i, 1); L.earn(z, s.price);
-            this.say(g, m.id, `${s.item.名称}我要了！`); this.say(g, 'sys', `${m.名称}@${m.世界} 买下了 ${s.item.名称}，+${fmtNum(s.price)} 系统点 · 已入库`, { kind: 'sys' });
+            this.say(g, m.id, `${s.item.名称}我要了！`); this.booked(g, `卖出 ${s.item.名称} 得 ${fmtNum(s.price)} 系统点`, `${m.名称}@${m.世界}`, '集市出售'); this.say(g, 'sys', `${m.名称}@${m.世界} 买下了 ${s.item.名称}，+${fmtNum(s.price)} 系统点 · 已入库`, { kind: 'sys' });
             return { sold: true, who: m.名称, price: s.price };
         });
         this.toast(out.sold ? `${out.who} 买下了，+${fmtNum(out.price)} 系统点 · 已入库` : `${out.who} 嫌贵（超过原版估值 30%）。`); this.paint();
@@ -496,9 +555,9 @@ ${sheet}
     }
     membersView(g, z) {
         const c = g.候选, pm = this.pm && g.成员.find(m => m.id === this.pm);
-        const recruit = `<section class="zt-card"><h3>发布招募令 <small>每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档</small></h3>
+        const recruit = `<section class="zt-card"><h3>发布招募令 <small>每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档 · 随机招募按你的系统点挑实力档</small></h3>
 <div class="zt-g-row"><select data-f="rmode"><option value="rand">随机世界</option><option value="world">指定世界</option><option value="char">指定角色</option></select><input type="text" data-f="rhint" maxlength="30" placeholder="世界或角色名（随机时可空）"><button type="button" class="zt-btn primary small" data-g="recruit" ${this.busy || g.成员.length >= g.容量 ? 'disabled' : ''}>发布</button></div>
-${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite">邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button><button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
+${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite" ${num(z.系统点) < this.joinPrice(c) ? 'title="系统点不足"' : ''}>邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button>${num(z.系统点) < this.joinPrice(c) ? `<small class="zt-g-warn">系统点不足（有 ${fmtNum(num(z.系统点))}）。放弃后再招募，会换一个人。</small>` : ''}<button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
 <div class="zt-g-row"><span>容量 ${g.成员.length}/${g.容量}</span><button type="button" class="zt-btn small" data-g="expand" ${g.容量 >= MAX_MEMBERS ? 'disabled' : ''}>扩建 +5 · ${fmtNum(g.容量 * 2000)} 点</button></div></section>`;
         const list = g.成员.map(m => `<div class="zt-g-member${pm?.id === m.id ? ' open' : ''}">${this.avatar(m)}<div class="zt-g-minfo"><b>${esc(m.名称)}${m.身份 === '管理员' ? ' <span class="zt-grade">管理员</span>' : ''}${num(m.禁言轮) > 0 ? ` <span class="zt-grade" data-g="禁忌">禁言 ${m.禁言轮} 轮</span>` : ''}${g.降临?.id === m.id ? ` <span class="zt-grade" data-g="仙品">降临中 ${g.降临.轮} 轮</span>` : ''}</b>
 <small>${esc(m.世界)} · ${esc(this.tierName(m.档))} · ${esc(m.性格)} · 特产 ${esc(m.特产)}</small><i class="zt-g-fav" style="--v:${num(m.好感, 20)}%" title="好感 ${num(m.好感, 20)}"></i></div>
@@ -554,7 +613,7 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
             case 'inject': return run(() => this.saveMeta({ 摘要注入: t.checked }));
             case 'recruit': return run(() => this.recruit(this.val('[data-f=rmode]'), this.val('[data-f=rhint]')));
             case 'invite': return run(() => this.invite());
-            case 'drop-cand': return run(async () => { await this.write(g => { g.候选 = null; }); this.paint(); });
+            case 'drop-cand': return run(async () => { await this.write(g => { if (g.候选) g.候选历史 = [...g.候选历史, g.候选.名称].slice(-12); g.候选 = null; }); this.paint(); });
             case 'expand': return run(() => this.expand());
             case 'pm-send': { const v = this.val('[data-f=pm]'); return run(() => this.privateSay(d.id, v)); }
             case 'market': return run(() => this.refreshMarket());

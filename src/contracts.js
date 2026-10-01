@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.8.0';
+export const VERSION = '0.8.1';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -64,5 +64,8 @@ export const CAPABILITIES = [
     {name:'修行 · 熟练度（功法实效 / 实战积累 / 角色卡功法）',state:'implemented',scope:'0.8.0：每轮把各功法当前阶段的原版效果注入提示；正文用了功法而数据块漏记时按品阶补记少量熟练度（换页随旧回复撤销）；读取角色卡 / MVU / 其他脚本的功法变量并只升不降地导入功法库。真实模型是否按阶段效果演绎未验证'},
     {name:'莉莉丝气泡播报与剧情台词',state:'implemented',scope:'0.8.0：终端内不再显示状态栏底部的“莉莉丝：……”一行，数据块的系统播报由立绘气泡说出；点立绘空白处按账本说剧情台词；无立绘（手机）时用终端提示条'},
     {name:'管理员控制台入口',state:'implemented',scope:'0.8.0：从 设置 → 高级 · 管理员 打开原版管理员面板；终端内隐藏 ◆ 连点入口'},
-    {name:'莉莉丝原版页面跟随世界主题',state:'implemented',scope:'0.8.0：工作台 / 记忆 / 规则 / 连接 / 状态页、底部状态行、私聊面板在仙侠 / 赛博 / 诡异主题下使用同一套颜色；默认主题保持原版紫色'}
+    {name:'莉莉丝原版页面跟随世界主题',state:'implemented',scope:'0.8.0：工作台 / 记忆 / 规则 / 连接 / 状态页、底部状态行、私聊面板在仙侠 / 赛博 / 诡异主题下使用同一套颜色；默认主题保持原版紫色'},
+    {name:'莉莉丝连接页拉取模型（CORS 时经酒馆服务器转发）',state:'implemented',scope:'0.8.1：修复原版连接页拉取模型必报“CORS”的问题（私有作用域缺 fetch）；浏览器被拦截时经酒馆自己的服务器转发，保留 /v1 基础路径'},
+    {name:'聊天群：真随机招募、按预算定实力档、红包节奏、剧情来源',state:'implemented',scope:'0.8.1：招募在本地抽世界类型与目标实力档并排除刚出现过的人；入群费独立曲线（300 起）；红包/赠礼三四轮一次（宿主主动要求除外，账本层强制）；聊天群入库记录注入正文提示，保持物品来历'},
+    {name:'世界书更新到插件版本',state:'implemented',scope:'0.8.1：在原版 35 条上修正过时说明并新增「36｜联动｜诸天聊天群」；设置里可「更新到最新版（先备份）」或导出 JSON；旧书不会被自动覆盖'},
 ];
