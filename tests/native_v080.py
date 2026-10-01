@@ -166,12 +166,13 @@ with sync_playwright() as p:
     ok('card variables were not modified', page.evaluate("JSON.stringify(SillyTavern.getContext().chatMetadata.variables.角色状态)").count('600') == 1)
     shot(page, '05-skills')
 
-    # ---- phone: no portrait → broadcast falls back to the terminal toast ----
+    # ---- phone: no portrait → broadcast shown by the floating Lilith (0.8.2; before: terminal toast) ----
     page.set_viewport_size({'width': 390, 'height': 844}); page.wait_for_timeout(800)
     js(page, "app.lilith.heard='';app.lilith.readBroadcast({querySelector:()=>({textContent:'手机播报测试'})});return 1"); page.wait_for_timeout(500)
     toast = js(page, "const t=sr.getElementById('zt-hub-toast');return t&&!t.hidden?t.textContent:''")
     stage_vis = js(page, "return app.lilith.stageVisible()")
-    ok('phone: broadcast is visible (bubble or toast)', ('手机播报测试' in toast) or (stage_vis and '手机播报测试' in js(page, "return app.assistant.stage()?.bubble?.textContent||''")), f'toast={toast} stage={stage_vis}')
+    floater = page.evaluate("(()=>{const sh=document.getElementById('zhutian-lilith-float')?.shadowRoot;const b=sh?.querySelector('.bubble');return b&&b.classList.contains('show')?b.textContent:''})()")   # 0.8.2: floating Lilith
+    ok('phone: broadcast is visible (floating Lilith bubble, portrait bubble or toast)', ('手机播报测试' in toast) or ('手机播报测试' in floater) or (stage_vis and '手机播报测试' in js(page, "return app.assistant.stage()?.bubble?.textContent||''")), f'toast={toast} float={floater} stage={stage_vis}')
     shot(page, '06-phone')
 
     page.set_viewport_size({'width': 1400, 'height': 900}); page.wait_for_timeout(500)

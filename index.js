@@ -22,6 +22,9 @@ import {HubAtlas} from './src/hub-atlas.js';
 import {FX} from './src/fx.js';
 import {LilithStage} from './src/lilith-stage.js';
 import {SkillSync} from './src/skill-sync.js';
+import {LilithFloat} from './src/lilith-float.js';
+import {unbindAll} from './src/wb-unbind.js';
+import {WORLD_NAME} from './src/features.js';
 
 // manifest.generate_interceptor is looked up on globalThis at generation time: define it as soon as the module loads.
 installInterceptor();
@@ -61,6 +64,8 @@ class App {
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
         try{await this.portrait.start();}catch(e){console.warn('[诸天] 立绘模式回退到原版分层动画：',e.message);}
         try{this.lilith=new LilithStage(this).start();this.parts.push(this.lilith);}catch(e){console.warn('[诸天] 莉莉丝界面角色未启动',e);}
+        // 0.8.2: phones never show the portrait inside the window — Lilith floats on the page instead (and speaks there).
+        try{this.float=new LilithFloat(this).start();this.parts.push(this.float);}catch(e){console.warn('[诸天] 悬浮莉莉丝未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
         this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
         globalThis.__zhutianApp=this;
@@ -105,7 +110,19 @@ async function boot(){
     return starting;
 }
 export function activate(){hooked=true;disposed=false;void boot();}
-export function deactivate(){disposed=true;abortStart++;pending?.dispose();app?.dispose();app?.adapter?.dispose();app=null;}
+/** 0.8.2: turning the extension off also takes the 诸天 worldbook off every character card / the global list / the open
+ *  chat (setting 关闭插件时自动解绑, default on). SillyTavern awaits this hook for at most 5 s, then saves the settings —
+ *  the record written here is what 设置 → 世界书 → 恢复绑定 uses after re-enabling. */
+async function autoUnbind(){
+    const c=globalThis.SillyTavern?.getContext?.(), store=c?.extensionSettings?.[ID];
+    if(!c||(store&&store.wbUnbindOnDisable===false))return null;
+    try{
+        const rec=await Promise.race([unbindAll(c,WORLD_NAME,{chat:true}),new Promise(r=>setTimeout(()=>r(null),4500))]);
+        if(rec&&rec.count){c.extensionSettings[ID]={...(c.extensionSettings[ID]||{}),wbUnbound:{...rec,auto:true,noticed:false}};c.saveSettingsDebounced?.();console.info(`[诸天终端] 已解绑世界书：${rec.count} 处`);}
+        return rec;
+    }catch(e){console.warn('[诸天终端] 关闭时解绑世界书失败',e);return null;}
+}
+export function deactivate(){const p=autoUnbind();disposed=true;abortStart++;pending?.dispose();app?.dispose();app?.adapter?.dispose();app=null;return p;}
 
 // SillyTavern 1.16.x has no manifest hooks: it only injects this module. Start ourselves there, after APP_READY.
 // 1.17+ calls activate() right after the script loads (before APP_READY), so this path stays idle on those hosts.

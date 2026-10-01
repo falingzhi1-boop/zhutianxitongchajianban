@@ -31,6 +31,24 @@ export function packetAllowed(g, userText) {
     return num(g.节奏?.距上次, 99) + 1 >= num(g.节奏?.间隔, 3) ? 'due' : '';
 }
 export const DAILY_IN = 6, DAILY_OUT = 10;
+/** 0.8.2 economy: a member's points packet (the TOTAL, the host grabs one share of it) is capped by that member's own
+ *  入群费 as well — a packet worth more than the member cost to recruit made the group a money printer. */
+export function packetCap(tier, shop) {
+    const t = Math.max(1, Math.min(8, Math.round(num(tier, 1))));
+    return Math.min((L.TIERS[t] || L.TIERS[1]).p, POINTS_CAP_BY_SHOP[Math.max(1, Math.min(5, shop))], Math.max(100, JOIN_PRICE[t]));
+}
+/** 扩建 +5 seats (0.8.2: 1,000 per current seat — was 2,000, out of line with the 300-point 入群费 curve). */
+export const expandCost = cap => num(cap, 5) * 1000;
+/** 自动闲聊 every N story replies (0.8.2; before: after EVERY reply = one extra model call per message). */
+export const CHAT_EVERY = [1, 2, 3, 4, 5, 6, 8, 10];
+/** Bag items that came through the group (0.8.2: the item itself carries the source, so it never scrolls away). */
+export const GROUP_SRC = /^聊天群[·・]/;
+export function groupItems(z, g) {
+    const known = new Set([...(g?.入库记录 || []).map(r => r.src), ...(g?.成员 || []).map(m => `${m.名称}@${m.世界}`)]);
+    return (Array.isArray(z?.背包) ? z.背包 : []).filter(it => it && it.名称 && num(it.数量, 1) > 0 && (GROUP_SRC.test(String(it.来源 || '')) || known.has(String(it.来源 || ''))));
+}
+/** “聊天群·名称@世界·方式” — what the bag shows and what the story prompt quotes. */
+export const groupSource = (src, how) => `聊天群·${src}·${how}`;
 
 /** Recruit prompt (0.8.1). Random mode draws the genre and the target 实力档 locally — the model only fills in a person
  *  — so consecutive recruits really differ, and the target never exceeds what the host can pay for. */
@@ -51,11 +69,16 @@ ${target ? `【实力档】必须是 ${target}（${(L.TIERS[target] || L.TIERS[1
     return { text, target, seed };
 }
 /** Story-side prompt: who is in the group, what reached the host through it, and how the story should treat that. */
-export function groupStoryPrompt(g, tierName = t => String(t)) {
+export function groupStoryPrompt(g, tierName = t => String(t), z = null) {
     const lines = [];
     if (g.成员.length) lines.push(`【诸天聊天群】宿主拥有跨世界聊天群「${g.群名}」（${g.成员.length} 人）：${g.成员.map(m => `${m.名称}（${m.世界}·${tierName(m.档)}）`).join('、')}。群员身处各自的世界，只能通过聊天群（宿主意识里的系统界面）交流、发红包和赠礼。`);
-    const got = g.入库记录.slice(-8);
-    if (got.length) lines.push(`【聊天群 · 真实入库记录】以下东西是宿主通过聊天群获得、系统已入库的：${got.map(r => `${r.what}（${r.src}，${r.how}）`).join('；')}。正文里宿主拿出、使用或提到这些东西时，来历就是诸天聊天群（经系统空间送达），不得改写成捡到、买到、当面赠送等其他来源。`);
+    // 0.8.2: items are read from the BAG (still owned, with their own source) — the old 8-entry log scrolled away and
+    // kept listing things already used up. The log still covers points (they are not bag items).
+    const items = z ? groupItems(z, g).slice(-12) : [];
+    const pts = g.入库记录.filter(r => /系统点/.test(r.what)).slice(-4);
+    const fallback = z ? [] : g.入库记录.slice(-8);
+    const listed = [...items.map(it => `${it.名称}（${it.品级 || '凡品'}）×${num(it.数量, 1)}（${String(it.来源).replace(GROUP_SRC, '')}）`), ...pts.map(r => `${r.what}（${r.src}，${r.how}）`), ...fallback.map(r => `${r.what}（${r.src}，${r.how}）`)];
+    if (listed.length) lines.push(`【聊天群 · 真实入库记录】以下东西是宿主通过聊天群获得、系统已入库的（物品为背包里现有的）：${listed.join('；')}。正文里宿主拿出、使用或提到这些东西时，来历就是诸天聊天群（经系统空间送达），不得改写成捡到、买到、当面赠送等其他来源。`);
     const recent = g.消息.filter(m => m.kind !== 'sys').slice(-4).map(m => `${m.from === 'me' ? '宿主' : (g.成员.find(x => x.id === m.from)?.名称 || '群员')}：${String(m.text).slice(0, 60)}`);
     if (recent.length) lines.push('最近群聊：' + recent.join(' / '));
     if (lines.length) lines.push('聊天群里发生的事是真实的，剧情可以自然衔接（例如宿主看一眼群消息、提起某位群友）；但不要替群员编造没有记录的群聊、红包或赠礼。');
@@ -74,11 +97,11 @@ export function normGroup(g) {
         挂单: Array.isArray(x.挂单) ? x.挂单 : [], 集市: x.集市 && typeof x.集市 === 'object' ? x.集市 : { day: '', list: [] },
         降临: x.降临 && x.降临.id ? x.降临 : null,
         日计: x.日计?.day === today() ? { day: x.日计.day, 收: num(x.日计.收), 发: num(x.日计.发) } : { day: today(), 收: 0, 发: 0 },
-        设置: { 自动闲聊: !!x.设置?.自动闲聊, 摘要注入: x.设置?.摘要注入 !== false },
+        设置: { 自动闲聊: !!x.设置?.自动闲聊, 摘要注入: x.设置?.摘要注入 !== false, 闲聊间隔: CHAT_EVERY.includes(num(x.设置?.闲聊间隔)) ? num(x.设置?.闲聊间隔) : 3 },
         私聊: x.私聊 && typeof x.私聊 === 'object' ? x.私聊 : {},
         候选: x.候选 && x.候选.名称 ? x.候选 : null,
         候选历史: Array.isArray(x.候选历史) ? x.候选历史.map(n => clip(n, 20)).filter(Boolean).slice(-12) : [],
-        节奏: { 距上次: num(x.节奏?.距上次, 99), 间隔: Math.max(3, Math.min(4, num(x.节奏?.间隔, 3))) },
+        节奏: { 距上次: num(x.节奏?.距上次, 99), 间隔: Math.max(3, Math.min(4, num(x.节奏?.间隔, 3))), 闲聊: Math.max(0, num(x.节奏?.闲聊)) },
         入库记录: Array.isArray(x.入库记录) ? x.入库记录.filter(r => r && r.what).slice(-20) : [],
     };
 }
@@ -112,7 +135,7 @@ export function parseGroupReply(text, members, { cap = '凡品', shop = 1, max =
             const note = clip(pk[3] || '恭喜发财', 40);
             if (pk[1] === '系统点') {
                 const [amt, cnt] = pk[2].split(/\s+/).map(s => num(s.replace(/[^\d]/g, '')));
-                const limit = Math.min((L.TIERS[who.档] || L.TIERS[1]).p, POINTS_CAP_BY_SHOP[Math.max(1, Math.min(5, shop))]);
+                const limit = packetCap(who.档, shop);
                 const amount = Math.max(1, Math.min(Math.floor(amt) || 100, limit));
                 msg.packet = { kind: 'points', amount, count: Math.max(1, Math.min(10, Math.floor(cnt) || 3)), note, downgraded: amount < Math.floor(amt) };
             } else {
@@ -189,8 +212,8 @@ export class HubGroup {
     syncPrompt() {
         try {
             const z = this.ledger(), g = z ? normGroup(z[KEY]) : null, parts = [];
-            if (g && g.设置.摘要注入 && (g.成员.length || g.入库记录.length)) {
-                parts.push(groupStoryPrompt(g, t => this.tierName(t)));
+            if (g && g.设置.摘要注入 && (g.成员.length || g.入库记录.length || groupItems(z, g).length)) {
+                parts.push(groupStoryPrompt(g, t => this.tierName(t), z));
             }
             if (g?.降临) parts.push(`【诸天聊天群 · 群员降临】${g.降临.名称}（${g.降临.世界}·${this.tierName(g.降临.档)}·${g.降临.性格 || ''}）通过聊天群降临到宿主身边，接下来 ${g.降临.轮} 轮剧情中作为同伴登场，按其性格和原世界能力行动。`);
             const text = parts.join('\n');
@@ -204,7 +227,11 @@ export class HubGroup {
         if (g.降临) {
             try { await this.write(gg => { if (!gg.降临) return; gg.降临.轮 = num(gg.降临.轮) - 1; if (gg.降临.轮 <= 0) { this.say(gg, 'sys', `${gg.降临.名称} 的降临结束，回到了${gg.降临.世界}。`, { kind: 'sys' }); gg.降临 = null; } }); this.syncPrompt(); } catch (e) { console.warn(e); }
         }
-        if (g.设置.自动闲聊 && g.成员.length && !this.busy) this.round(null, String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '').slice(-400)).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
+        if (!g.设置.自动闲聊 || !g.成员.length || this.busy) return;
+        // 0.8.2: every N-th story reply only (setting 闲聊间隔, default 3) — not one extra model call per message.
+        const every = g.设置.闲聊间隔 || 3, due = num(g.节奏.闲聊) + 1 >= every;
+        try { await this.write(gg => { gg.节奏.闲聊 = due ? 0 : num(gg.节奏.闲聊) + 1; }); } catch (e) { console.warn(e); return; }
+        if (due) this.round(null, String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '').slice(-400)).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
     }
 
     // ---------- chat round: one request, 1–6 members ----------
@@ -282,7 +309,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const others = g.成员.filter(m => m.id !== p.from).sort(() => Math.random() - 0.5);
             for (const v of left) { const o = others.shift(); if (!o) break; p.grabs.push({ who: o.id, v }); }
             const src = `${from.名称}@${from.世界}`;
-            if (p.kind === 'points') { L.earn(z, mine); } else L.bagAdd(z, { ...p.item, 来源: src, 价格: L.TIER_PRICE[p.item.品级] }, mine);
+            if (p.kind === 'points') { L.earn(z, mine); } else L.bagAdd(z, { ...p.item, 来源: groupSource(src, '红包'), 价格: L.TIER_PRICE[p.item.品级] }, mine);
             const what = p.kind === 'points' ? `${fmtNum(mine)} 系统点` : `${p.item.名称}（${p.item.品级}）×${mine}`;
             const best = Math.max(...p.grabs.map(x => x.v)) === mine;
             this.say(g, 'sys', `你抢到了 ${src} 的红包：${what}${best ? ' · 手气最佳' : ''} · 已入库`, { kind: 'sys' }); this.booked(g, what, src, '红包');
@@ -295,7 +322,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         const out = await this.write((g, z) => {
             const i = g.待领取.findIndex(x => x.id === giftId); if (i < 0) throw Error('这件礼物已经领过了。');
             const x = g.待领取.splice(i, 1)[0], src = `${x.名称}@${x.世界}`;
-            L.bagAdd(z, { ...x.item, 来源: src }, 1);
+            L.bagAdd(z, { ...x.item, 来源: groupSource(src, '赠礼') }, 1);
             const m = g.成员.find(mm => mm.id === x.from); if (m) m.好感 = Math.min(100, num(m.好感, 20) + 1);
             this.say(g, 'sys', `你领取了 ${src} 的赠礼：${x.item.名称}（${x.item.品级}）· 已入库`, { kind: 'sys' }); this.booked(g, `${x.item.名称}（${x.item.品级}）`, src, '赠礼');
             return { what: `${x.item.名称}（${x.item.品级}）`, src };
@@ -371,7 +398,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         this.toast(`${out.名称} 已入群。`, 3000); this.syncPrompt(); this.paint();
     }
     async expand() {
-        const out = await this.write((g, z) => { if (g.容量 >= MAX_MEMBERS) throw Error('已经是最大容量。'); const cost = g.容量 * 2000; L.spend(z, cost); g.容量 += 5; this.say(g, 'sys', `群扩建到 ${g.容量} 人。`, { kind: 'sys' }); return { cost, cap: g.容量 }; });
+        const out = await this.write((g, z) => { if (g.容量 >= MAX_MEMBERS) throw Error('已经是最大容量。'); const cost = expandCost(g.容量); L.spend(z, cost); g.容量 += 5; this.say(g, 'sys', `群扩建到 ${g.容量} 人。`, { kind: 'sys' }); return { cost, cap: g.容量 }; });
         this.toast(`已扩建到 ${out.cap} 人（${fmtNum(out.cost)} 点）。`); this.paint();
     }
     async admin(id, act) {
@@ -424,7 +451,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
     async buy(id) {
         const out = await this.write((g, z) => {
             const list = this.marketList(g, z), i = list.findIndex(x => x.id === id); if (i < 0) throw Error('这件货已经卖掉了。');
-            const x = list[i]; L.spend(z, x.price); L.bagAdd(z, { ...x.item, 来源: `${x.名称}@${x.世界}`, 价格: x.price }, 1); list.splice(i, 1);
+            const x = list[i]; L.spend(z, x.price); L.bagAdd(z, { ...x.item, 来源: groupSource(`${x.名称}@${x.世界}`, '集市购买'), 价格: x.price }, 1); list.splice(i, 1);
             this.say(g, 'sys', `你从 ${x.名称}@${x.世界} 买下 ${x.item.名称}（${x.item.品级}）· ${fmtNum(x.price)} 点 · 已入库`, { kind: 'sys' }); this.booked(g, `${x.item.名称}（${x.item.品级}）`, `${x.名称}@${x.世界}`, '集市购买'); return x;
         });
         this.toast(`已入库：${out.item.名称}（来源 ${out.名称}@${out.世界}）`); this.paint();
@@ -492,6 +519,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             if ('群规' in patch) g.群规 = String(patch.群规).split('\n').map(s => clip(s, 80)).filter(Boolean).slice(0, 12);
             if ('自动闲聊' in patch) g.设置.自动闲聊 = !!patch.自动闲聊;
             if ('摘要注入' in patch) g.设置.摘要注入 = !!patch.摘要注入;
+            if ('闲聊间隔' in patch && CHAT_EVERY.includes(num(patch.闲聊间隔))) { g.设置.闲聊间隔 = num(patch.闲聊间隔); g.节奏.闲聊 = 0; }
         });
         this.syncPrompt(); this.paint();
     }
@@ -513,7 +541,7 @@ ${g.待领取.length ? `<div class="zt-g-claims"><span>🎁 待领取 ${g.待领
 <div class="zt-g-body">${this.view === 'members' ? this.membersView(g, z) : this.view === 'market' ? this.marketView(g, z) : this.view === 'admin' ? this.adminView(g) : this.chatView(g, z)}</div></div>`;
         const input = el.querySelector('#zt-g-input'); if (input) { input.value = draft; if (hadFocus) { try { input.focus({ preventScroll: true }); input.setSelectionRange(caret, caret); } catch { } } }
         const log = el.querySelector('.zt-g-log'); if (log) log.scrollTop = atBottom ? log.scrollHeight : oldTop;
-        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
+        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('change', e => { const sel = e.target.closest?.('[data-g-sel=every]'); if (sel) this.saveMeta({ 闲聊间隔: Number(sel.value) }).catch(err => this.fail(err)); }); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
     }
     avatar(m) { const h = [...String(m?.名称 || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; return `<span class="zt-g-av" style="background:hsl(${h} 45% 38%)">${esc(String(m?.名称 || '?').slice(0, 1))}</span>`; }
     chatView(g, z) {
@@ -558,7 +586,7 @@ ${sheet}
         const recruit = `<section class="zt-card"><h3>发布招募令 <small>每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档 · 随机招募按你的系统点挑实力档</small></h3>
 <div class="zt-g-row"><select data-f="rmode"><option value="rand">随机世界</option><option value="world">指定世界</option><option value="char">指定角色</option></select><input type="text" data-f="rhint" maxlength="30" placeholder="世界或角色名（随机时可空）"><button type="button" class="zt-btn primary small" data-g="recruit" ${this.busy || g.成员.length >= g.容量 ? 'disabled' : ''}>发布</button></div>
 ${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite" ${num(z.系统点) < this.joinPrice(c) ? 'title="系统点不足"' : ''}>邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button>${num(z.系统点) < this.joinPrice(c) ? `<small class="zt-g-warn">系统点不足（有 ${fmtNum(num(z.系统点))}）。放弃后再招募，会换一个人。</small>` : ''}<button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
-<div class="zt-g-row"><span>容量 ${g.成员.length}/${g.容量}</span><button type="button" class="zt-btn small" data-g="expand" ${g.容量 >= MAX_MEMBERS ? 'disabled' : ''}>扩建 +5 · ${fmtNum(g.容量 * 2000)} 点</button></div></section>`;
+<div class="zt-g-row"><span>容量 ${g.成员.length}/${g.容量}</span><button type="button" class="zt-btn small" data-g="expand" ${g.容量 >= MAX_MEMBERS ? 'disabled' : ''}>扩建 +5 · ${fmtNum(expandCost(g.容量))} 点</button></div></section>`;
         const list = g.成员.map(m => `<div class="zt-g-member${pm?.id === m.id ? ' open' : ''}">${this.avatar(m)}<div class="zt-g-minfo"><b>${esc(m.名称)}${m.身份 === '管理员' ? ' <span class="zt-grade">管理员</span>' : ''}${num(m.禁言轮) > 0 ? ` <span class="zt-grade" data-g="禁忌">禁言 ${m.禁言轮} 轮</span>` : ''}${g.降临?.id === m.id ? ` <span class="zt-grade" data-g="仙品">降临中 ${g.降临.轮} 轮</span>` : ''}</b>
 <small>${esc(m.世界)} · ${esc(this.tierName(m.档))} · ${esc(m.性格)} · 特产 ${esc(m.特产)}</small><i class="zt-g-fav" style="--v:${num(m.好感, 20)}%" title="好感 ${num(m.好感, 20)}"></i></div>
 <div class="zt-actions"><button type="button" class="zt-btn small" data-pm="${m.id}">私聊</button><button type="button" class="zt-btn small" data-descend="${m.id}" ${g.降临 ? 'disabled' : ''}>降临 · ${fmtNum(this.descendCost(m))}</button><button type="button" class="zt-btn small" data-live="${m.id}">直播</button><button type="button" class="zt-btn small" data-admin="op" data-id="${m.id}">${m.身份 === '管理员' ? '撤管理' : '设管理'}</button><button type="button" class="zt-btn small" data-admin="mute" data-id="${m.id}">${num(m.禁言轮) > 0 ? '解禁' : '禁言'}</button><button type="button" class="zt-btn small danger" data-admin="kick" data-id="${m.id}">踢出</button></div>
@@ -583,7 +611,8 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
 <section class="zt-card"><h3>规则底线 <small>不可关闭</small></h3><p class="zt-sub">群员送出的物品：品阶 ≤ 商城等级、≤ 赠送者实力档，禁忌品禁止；超标自动降到允许的最高品阶，而不是拒绝。系统点红包 ≤ 赠送者实力档价格与商城等级上限。每天最多收 ${DAILY_IN} 个群员红包、发 ${DAILY_OUT} 个。抢到/领取的东西先写入账本并读回确认，才显示“已入库”。</p></section>
 <section class="zt-card"><h3>与剧情联动</h3>
 <div class="zt-row"><span>群摘要写进提示词<span class="zt-desc">让正文 AI 知道群的存在、群员和最近群聊。</span></span><label class="zt-switch"><input type="checkbox" data-g="inject" ${g.设置.摘要注入 ? 'checked' : ''}><i></i></label></div>
-<div class="zt-row"><span>每轮剧情后自动闲聊<span class="zt-desc">每次正文回复后多一次模型请求。</span></span><label class="zt-switch"><input type="checkbox" data-g="auto" ${g.设置.自动闲聊 ? 'checked' : ''}><i></i></label></div></section></div>`;
+<div class="zt-row"><span>剧情后自动闲聊<span class="zt-desc">每 N 次正文回复，群员自动聊一次（一次额外的模型请求）。</span></span><label class="zt-switch"><input type="checkbox" data-g="auto" ${g.设置.自动闲聊 ? 'checked' : ''}><i></i></label></div>
+<div class="zt-row"><span>闲聊间隔<span class="zt-desc">每几次正文回复闲聊一次。</span></span><select data-g-sel="every" aria-label="闲聊间隔">${CHAT_EVERY.map(n => `<option value="${n}" ${g.设置.闲聊间隔 === n ? 'selected' : ''}>每 ${n} 轮</option>`).join('')}</select></div></section></div>`;
     }
     val(sel) { return this.el.querySelector(sel)?.value ?? ''; }
     async onClick(e) {

@@ -10,6 +10,7 @@
 // Depth is SillyTavern's regex depth: 0 = newest floor.
 import { BRIDGE_KEY, STATUSBAR_CLASS } from './contracts.js';
 import { extractVoices, buildVoiceCard, voiceRegex, LEGACY_VOICE_ID } from './voice-box.js';
+import { tavernHelperMacrosActive } from './macro-like.js';
 
 export const PANEL_RE = /<ZhuTianPanel>([\s\S]*?)<\/ZhuTianPanel>/g;
 const SLOT = i => `ZTPANELSLOT${i}ZT`;
@@ -40,6 +41,35 @@ export function legacyRegexActive(c) {
 export function legacyVoiceActive(c) {
     const lists = [c?.extensionSettings?.regex, c?.characters?.[c?.characterId]?.data?.extensions?.regex_scripts];
     return lists.some(list => Array.isArray(list) && list.some(r => r && !r.disabled && (r.id === LEGACY_VOICE_ID || /data-lilith-voice/.test(String(r.replaceString || '')))));
+}
+/** 0.8.2 fix — character-card status bars (Tavern Helper front-end code blocks) vanished when this extension was on.
+ *  Tavern Helper wraps each front-end <pre> of a floor in div.TH-render and mounts its iframe there ONCE per render event.
+ *  Our floor renderer used to rebuild .mes_text with innerHTML (voice card, 诸天 data block, macros): that destroyed the
+ *  wrapper and Tavern Helper never drew the card's status bar again. Now the new content is built off-DOM and swapped in
+ *  around those wrappers — they stay in place (no iframe reload) and keep their position among the new nodes. */
+export const FOREIGN_SELECTOR = 'div.TH-render';
+const preText = el => (el?.matches?.('pre') ? el : el?.querySelector?.('pre'))?.textContent ?? '';
+const FRONTEND = /<(?:!doctype|html|head|body|script|style)\b/i;
+export function swapContent(target, box) {
+    const kept = [...target.querySelectorAll(FOREIGN_SELECTOR)];
+    if (!kept.length) { target.replaceChildren(...box.childNodes); return 0; }
+    const pool = kept.slice(), plan = [];
+    const take = pre => {
+        let i = pool.findIndex(k => preText(k) === pre.textContent);
+        if (i < 0 && FRONTEND.test(pre.textContent)) i = pool.findIndex(k => FRONTEND.test(preText(k)));   // macro/edit changed the text
+        return i < 0 ? null : pool.splice(i, 1)[0];
+    };
+    for (const n of [...box.childNodes]) {
+        const k = n.nodeType === 1 && n.tagName === 'PRE' ? take(n) : null;
+        plan.push(k || n);
+    }
+    // nested code blocks (inside details/blockquote): swap the new <pre> for the old wrapper (that one has to move)
+    for (const pre of [...box.querySelectorAll('pre')]) { if (!pool.length) break; if (pre.parentNode === box) continue; const k = take(pre); if (k) pre.replaceWith(k); }
+    const keep = new Set(plan.filter(n => kept.includes(n) && n.parentNode === target));
+    for (const n of [...target.childNodes]) if (!keep.has(n)) n.remove();          // only the kept wrappers stay put
+    let cursor = target.firstChild;
+    for (const n of plan) { if (n === cursor) { cursor = cursor.nextSibling; continue; } target.insertBefore(n, cursor); }
+    return keep.size;
 }
 export function tavernHelperPresent() { return !!(globalThis.TavernHelper || document.querySelector('iframe[id^="TH-message--"], #tavern_helper')); }
 
@@ -86,7 +116,7 @@ export class StatusBarHost {
         const panels = (this.state.mode === 'native' || this.state.mode === 'terminal') && PANEL_RE.test(text); PANEL_RE.lastIndex = 0;
         const yieldPanels = this.state.mode === 'yield' && /<ZhuTianPanel>/.test(text);
         const voice = !yieldPanels && this.settings.get('voiceBox') !== false && !m.is_user && !m.is_system && voiceRegex().test(text);
-        const macro = !yieldPanels && !!this.macros?.has(text);
+        const macro = !yieldPanels && !!this.macros?.has(text) && !tavernHelperMacrosActive(this.ctx());   // TH replaces them itself
         return { panels, voice, macro, any: panels || voice || macro };
     }
     scan() {
@@ -113,7 +143,7 @@ export class StatusBarHost {
         for (const f of el.querySelectorAll('.' + STATUSBAR_CLASS + ' iframe')) this.release(f);
         delete el.dataset.ztSig;
         const text = el.querySelector('.mes_text');
-        if (text && m) text.innerHTML = this.ctx().messageFormatting(m.mes, m.name, m.is_system, m.is_user, id);
+        if (text && m) { const box = document.createElement('div'); box.innerHTML = this.ctx().messageFormatting(m.mes, m.name, m.is_system, m.is_user, id); swapContent(text, box); }
     }
     render(el, m, id, live, p) {
         const c = this.ctx(), text = el.querySelector('.mes_text'); if (!text) return;
@@ -124,8 +154,9 @@ export class StatusBarHost {
         if (p.panels) ({ panels, stripped: source } = splitPanels(source));
         let voices = [];
         if (p.voice) ({ voices, text: source } = extractVoices(source));
-        text.innerHTML = c.messageFormatting(source, m.name, m.is_system, m.is_user, id);
-        const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT), hits = [];
+        const box = document.createElement('div');
+        box.innerHTML = c.messageFormatting(source, m.name, m.is_system, m.is_user, id);
+        const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT), hits = [];
         while (walker.nextNode()) if (TOKEN.test(walker.currentNode.nodeValue)) hits.push(walker.currentNode);
         const usedP = new Set(), usedV = new Set();
         for (const node of hits) {
@@ -137,10 +168,11 @@ export class StatusBarHost {
                 else if (part) frag.append(part);
             }
             const block = node.parentElement;
-            if (block && block !== text && block.childNodes.length === 1 && /^(P|SPAN|DIV)$/.test(block.tagName)) block.replaceWith(frag); else node.replaceWith(frag);
+            if (block && block !== box && block.childNodes.length === 1 && /^(P|SPAN|DIV)$/.test(block.tagName)) block.replaceWith(frag); else node.replaceWith(frag);
         }
-        panels.forEach((pn, i) => { if (!usedP.has(i)) text.append(this.mount(pn, id, live)); }); // markdown swallowed the slot: still show it
-        voices.forEach((v, i) => { if (!usedV.has(i)) text.append(this.voiceCard(v)); });
+        panels.forEach((pn, i) => { if (!usedP.has(i)) box.append(this.mount(pn, id, live)); }); // markdown swallowed the slot: still show it
+        voices.forEach((v, i) => { if (!usedV.has(i)) box.append(this.voiceCard(v)); });
+        swapContent(text, box);
         this.counts.panels += panels.length; this.counts.voices += voices.length;
         const mark = document.createElement('span'); mark.className = 'zt-render-mark'; mark.hidden = true; text.append(mark);
     }

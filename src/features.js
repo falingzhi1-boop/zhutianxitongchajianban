@@ -8,6 +8,7 @@ import { readConfigs } from './api-center.js';
 import { isMainApi } from './th-bridge.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
 import { latestRules, mergeWorldbook, WORLDBOOK_REV } from './worldbook.js';
+import { findBindings, unbindAll, restoreBindings, describe as describeBindings } from './wb-unbind.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -128,22 +129,61 @@ export class Features {
         if (pct >= 100 && b.max * 1.0 < b.need * 1.25) this.toast('warning', '上下文长度太小，即使预算 100% 也放不下诸天常驻规则，请在 API 设置中调大上下文。');
         return done;
     }
+    // ---------- 0.8.2 解绑 ----------
+    async bindings() { let wi = null; try { wi = await import('/scripts/world-info.js'); } catch { /* old layout */ } return findBindings(this.ctx, wi, WORLD_NAME); }
+    /** 一键解绑: every card / extra book / global / open chat. Turns auto-binding off, otherwise the open 诸天 chat would be
+     *  bound again on the next message. */
+    async unbindWorldbook() {
+        const rec = await unbindAll(this.ctx, WORLD_NAME, { chat: true });
+        if (rec.count) this.app.settings.set('wbUnbound', { ...rec, auto: false, noticed: true });
+        if (this.app.settings.get('worldbookAuto') !== false) this.app.settings.set('worldbookAuto', false);
+        this.wbAuto = 'off';
+        return rec;
+    }
+    async restoreWorldbook() {
+        const rec = this.app.settings.get('wbUnbound'); if (!rec) throw Error('没有可恢复的解绑记录。');
+        const r = await restoreBindings(this.ctx, rec);
+        this.app.settings.set('wbUnbound', null);
+        return r;
+    }
+    /** Once after re-enabling: say what the disable hook unbound. */
+    unbindNotice() {
+        const rec = this.app.settings.get('wbUnbound'); if (!rec?.auto || rec.noticed) return;
+        this.app.settings.set('wbUnbound', { ...rec, noticed: true });
+        this.toast('info', `上次关闭插件时，已把“${WORLD_NAME}”世界书从 ${describeBindings(rec)} 解绑。需要恢复：终端 → 设置 → 世界书 → 恢复绑定。`);
+    }
     async openWorldbook() {
-        const st = await this.worldbookStatus();
+        const st = await this.worldbookStatus(), b = await this.bindings().catch(() => null), last = this.app.settings.get('wbUnbound');
+        const bound = b ? [b.chars.length ? `角色卡 ${b.chars.length} 张（${esc(b.chars.slice(0, 6).map(c => c.name).join('、'))}${b.chars.length > 6 ? '…' : ''}）` : '', b.extra.length ? `附加世界书 ${b.extra.length} 张卡` : '', b.global ? '全局世界书' : '', b.chat ? '当前聊天' : ''].filter(Boolean).join('、') : '';
         const el = this.popup(`<h3>诸天世界书（外挂，不依赖角色卡 MVU）</h3>
 <p>内置规则 ${st.builtin} 条（插件 ${WORLDBOOK_REV} 版）。当前酒馆：${st.exists ? `已存在“${esc(WORLD_NAME)}”（${st.count} 条，${st.current ? '<b>已是最新</b>' : '<b>不是最新版</b>，可点「更新到最新版」'}）` : '尚未安装'}；当前聊天${st.chatBound ? '<b>已绑定</b>' : '未绑定'}。</p>
 <div class="zt-popup-actions"><div class="menu_button" data-wb="install">仅安装世界书</div><div class="menu_button" data-wb="chat">安装并绑定到当前聊天</div><div class="menu_button" data-wb="update">更新到最新版（先备份）</div><div class="menu_button" data-wb="export">导出 JSON</div></div>
-<p class="zt-note">绑定为“聊天世界书”（chat_metadata.world_info），只影响当前聊天，与其他角色卡隔离。已存在同名世界书时只绑定，不覆盖你改过的条目。</p><p class="zt-out"></p>`);
+<p class="zt-note">绑定为“聊天世界书”（chat_metadata.world_info），只影响当前聊天，与其他角色卡隔离。已存在同名世界书时只绑定，不覆盖你改过的条目。</p>
+<h4>解绑</h4>
+<p class="zt-wb-bound">现在绑定在：${bound || '没有任何地方'}。</p>
+<div class="zt-popup-actions"><div class="menu_button" data-wb="unbind" ${b?.total ? '' : 'aria-disabled="true"'}>一键解绑全部</div>${last ? `<div class="menu_button" data-wb="restore" title="${esc(describeBindings(last))}">恢复上次解绑（${esc(describeBindings(last))}）</div>` : ''}</div>
+<p class="zt-note">解绑只取消绑定，不删除世界书。会同时关闭“诸天存档自动绑定世界书”，否则当前诸天聊天下一条消息又会自动绑上。其他聊天文件里的聊天世界书不改动（只在那些诸天聊天里生效）。关闭插件时会自动做同样的解绑（设置里可关；需要 SillyTavern 1.17 及以上，1.16 没有关闭钩子）。</p><p class="zt-out"></p>`);
         el.addEventListener('click', async e => {
             const act = e.target.closest('[data-wb]')?.dataset.wb; if (!act) return;
+            const out = el.querySelector('.zt-out');
             if (act === 'export') { this.exportWorldbook(); return; }
-            if (act === 'update') {
-                try { const r = await this.updateWorldbook(); el.querySelector('.zt-out').textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', '世界书已更新到插件最新版'); }
-                catch (err) { el.querySelector('.zt-out').textContent = '未完成：' + err.message; }
+            if (act === 'unbind') {
+                try { const r = await this.unbindWorldbook(); out.textContent = r.count ? `已解绑：${describeBindings(r)}。${r.errors.length ? '部分失败：' + r.errors.join('；') : ''}自动绑定已关闭。` : '没有找到需要解绑的地方。'; el.querySelector('.zt-wb-bound').textContent = '现在绑定在：没有任何地方。'; if (r.count) this.toast('success', `已解绑 ${r.count} 处`); }
+                catch (err) { out.textContent = '未完成：' + err.message; }
                 return;
             }
-            try { const r = await this.installWorldbook(act === 'chat' ? 'chat' : 'none'); el.querySelector('.zt-out').textContent = `完成：世界书 ${r.count} 条；当前聊天${r.chatBound ? '已绑定' : '未绑定'}。`; this.toast('success', '世界书已就绪'); }
-            catch (err) { el.querySelector('.zt-out').textContent = '未完成：' + err.message; }
+            if (act === 'restore') {
+                try { const r = await this.restoreWorldbook(); out.textContent = `已恢复 ${r.count} 处${r.skipped ? `，${r.skipped} 处跳过（角色卡已删除或换了别的世界书）` : ''}。`; e.target.closest('[data-wb]').remove(); }
+                catch (err) { out.textContent = '未完成：' + err.message; }
+                return;
+            }
+            if (act === 'update') {
+                try { const r = await this.updateWorldbook(); out.textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', '世界书已更新到插件最新版'); }
+                catch (err) { out.textContent = '未完成：' + err.message; }
+                return;
+            }
+            try { const r = await this.installWorldbook(act === 'chat' ? 'chat' : 'none'); out.textContent = `完成：世界书 ${r.count} 条；当前聊天${r.chatBound ? '已绑定' : '未绑定'}。`; this.toast('success', '世界书已就绪'); }
+            catch (err) { out.textContent = '未完成：' + err.message; }
         });
     }
 
@@ -297,6 +337,7 @@ export class Features {
         const c = this.ctx, ev = c.eventTypes, run = () => this.scheduleWorldbook();
         for (const key of ['CHAT_CHANGED', 'MESSAGE_RECEIVED']) if (ev[key]) { c.eventSource.on(ev[key], run); this.disposers.push(() => c.eventSource.removeListener(ev[key], run)); }
         this.scheduleWorldbook();
+        setTimeout(() => { if (!this.dead) this.unbindNotice(); }, 2500);
     }
     scheduleWorldbook() { clearTimeout(this.wbTimer); this.wbTimer = setTimeout(() => this.autoWorldbook().catch(e => { this.wbAuto = 'error: ' + e.message; console.warn('[诸天] 世界书自动绑定失败', e); }), 800); }
     dispose() { this.dead = true; clearTimeout(this.wbTimer); this.disposers.splice(0).forEach(f => f()); this.hud?.remove(); this.hud = null; }

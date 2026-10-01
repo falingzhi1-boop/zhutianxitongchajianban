@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.8.1';
+export const VERSION = '0.8.2';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -68,4 +68,7 @@ export const CAPABILITIES = [
     {name:'莉莉丝连接页拉取模型（CORS 时经酒馆服务器转发）',state:'implemented',scope:'0.8.1：修复原版连接页拉取模型必报“CORS”的问题（私有作用域缺 fetch）；浏览器被拦截时经酒馆自己的服务器转发，保留 /v1 基础路径'},
     {name:'聊天群：真随机招募、按预算定实力档、红包节奏、剧情来源',state:'implemented',scope:'0.8.1：招募在本地抽世界类型与目标实力档并排除刚出现过的人；入群费独立曲线（300 起）；红包/赠礼三四轮一次（宿主主动要求除外，账本层强制）；聊天群入库记录注入正文提示，保持物品来历'},
     {name:'世界书更新到插件版本',state:'implemented',scope:'0.8.1：在原版 35 条上修正过时说明并新增「36｜联动｜诸天聊天群」；设置里可「更新到最新版（先备份）」或导出 JSON；旧书不会被自动覆盖'},
+    {name:'世界书一键解绑 / 关闭插件时自动解绑',state:'implemented',scope:'0.8.2：设置 → 一键解绑：把“诸天万界最强系统”从所有角色卡（主世界书与附加世界书）、全局世界书和当前聊天取下（不删除），记录可恢复；停用插件时（SillyTavern 1.17+ disable 钩子）自动执行，可关'},
+    {name:'悬浮莉莉丝（手机）',state:'implemented',scope:'0.8.2：手机/触屏上唤醒按钮换成莉莉丝表情立绘：点开终端、双击戳、长按拖动、拖到边缘躲起来并记住位置；立绘不可见时台词气泡在这里弹出'},
+    {name:'角色卡状态栏兼容（酒馆助手前端渲染）',state:'implemented',scope:'0.8.2：楼层渲染不再整段重建 .mes_text，保留酒馆助手的 TH-render 包装，角色卡自带状态栏不再消失；助手宏开启时楼层宏让位'},
 ];

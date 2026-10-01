@@ -30,7 +30,9 @@ export class HubSettings {
                 num('promptPanelKeepDepth', '保留最新几层的数据块', 0, 6, 'AI 每轮都会从世界书“实时数据”读到最新账本，所以可以设为 0（数据块全部不回传，最省 token）；保留 1–2 层能让 AI 照抄格式更稳。'),
                 sw('macroLike', '世界书变量宏 {{get_chat_variable::…}}', '酒馆助手宏开启时自动让位。'),
                 sw('worldbookAuto', '诸天存档自动安装并绑定世界书', '不覆盖你改过的条目。'),
-                act('worldbook', '世界书安装 / 绑定…'),
+                act('worldbook', '世界书安装 / 绑定 / 解绑…'),
+                act('wb-unbind', '一键解绑世界书', '把“诸天万界最强系统”从所有角色卡、全局和当前聊天上取下（不删除），可在世界书窗口里恢复。'),
+                sw('wbUnbindOnDisable', '关闭插件时自动解绑世界书', '在扩展列表里停用本插件时自动执行上面的解绑（SillyTavern 1.17+；1.16 没有关闭钩子，请手动点一键解绑）。'),
             ] },
             { title: '账本与存档', items: [
                 act('init', '新聊天初始化', '按原版规则创建账本；已存在时只补齐缺失字段。'),
@@ -41,6 +43,7 @@ export class HubSettings {
                 act('go-api', '莉莉丝连接页'),
             ] },
             { title: '莉莉丝', items: [
+                sel('floatLilith', '悬浮莉莉丝（代替左下角唤醒按钮）', [['auto', '自动：手机 / 触屏开启'], ['on', '总是开启'], ['off', '关闭（用原版唤醒按钮）']], '点一下打开终端；双击戳她；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住）。立绘看不到时，她的台词气泡在这里弹出。'),
                 sw('touchGestures', '真实触摸互动（抚摸 / 长按 / 视线跟随）'),
                 sw('haptics', '触摸震动反馈（手机）'),
                 sel('portrait.mode', '立绘模式', [['rig', '原版分层动画（伪 Live2D）'], ['variants', '原版 + 表情差分（随语气切换）'], ['live2d', '真 Live2D（需自备 Cubism 模型）']]),
@@ -95,7 +98,8 @@ export class HubSettings {
     run(id) {
         const app = this.app, t = globalThis.toastr;
         const map = {
-            worldbook: () => app.features.openWorldbook(), migrate: () => app.features.openMigration(), diagnose: () => app.features.openDiagnostics(),
+            worldbook: () => app.features.openWorldbook(),
+            'wb-unbind': async () => { if (!globalThis.confirm('把“诸天万界最强系统”世界书从所有角色卡、全局世界书和当前聊天上解绑？\n（不删除世界书；同时关闭自动绑定；可在世界书窗口里恢复）')) return; const r = await app.features.unbindWorldbook(); app.hub?.toast(r.count ? `已解绑 ${r.count} 处` : '没有找到需要解绑的地方', 3600); if (r.count) t?.success(`已解绑：${r.chars.length} 张角色卡${r.extra.length ? `、${r.extra.length} 个附加` : ''}${r.global ? '、全局' : ''}${r.chat ? '、当前聊天' : ''}`, '诸天 · 世界书'); if (app.hub?.page === 'set') app.hub.go('set', { silent: true }); }, migrate: () => app.features.openMigration(), diagnose: () => app.features.openDiagnostics(),
             api: () => app.openApiCenter(), 'go-api': () => app.hub.go('api'), live2d: () => app.portrait?.openSettings(),
             takeover: () => app.runTakeover(), restore: () => app.restoreLegacy(),
             'fx-preview': () => app.fx?.preview(),
