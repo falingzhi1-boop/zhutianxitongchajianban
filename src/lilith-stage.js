@@ -15,6 +15,31 @@ const fmt = x => num(x).toLocaleString('zh-CN');
 const clip = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 const fill = (tpl, d) => tpl.replace(/\{(\w+)\}/g, (_, k) => String(d[k] ?? ''));
 const HIGH = new Set(['神品', '禁忌', '混沌']);
+/** Original 3.1 idle lines (ZT_LILITH_IDLE) — the engine shows one of them when the panel has no 系统播报. */
+export const IDLE = Object.freeze(['宿主大人，莉莉丝已上线～有事随时叫我。', '今天也要努力变强，然后把系统点花光光！', '商城刚上了新货，要不要去看看？', '签到了吗？连续签到的奖励会越滚越多哦。', '功法库空着多浪费，去学点什么吧～', '有想要的东西？许个愿，莉莉丝帮你估价。']);
+const STAGE_NEXT = { 未入门: ['入门', 100], 入门: ['熟练', 500], 熟练: ['精通', 2000], 精通: ['宗师', 10000] };
+const stageOf = s => s?.入道 ? '入道' : num(s?.熟练度) >= 1e4 ? '宗师' : num(s?.熟练度) >= 2e3 ? '精通' : num(s?.熟练度) >= 500 ? '熟练' : num(s?.熟练度) >= 100 ? '入门' : '未入门';
+/** 点空白处 lines built from the ledger (pure): what is going on right now, said in character. */
+export function storyLines(z) {
+    const out = [];
+    if (!z || typeof z !== 'object') return IDLE.map(text => ({ zone: 'chest', text }));
+    const pend = Array.isArray(z.功法待播报) ? z.功法待播报 : [];
+    if (pend.length) { const p = pend.at(-1); out.push({ zone: 'chest', text: `${clip(p.名称, 10)}到「${p.阶段}」了——${clip(p.奖励, 26)}。记得让系统结算。` }); }
+    const tasks = Object.entries(z.任务库 || {}).map(([id, t]) => ({ id, ...(t || {}) })).filter(t => t.状态 !== '已完成' && t.状态 !== '已失败');
+    if (tasks.length) { const t = tasks[0], p = num(t.完成度); out.push({ zone: 'cheek', text: `「${clip(t.名称 || t.id, 12)}」还没了结${p > 0 ? `，进度 ${p}%` : ''}。${tasks.length > 1 ? `后面还排着 ${tasks.length - 1} 个。` : '莉莉丝替你盯着呢。'}` }); }
+    const lib = Array.isArray(z.功法库) ? z.功法库 : [], mainName = z.功法?.名称;
+    const main = lib.find(s => s?.名称 === mainName) || lib[0];
+    if (main?.名称) {
+        const st = stageOf(main), nx = STAGE_NEXT[st], cap = num(main.上限, 100);
+        out.push({ zone: 'arm', text: nx && nx[1] <= cap ? `${clip(main.名称, 10)}离「${nx[0]}」还差 ${fmt(nx[1] - num(main.熟练度))}。多用、多悟，熟练度会自己涨。` : st === '入道' ? `${clip(main.名称, 10)}已经入道了……那是法则在回应你。` : `${clip(main.名称, 10)}练到这一品的头了，该想办法升品了。` });
+    }
+    if (z.当前世界) out.push({ zone: 'horn', text: `这里是${clip(z.当前世界, 12)}。规矩和上一个世界不一样，别大意。` });
+    const lt = z.恋爱目标 || {};
+    if (lt.姓名) out.push({ zone: 'cheek', text: `${clip(lt.姓名, 8)}的好感停在 ${num(lt.好感度)}${num(lt.黑化值) >= 30 ? `，黑化值也有 ${num(lt.黑化值)} 了……小心点` : ''}。` });
+    out.push({ zone: 'wing', text: `账上还有 ${fmt(z.系统点)} 系统点。省着花，还是花在刀刃上？` });
+    for (const text of IDLE.slice(1)) out.push({ zone: 'chest', text });
+    return out;
+}
 
 /** Zone = which original reaction (motion + expression) plays. Lines are picked round-robin per key. */
 export const REACT = Object.freeze({
@@ -44,16 +69,19 @@ export const REACT = Object.freeze({
 });
 
 export class LilithStage {
-    constructor(app) { this.app = app; this.seen = {}; this.last = 0; this.pageSaid = new Set(); this.disposers = []; this.hold = 0; }
+    constructor(app) { this.app = app; this.seen = {}; this.last = 0; this.pageSaid = new Set(); this.disposers = []; this.hold = 0; this.storyIdx = 0; this.lastTap = 0; this.heard = ''; this.unheard = ''; }
     get settings() { return this.app.settings; }
-    get cfg() { return { react: true, pageLines: true, camera: true, ...(this.settings.get('lilith') || {}) }; }
+    get cfg() { return { react: true, pageLines: true, camera: true, story: true, ...(this.settings.get('lilith') || {}) }; }
     stage() { return this.app.assistant?.stage?.() || null; }
     ledger() { try { const z = this.app.bridge.getVariables({ type: 'chat' })?.诸天系统; return z && typeof z === 'object' ? z : null; } catch { return null; } }
     start() {
         const hub = this.app.hub; if (!hub) return this;
         hub.hook('onEngine', (frame, doc) => this.bindEngine(doc));
         hub.hook('onPage', page => { this.camera(page); this.pageLine(page); });
-        hub.hook('onOpen', () => this.camera(hub.page));
+        hub.hook('onOpen', () => { this.camera(hub.page); if (this.unheard) setTimeout(() => this.broadcast(this.unheard), 500); });
+        // 0.8.0: the engine's 莉莉丝 row is hidden in the terminal; its line (the panel's 系统播报) is spoken from the portrait.
+        hub.hook('onEngineView', (root, doc) => this.readBroadcast(doc));
+        this.bindPortrait();
         this.disposers.push(this.settings.onChange(k => { if (k === 'lilith') { this.camera(hub.page); this.mountCloseUp(); } }));
         this.mountCloseUp();
         // The private chat panel may be created later by the original window: re-check after clicks inside it.
@@ -72,16 +100,60 @@ export class LilithStage {
     say(key, d, { force = false, passive = false } = {}) {
         if (!this.cfg.react) return '';
         const now = Date.now(); if (!force && now - this.last < 1800) return '';
-        const st = this.stage(); const text = this.pick(key, d); if (!text) return '';
+        const text = this.pick(key, d); if (!text) return '';
         if (!passive) this.last = now; this.lastLine = text;
-        if (!st || typeof st.speak !== 'function' || !st.frame?.isConnected || !st.frame.getClientRects().length) return text;
+        this.speakText(text, REACT[key].zone);
+        return text;
+    }
+    stageVisible(st = this.stage()) { return !!(st && typeof st.speak === 'function' && st.frame?.isConnected && st.frame.getClientRects().length); }
+    /** Original speak(zone) for motion + expression, then our text in the original bubble (kept long enough to read). */
+    speakText(text, zone = 'chest', { story = false } = {}) {
+        const st = this.stage(); if (!this.stageVisible(st)) return false;
         try {
-            st.speak(REACT[key].zone);
+            st.speak(zone);
             if (st.bubble) st.bubble.textContent = text;
             const say = st.bubble?.closest?.('.zt-say'); clearTimeout(this.hold);
+            if (say) say.dataset.ztStory = story ? 'true' : 'false';
             if (say && text.length > 22) this.hold = setTimeout(() => { if (st.bubble.textContent === text) { say.dataset.show = 'true'; this.hold = setTimeout(() => { if (st.bubble.textContent === text) say.dataset.show = 'false'; }, text.length * 150 - 3400); } }, 3300);
-        } catch { /* stage gone */ }
-        return text;
+            return true;
+        } catch { return false; }   /* stage gone */
+    }
+    // ---------- 0.8.0 气泡播报 + 剧情台词 ----------
+    /** Called after each engine refresh: a NEW 系统播报 from the panel is spoken once (idle lines are not). */
+    readBroadcast(doc) {
+        let text = ''; try { text = String(doc?.querySelector('.mvu-msg-text')?.textContent || '').replace(/\s+/g, ' ').trim(); } catch { return; }
+        if (!text || text === '……' || IDLE.includes(text)) { this.current = ''; return; }
+        this.current = text;
+        const key = (this.app.adapter.currentIdentity?.() || '') + '|' + text;
+        if (key === this.heard) return;
+        this.heard = key;
+        if (!this.cfg.story) return;
+        if (this.app.hub?.isOpen && this.broadcast(text)) return;
+        this.unheard = text;                       // terminal closed: say it the next time it opens
+    }
+    broadcast(text) {
+        this.unheard = '';
+        const said = this.speakText(clip(text, 90), 'chest', { story: true });
+        if (!said && this.app.hub?.isOpen) this.app.hub.toast('莉莉丝：' + clip(text, 80), 5200);   // phone layout / no portrait
+        return true;
+    }
+    /** 点立绘空白处 (not a body zone, not a drag): the latest 系统播报 first, then ledger-based story lines in turn. */
+    bindPortrait() {
+        const sh = this.app.assistant?.shadow; if (!sh) return;
+        let down = null;
+        const inFrame = e => { const st = this.stage(); return st?.frame && e.composedPath().includes(st.frame) ? st : null; };
+        const pd = e => { down = inFrame(e) ? { x: e.clientX, y: e.clientY, t: Date.now() } : null; };
+        const click = e => {
+            const st = inFrame(e); if (!st || !this.cfg.story) return;
+            if (e.composedPath().some(n => n?.classList?.contains?.('zt-zone'))) return;          // a body zone: original reaction
+            if (down && (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8 || Date.now() - down.t > 600)) return;   // stroke / long press
+            const now = Date.now(); if (now - this.lastTap < 900) return; this.lastTap = now;
+            const all = [...(this.current ? [{ zone: 'chest', text: this.current }] : []), ...storyLines(this.ledger())];
+            const pickLine = all[this.storyIdx % all.length]; this.storyIdx++;
+            this.speakText(clip(pickLine.text, 90), pickLine.zone, { story: true });
+        };
+        sh.addEventListener('pointerdown', pd, true); sh.addEventListener('click', click);
+        this.disposers.push(() => { sh.removeEventListener('pointerdown', pd, true); sh.removeEventListener('click', click); });
     }
     fxData(ev) {
         return { name: ev.name || ev.to || '', to: ev.to || '', stage: ev.stage || '', n: ev.n || 1, best: ev.best || '',

@@ -28,7 +28,8 @@ const DEFAULTS = Object.freeze({
     portrait: { mode: 'rig', variant: 'default', autoMood: true },   // rig | variants | live2d
     fx: { mode: 'full', outside: true },                   // 0.7.0 演出: full | brief (result card only) | off; outside = 剧情提示 card when the terminal is closed
     world: { enabled: true, theme: 'auto', prompt: true },  // 0.7.0 世界主题: auto | default | xianxia | cyber | eerie; prompt = ask the model to record 当前世界/世界类型
-    lilith: { react: true, pageLines: true, camera: true }, // 0.7.0 莉莉丝界面角色: reactions, one line per page per session, camera framing
+    lilith: { react: true, pageLines: true, camera: true, story: true }, // 0.7.0 莉莉丝界面角色; 0.8.0 story = 气泡播报 + 点空白处的剧情台词
+    skills: { prompt: true, practice: true, cardAuto: false },   // 0.8.0 修行: 功法实效提示 · 实战积累 · 角色卡功法自动同步
     live2d: { accepted: false, coreUrl: LIVE2D_CORE_URL, model: '', scale: 1, x: 0, y: 0, follow: true, lipsync: true, idle: true, moodMap: {} },
     scriptVariables: {},
     legacyImported: false,

@@ -91,11 +91,18 @@ export class HubPlugins {
         if (n !== 7) { if (tools.dataset.owner === 'plugins') { tools.innerHTML = ''; delete tools.dataset.owner; } return; }
         tools.dataset.owner = 'plugins';
         const list = this.enabled(), st = this.chatState();
-        tools.innerHTML = `<div class="zt-plug-strip"><span class="zt-plug-title">自拟外挂</span>${list.map(p => `<span class="zt-plug-card"><span>${esc(p.name)}<span class="zt-grade" data-g="${p.grade}">${p.grade}</span></span>${p.type === 'passive' ? '<small>被动 · 生效中</small>' : `<button type="button" class="zt-btn small primary" data-plug-use="${p.id}">发动${this.costLabel(p)}</button>`}</span>`).join('') || '<span class="zt-note">尚未启用自拟外挂</span>'}${st.off.length ? `<span class="zt-chip">已关闭 ${st.off.length} 个原版外挂</span>` : ''}<button type="button" class="zt-btn small" data-plug-manage style="margin-left:auto">外挂管理 ›</button></div>`;
+        tools.innerHTML = `<div class="zt-plug-strip"><span class="zt-plug-title">自拟外挂</span>${list.map(p => `<span class="zt-plug-card"><span>${esc(p.name)}<span class="zt-grade" data-g="${p.grade}">${p.grade}</span></span>${p.type === 'passive' ? '<small>被动 · 生效中</small>' : `<button type="button" class="zt-btn small primary" data-plug-use="${p.id}">发动${this.costLabel(p)}</button>`}</span>`).join('') || '<span class="zt-note">尚未启用自拟外挂</span>'}${st.off.length ? `<span class="zt-chip">已关闭 ${st.off.length} 个原版外挂</span>` : ''}<button type="button" class="zt-btn small" data-plug-new style="margin-left:auto">＋ 自拟外挂</button><button type="button" class="zt-btn small" data-plug-manage>外挂管理 ›</button></div>`;
         tools.onclick = e => {
             if (e.target.closest('[data-plug-manage]')) return this.hub.go('plugmgr');
+            if (e.target.closest('[data-plug-new]')) return this.openEditor();
             const u = e.target.closest('[data-plug-use]'); if (u) this.activate(u.dataset.plugUse, u);
         };
+    }
+    /** 0.8.0: “＋ 自拟外挂” — opens 外挂管理 with an empty editor focused (the page is also in the 能力 navigation). */
+    openEditor() {
+        this.editing = null; this.hub.go('plugmgr');
+        const el = this.hub.pages.get('plugmgr')?.el, ed = el?.querySelector('#zt-plug-editor');
+        ed?.scrollIntoView({ block: 'start' }); ed?.querySelector('[data-f="name"]')?.focus({ preventScroll: true });
     }
     costLabel(p) { return p.cost.kind === 'points' ? ` · ${fmtNum(p.cost.amount)} 点` : p.cost.kind === 'resource' ? ` · ${p.cost.amount} ${p.cost.res}` : ''; }
     /** Charges the cost through the ledger, reads it back, then writes the action into the input box. */
@@ -114,8 +121,8 @@ export class HubPlugins {
             if (p.cost.kind !== 'none' && p.cost.amount > 0) {
                 await this.app.bridge.updateVariablesWith(v => {
                     const s = v.诸天系统; if (!s || typeof s !== 'object') throw Error('当前聊天没有诸天账本。');
-                    if (p.cost.kind === 'points') { const have = Number(s.系统点) || 0; if (have < p.cost.amount) throw Error(`系统点不足：需要 ${fmtNum(p.cost.amount)}，现有 ${fmtNum(have)}。`); s.系统点 = have - p.cost.amount; s.累计消费 = (Number(s.累计消费) || 0) + p.cost.amount; expect = ['系统点', s.系统点]; }
-                    else { s.专属资源 = s.专属资源 && typeof s.专属资源 === 'object' ? s.专属资源 : {}; const have = Number(s.专属资源[p.cost.res]) || 0; if (have < p.cost.amount) throw Error(`${p.cost.res}不足：需要 ${p.cost.amount}，现有 ${have}。`); s.专属资源[p.cost.res] = have - p.cost.amount; expect = [p.cost.res, s.专属资源[p.cost.res]]; }
+                    if (p.cost.kind === 'points') { const have = Number(s.系统点) || 0; if (have < p.cost.amount) throw Error(`系统点不足：需要 ${fmtNum(p.cost.amount)}，现有 ${fmtNum(have)}。`); s.系统点 = have - p.cost.amount; s.累计消费 = (Number(s.累计消费) || 0) + p.cost.amount; s.界面记账时间 = Date.now(); expect = ['系统点', s.系统点]; }
+                    else { s.专属资源 = s.专属资源 && typeof s.专属资源 === 'object' ? s.专属资源 : {}; const have = Number(s.专属资源[p.cost.res]) || 0; if (have < p.cost.amount) throw Error(`${p.cost.res}不足：需要 ${p.cost.amount}，现有 ${have}。`); s.专属资源[p.cost.res] = have - p.cost.amount; s.界面记账时间 = Date.now(); expect = [p.cost.res, s.专属资源[p.cost.res]]; }
                     return v;
                 });
                 const back = this.app.bridge.getVariables({ type: 'chat' }).诸天系统 || {};

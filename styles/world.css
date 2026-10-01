@@ -1,4 +1,4 @@
-/* 诸天终端 0.7.0 · 世界主题 + 布局.  Loaded after hub.css inside the Lilith window's shadow root.
+/* 诸天终端 0.8.0 · 世界主题 + 布局.  Loaded after hub.css inside the Lilith window's shadow root.
    Rule of this file: themes change colour, texture and decoration only — no rule here moves, hides or resizes a
    control based on the theme (positions stay fixed across worlds). Motion is off under prefers-reduced-motion. */
 
@@ -95,3 +95,44 @@ dialog[data-compact=true] .zt-lc-cam i{top:-105px}
 dialog[data-compact=true] .zt-top-world{max-width:none!important;flex:none}
 dialog[data-compact=true] .zt-top-world small{white-space:nowrap}
 dialog[data-compact=true] .zt-top-world b{max-width:9em}
+
+/* ---------- 0.8.0 theme bridge: the original Lilith pages (工作台 / 记忆 / 规则 / 连接 / 环境), the window status line and
+   the 私聊 panel follow the same world colours as the terminal pages. Colour, border and font only — sizes, spacing and
+   positions are untouched. The default theme keeps the original purple exactly as shipped. ---------- */
+:host([data-zt-world]:not([data-zt-world=default])){--panel:var(--zt-panel2);--violet:var(--zt-primary-a)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .card{background:linear-gradient(135deg,var(--zt-surface),var(--zt-panel2));border-color:color-mix(in srgb,var(--accent) 16%,transparent)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) button{background:var(--zt-surface);border-color:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--ink)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) button:hover{background:var(--zt-surface-h);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) :is(button.primary,#wb-submit,#save-chat,#save-api){background:linear-gradient(110deg,var(--zt-primary-a),var(--zt-primary-b));border-color:color-mix(in srgb,var(--accent) 35%,transparent);box-shadow:0 4px 18px color-mix(in srgb,var(--zt-primary-a) 28%,transparent);color:#fff}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) :is(input:not([type=checkbox]),textarea,select){background:var(--zt-input);border-color:color-mix(in srgb,var(--accent) 30%,transparent);color:var(--ink)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) label{color:var(--zt-text2)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) h2{font-family:var(--zt-title-font)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .pill{border-color:color-mix(in srgb,var(--accent) 26%,transparent);color:var(--zt-text2)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .dot{background:var(--accent)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .step{color:var(--accent)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) details{background:var(--zt-panel2)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) summary{color:var(--zt-text2)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) pre{background:var(--zt-input)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .quick-prompts button{background:color-mix(in srgb,var(--accent) 9%,transparent);color:var(--zt-text2)}
+:host([data-zt-world]:not([data-zt-world=default])) .page:not(.zt-hub-page) .helper-note{color:var(--muted)}
+:host([data-zt-world]:not([data-zt-world=default])) .statusbar{background:var(--zt-bar);color:var(--muted)}
+:host([data-zt-world]:not([data-zt-world=default])) .statusbar svg{color:var(--accent)}
+:host([data-zt-world]:not([data-zt-world=default])) .header-title small,:host([data-zt-world]:not([data-zt-world=default])) .window-tools button{color:var(--muted)}
+:host([data-zt-world]:not([data-zt-world=default])) .window-tools button:hover{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+:host([data-zt-world]:not([data-zt-world=default])) .mark{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--gold)}
+:host([data-zt-world]:not([data-zt-world=default])) .portrait-caption strong{color:var(--zt-ink2);font-family:var(--zt-title-font)}
+:host([data-zt-world]:not([data-zt-world=default])) .portrait-caption span{color:var(--muted)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-panel{background:var(--zt-win);border-color:var(--zt-win-line);color:var(--ink)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-head{background:var(--zt-head);border-bottom-color:color-mix(in srgb,var(--accent) 16%,transparent)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-menu{background:var(--zt-panel2)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-bottom{background:var(--zt-bar)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-compose{background:var(--zt-input);border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+:host([data-zt-world]:not([data-zt-world=default])) .lc-body{background:linear-gradient(120deg,var(--zt-surface),var(--zt-panel2));border-color:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--ink)}
+:host([data-zt-world]:not([data-zt-world=default])) .lc-message[data-role=user] .lc-body{background:var(--zt-surface-h)}
+:host([data-zt-world]:not([data-zt-world=default])) .lc-byline{color:var(--accent)}
+:host([data-zt-world]:not([data-zt-world=default])) #lc-send{background:linear-gradient(135deg,var(--zt-primary-a),var(--zt-primary-b))}
+:host([data-zt-world]:not([data-zt-world=default])) .lc-suggestions button{background:color-mix(in srgb,var(--accent) 8%,transparent);border-color:color-mix(in srgb,var(--accent) 24%,transparent);color:var(--zt-text2)}
+
+/* 莉莉丝气泡 (0.8.0): the line that used to sit as a row inside the status bar now speaks from the portrait */
+.zt-say[data-zt-story=true]{border-color:color-mix(in srgb,var(--zt-deco2) 55%,transparent)!important}
+:host([data-zt-world]:not([data-zt-world=default])) .zt-say .zt-bubble{background:color-mix(in srgb,var(--zt-win) 92%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--ink)}

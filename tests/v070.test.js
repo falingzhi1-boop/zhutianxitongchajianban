@@ -126,9 +126,9 @@ test('settings: stored native status bar moves to terminal once; explicit later 
     store[ID].statusbar = 'native'; assert.equal(s.get('statusbar'), 'native');
     assert.deepEqual(s.get('fx'), { mode: 'full', outside: true }); assert.equal(s.get('world').theme, 'auto'); assert.equal(s.get('lilith').camera, true);
 });
-test('version files agree and 0.7.0 capabilities are declared', () => {
+test('version files agree and 0.7.0 capabilities are still declared', () => {
     const m = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url))), p = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))), l = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url)));
-    assert.equal(VERSION, '0.7.0'); assert.equal(m.version, VERSION); assert.equal(p.version, VERSION); assert.equal(l.version, VERSION); assert.equal(l.packages[''].version, VERSION);
+    assert.match(VERSION, /^0\.(?:[7-9]|\d{2,})\.\d+$/); assert.equal(m.version, VERSION); assert.equal(p.version, VERSION); assert.equal(l.version, VERSION); assert.equal(l.packages[''].version, VERSION);
     for (const f of ['world.js', 'fx.js', 'hub-atlas.js', 'lilith-stage.js']) assert.match(p.scripts.check, new RegExp('src/' + f.replace('.', '\\.')));
     assert.ok(CAPABILITIES.some(c => c.name.startsWith('演出')) && CAPABILITIES.some(c => c.name.startsWith('图谱')));
 });

@@ -21,6 +21,7 @@ import {World} from './src/world.js';
 import {HubAtlas} from './src/hub-atlas.js';
 import {FX} from './src/fx.js';
 import {LilithStage} from './src/lilith-stage.js';
+import {SkillSync} from './src/skill-sync.js';
 
 // manifest.generate_interceptor is looked up on globalThis at generation time: define it as soon as the module loads.
 installInterceptor();
@@ -54,6 +55,7 @@ class App {
         try{this.world=new World(this).start();this.parts.push(this.world);}catch(e){console.warn('[诸天] 世界主题未启动',e);}
         try{this.atlas=new HubAtlas(this).start();this.parts.push(this.atlas);}catch(e){console.warn('[诸天] 图谱未启动',e);}
         try{this.fx=new FX(this).start();this.parts.push(this.fx);}catch(e){console.warn('[诸天] 演出未启动',e);}
+        try{this.skills=new SkillSync(this).start();this.parts.push(this.skills);}catch(e){console.warn('[诸天] 修行熟练度未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);

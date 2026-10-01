@@ -27,7 +27,7 @@ export class HubSettings {
             ] },
             { title: '提示词与世界书', items: [
                 sw('promptStripPanels', '旧楼层数据块不发给 AI（省 token）'),
-                num('promptPanelKeepDepth', '保留最新几层的数据块', 0, 6),
+                num('promptPanelKeepDepth', '保留最新几层的数据块', 0, 6, 'AI 每轮都会从世界书“实时数据”读到最新账本，所以可以设为 0（数据块全部不回传，最省 token）；保留 1–2 层能让 AI 照抄格式更稳。'),
                 sw('macroLike', '世界书变量宏 {{get_chat_variable::…}}', '酒馆助手宏开启时自动让位。'),
                 sw('worldbookAuto', '诸天存档自动安装并绑定世界书', '不覆盖你改过的条目。'),
                 act('worldbook', '世界书安装 / 绑定…'),
@@ -48,6 +48,7 @@ export class HubSettings {
                 sw('lilith.react', '界面角色：对选中任务 / 物品 / 功法和结算成败作出反应', '只用原版表情与分层动作；台词来自账本数据。'),
                 sw('lilith.pageLines', '进入系统页时说一句（每页每次会话一次）'),
                 sw('lilith.camera', '镜头：系统页半身 · 工作台全身 · 私聊面部特写'),
+                sw('lilith.story', '气泡播报：数据块里的「系统播报」由立绘气泡说出；点立绘空白处说剧情台词', '原来在状态栏底部的“莉莉丝：……”一行已移到这里。'),
             ] },
             { title: '世界与演出', sub: '主题只换颜色和装饰，按钮位置不变。', items: [
                 sel('world.theme', '界面主题', [['auto', '跟随当前世界（自动判断）'], ['default', '诸天（默认）'], ['xianxia', '仙侠 · 玉简 / 星图 / 阵纹'], ['cyber', '赛博 · 全息终端'], ['eerie', '诡异 · 异常与侵蚀']], this.worldDesc()),
@@ -57,6 +58,9 @@ export class HubSettings {
                 act('fx-preview', '预览演出', '播放一段示例（不写账本，卡片会标明“预览”）。'),
             ] },
             ...this.extra.map(x => (typeof x === 'function' ? x(app) : x)),
+            { title: '高级 · 管理员', sub: '直接改账本，慎用。', items: [
+                act('admin', '管理员控制台…', '原版管理员面板：直接改系统点、专属资源、好感 / 黑化 / 悔意、主修功法、货币、实力档。保存即真实写入账本（原 ◆ 连点五次的入口已从终端里移除）。'),
+            ] },
             { title: '兼容与维护', items: [
                 act('diagnose', '兼容诊断…'),
                 act('takeover', '一键接管旧版', '停用（不删除）旧正则与旧酒馆助手脚本。'),
@@ -95,6 +99,7 @@ export class HubSettings {
             api: () => app.openApiCenter(), 'go-api': () => app.hub.go('api'), live2d: () => app.portrait?.openSettings(),
             takeover: () => app.runTakeover(), restore: () => app.restoreLegacy(),
             'fx-preview': () => app.fx?.preview(),
+            admin: () => app.hub.openAdmin(),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(e.message, '诸天')),
         };
         try { const r = map[id]?.(); r?.catch?.(e => t?.error(e.message, '诸天')); } catch (e) { t?.error(e.message, '诸天'); }

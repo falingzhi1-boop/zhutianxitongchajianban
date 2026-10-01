@@ -23,6 +23,7 @@ const I = {
     art: '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',
     chat: '<path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/>',
     atlas: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    quill: '<path d="M20 4c-6 1-11 6-13 13l-2 3"/><path d="M20 4c0 6-4 11-11 12"/><path d="M9 11h5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
 };
 const icon = k => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${I[k] || I.grid}</svg>`;
@@ -32,12 +33,14 @@ export const ENGINE_TABS = { ov: 1, bond: 2, task: 3, cult: 4, shop: 5, bag: 6, 
 export const NAV = [
     { group: '系统', items: [['ov', '总览', 'grid'], ['task', '任务', 'task'], ['bond', '羁绊', 'heart'], ['cult', '修行', 'lotus']] },
     { group: '交易', items: [['shop', '商城', 'shop'], ['bag', '背包', 'bag']] },
-    { group: '能力', items: [['plug', '外挂', 'plug'], ['art', '神通', 'art']] },
+    { group: '能力', items: [['plug', '外挂', 'plug'], ['plugmgr', '自拟', 'quill'], ['art', '神通', 'art']] },
     { group: '图谱', items: [] },
     { group: '万界', items: [] },
     { group: '莉莉丝', items: [['work'], ['memory'], ['rules']] },
     { group: '终端', items: [['api'], ['env'], ['set', '设置', 'gear']] },
 ];
+/** Full names for short navigation labels (tooltip + screen readers via title). */
+const NAV_TITLE = { plugmgr: '自拟外挂：自己编写外挂（规则、代价、冷却），按聊天启用' };
 const ORIGINAL_PAGES = ['work', 'memory', 'rules', 'api', 'env'];
 const ORIGINAL_LABEL = { work: '工作台', memory: '记忆', rules: '规则', api: '连接', env: '状态' };
 
@@ -63,7 +66,9 @@ export class Hub {
         this.register('set', { title: '设置', render: el => this.app.hubSettings?.render(el) });
         this.bindClose();
         this.disposers.push(this.a.subscribe(() => { this.refreshTop(); this.scheduleEngine(); }));
-        this.disposers.push(this.app.bridge.onChange(() => { this.refreshTop(); }));
+        // 0.8.0: a ledger write from outside the engine (签到, 聊天群, 自拟外挂, 管理员 …) also refreshes the numbers shown
+        // inside the engine page — before, only the top bar followed and 基础概览 kept the panel's old 系统点.
+        this.disposers.push(this.app.bridge.onChange(() => { this.refreshTop(); this.scheduleEngineView(); }));
         if (this.app.statusbar) { this.app.statusbar.openHub = (page, floor) => this.open(page, { floor }); this.app.statusbar.onScan = () => this.scheduleEngine(); }
         this.page = this.settings.get('hubPage') || 'ov';
         this.go(this.page, { silent: true });
@@ -127,7 +132,7 @@ export class Hub {
     }
     navButton(id, label, ic) {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'nav-button zt-nav-own'; b.dataset.page = id; b.setAttribute('role', 'tab');
-        b.id = 'tab-' + id; b.setAttribute('aria-selected', 'false'); b.innerHTML = `${icon(ic)}<span>${esc(label)}</span>`; return b;
+        b.id = 'tab-' + id; b.setAttribute('aria-selected', 'false'); if (NAV_TITLE[id]) b.title = NAV_TITLE[id]; b.innerHTML = `${icon(ic)}<span>${esc(label)}</span>`; return b;
     }
     /** Adds a page to a nav group (used by later modules: 聊天群, 图谱 …). */
     addNav(group, id, label, ic, def) {
@@ -205,7 +210,7 @@ export class Hub {
         this.on(document, 'keydown', e => {
             if (e.key !== 'Escape' || !this.isOpen || e.defaultPrevented) return;
             if (document.querySelector('dialog.popup[open], .popup[open]')) return;
-            const inner = this.engineFrame?.contentDocument?.querySelector('.mvu-modal-toggle:checked, .gacha-overlay.show, .zt-overlay.show');
+            const inner = this.engineFrame?.contentDocument?.querySelector('.mvu-modal-toggle:checked, .gacha-overlay.show, .zt-overlay.show, [id$="-overlay"]:not([hidden])');
             if (inner) return;
             e.preventDefault(); this.close();
         });
@@ -279,7 +284,8 @@ export class Hub {
     }
     get engineBusy() {
         const doc = this.engineFrame?.contentDocument; if (!doc) return false;
-        return !!doc.querySelector('.mvu-modal-toggle:checked, .gacha-overlay.show, [class*="overlay"].show, .mvu-detail-modal.show') || doc.activeElement?.matches?.('input[type=text],textarea');
+        // #admin-overlay / #gacha-overlay / #item-detail-overlay: 管理员 / 抽取 / 物品详情 (shown by removing [hidden], not by .show)
+        return !!doc.querySelector('.mvu-modal-toggle:checked, .gacha-overlay.show, [class*="overlay"].show, [id$="-overlay"]:not([hidden]), .mvu-detail-modal.show') || !!doc.activeElement?.matches?.('input:not([type]),input[type=text],input[type=number],textarea,select');
     }
     dropEngine() { const f = this.engineFrame; if (f) { this.app.statusbar?.release(f); f.remove(); } this.engineFrame = null; }
     engineLoaded(frame) {
@@ -294,6 +300,39 @@ export class Hub {
         if (typeof orig === 'function' && !orig.__zt) { const wrapped = function (...args) { const r = orig.apply(this, args); if (r) setTimeout(() => this.hubInputWritten?.(), 0); return r; }.bind(w); wrapped.__zt = true; w.hubInputWritten = () => this.inputWritten(); w.insertIntoChatInput = wrapped; }
         this.setEngineTab(this.engineTab, true);
         this.onEngine?.(frame, doc);
+        this.scheduleEngineView(0);
+    }
+    /** The engine root once the original finished its first fill (root.__ztDataReady), else null. */
+    engineRoot() {
+        const f = this.engineFrame; if (!f?.isConnected) return null;
+        try { const r = f.contentDocument?.querySelector('.mvu-sys'); return r && r.__ztDataReady ? r : null; } catch { return null; }
+    }
+    scheduleEngineView(ms = 120) { if (this.dead) return; clearTimeout(this.viewTimer); this.viewTimer = setTimeout(() => this.refreshEngineView(), ms); }
+    /** Re-reads the ledger into the visible engine page with the original functions (applyVarsToDisplay: 系统点 / 好感 /
+     *  主修功法 / 货币; ztRefreshVisible: the active tab's lists). The panel text itself is not touched. When the engine
+     *  was built without a capture (no AI panel yet, e.g. right after 签到) this is what puts the ledger value on screen. */
+    refreshEngineView(tries = 0) {
+        if (this.dead) return;
+        const f = this.engineFrame; if (!f?.isConnected) return;
+        const root = this.engineRoot();
+        if (!root) { if (tries < 40) this.viewTimer = setTimeout(() => this.refreshEngineView(tries + 1), 250); return; }
+        if (this.engineBusy) { this.viewTimer = setTimeout(() => this.refreshEngineView(tries), 900); return; }
+        const w = f.contentWindow;
+        try { w.applyVarsToDisplay?.(root); } catch (e) { console.warn('[诸天终端] 概览刷新失败', e); }
+        try { w.ztRefreshVisible?.(root); } catch (e) { console.warn('[诸天终端] 页面刷新失败', e); }
+        this.onEngineView?.(root, f.contentDocument);
+    }
+    /** 管理员控制台 (original openAdmin) — 0.8.0 entry: 设置 → 高级. The ◆ five-click entry is hidden in the terminal. */
+    async openAdmin() {
+        if (!this.a.currentIdentity()) throw Error('请先打开单角色聊天。');
+        if (!this.ledger()) throw Error('当前聊天还没有诸天账本，先在「设置 → 新聊天初始化」创建。');
+        this.open('ov');
+        for (let i = 0; i < 60; i++) {
+            const root = this.engineRoot(), w = this.engineFrame?.contentWindow;
+            if (root && typeof w?.openAdmin === 'function') { await w.openAdmin(root); return true; }
+            await new Promise(r => setTimeout(r, 150));
+        }
+        throw Error('诸天系统页面还没加载好，稍后再试。');
     }
     setEngineTab(n, force = false) {
         this.engineTab = n;
@@ -321,7 +360,7 @@ export class Hub {
     }
 
     dispose() {
-        this.dead = true; clearTimeout(this.engineTimer); this.disarmHistory();
+        this.dead = true; clearTimeout(this.engineTimer); clearTimeout(this.viewTimer); this.disarmHistory();
         this.disposers.splice(0).forEach(f => { try { f(); } catch { /* ignore */ } });
         this.dropEngine(); this.marker?.remove(); this.css?.remove();
         for (const { el } of this.pages.values()) el?.remove();
@@ -340,6 +379,10 @@ html[data-zt-hub] .mvu-sys>details>summary,html[data-zt-hub] .mvu-head-area,html
 html[data-zt-hub] .mvu-container{padding:14px 18px 48px!important;border:0!important;background:transparent!important}
 html[data-zt-hub] .zt-page-heading{margin-top:0!important}
 html[data-zt-hub] [data-zt-off="1"]{display:none!important}
+/* 0.8.0: 莉莉丝's line (and the ◆ admin mark) moved out of the page: she speaks it from the portrait bubble; the admin
+   console opens from 设置 → 高级. Native in-message mode keeps the original row. */
+html[data-zt-hub] .mvu-msg{display:none!important}
+html[data-zt-hub] .mvu-admin-f-sub{visibility:hidden}
 html[data-zt-hub] ::-webkit-scrollbar{width:8px;height:8px}html[data-zt-hub] ::-webkit-scrollbar-thumb{background:#8a6aa055;border-radius:8px}
 @media (max-width:560px){html[data-zt-hub] .mvu-container{padding:10px 10px 40px!important}}
 /* 0.7.0 world themes: colours only (the engine layout never changes) */

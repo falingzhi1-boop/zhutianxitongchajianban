@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.7.0';
+export const VERSION = '0.8.0';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -60,5 +60,9 @@ export const CAPABILITIES = [
     {name:'图谱：事件线、羁绊图、星图、能力树',state:'implemented',scope:'0.7.0：节点全部来自账本记录，详情显示原始字段与来源路径，可跳回任务页 / 聊天群 / 外挂 / 楼层；星图可加锁记录穿越'},
     {name:'演出：穿越、突破、契约、任务完成、抽取、奖励入库',state:'implemented',scope:'0.7.0：只在账本保存并读回后播放，播放前再次核对，回滚的标为未入账；≤2.1 秒可跳过，结果卡片可跳转记录；可只显示卡片或关闭'},
     {name:'AI 自动写入 当前世界 / 世界类型',state:'pending',scope:'0.7.0：已注入提示并由原版 变量更新 写入；仅用模拟模型验收，真实模型遵循度未验证'},
-    {name:'旧存档迁移、账本备份与回滚',state:'pending',scope:'迁移报告、旧助手配置导入与回滚界面已提供；尚未完成浏览器点击验收'}
+    {name:'旧存档迁移、账本备份与回滚',state:'pending',scope:'迁移报告、旧助手配置导入与回滚界面已提供；尚未完成浏览器点击验收'},
+    {name:'修行 · 熟练度（功法实效 / 实战积累 / 角色卡功法）',state:'implemented',scope:'0.8.0：每轮把各功法当前阶段的原版效果注入提示；正文用了功法而数据块漏记时按品阶补记少量熟练度（换页随旧回复撤销）；读取角色卡 / MVU / 其他脚本的功法变量并只升不降地导入功法库。真实模型是否按阶段效果演绎未验证'},
+    {name:'莉莉丝气泡播报与剧情台词',state:'implemented',scope:'0.8.0：终端内不再显示状态栏底部的“莉莉丝：……”一行，数据块的系统播报由立绘气泡说出；点立绘空白处按账本说剧情台词；无立绘（手机）时用终端提示条'},
+    {name:'管理员控制台入口',state:'implemented',scope:'0.8.0：从 设置 → 高级 · 管理员 打开原版管理员面板；终端内隐藏 ◆ 连点入口'},
+    {name:'莉莉丝原版页面跟随世界主题',state:'implemented',scope:'0.8.0：工作台 / 记忆 / 规则 / 连接 / 状态页、底部状态行、私聊面板在仙侠 / 赛博 / 诡异主题下使用同一套颜色；默认主题保持原版紫色'}
 ];
