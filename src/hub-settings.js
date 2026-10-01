@@ -2,6 +2,7 @@
 import { VERSION } from './contracts.js';
 import { HOST_TESTED } from './compat.js';
 import { esc } from './hub.js';
+import { PALETTE_OPTIONS } from './palettes.js';
 
 const sw = (k, label, desc = '') => ({ type: 'switch', k, label, desc });
 const sel = (k, label, options, desc = '') => ({ type: 'select', k, label, options, desc });
@@ -39,8 +40,8 @@ export class HubSettings {
                 act('migrate', '旧存档迁移 / 账本回滚…', '最近 5 份自动备份，可一键回滚。'),
             ] },
             { title: '连接', items: [
-                act('api', 'API 中心…', '状态栏 AI 功能与莉莉丝共用；可直接用酒馆当前主 API。'),
-                act('go-api', '莉莉丝连接页'),
+                act('api', 'API 中心（连接页）', '唯一的 API 设置：状态栏 AI 功能与莉莉丝共用；可直接用酒馆当前主 API。'),
+                sel('apiTimeout', '独立 API 超时（私聊 / 记忆 / 工作台）', [['60', '60 秒（原版）'], ['120', '120 秒'], ['180', '180 秒（默认）'], ['300', '300 秒'], ['600', '600 秒（思考模型）']], '请求一律以流式传输（中途不断流），不会再被反向代理 / Cloudflare 以 502 掐断；超时只在模型一直不出完时生效。'),
             ] },
             { title: '莉莉丝', items: [
                 sel('floatLilith', '悬浮莉莉丝（代替左下角唤醒按钮）', [['auto', '自动：手机 / 触屏开启'], ['on', '总是开启'], ['off', '关闭（用原版唤醒按钮）']], '点一下打开终端；终端开着时点她只会说话，不会关终端；双击戳她；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住）。立绘看不到时，她的台词气泡在这里弹出。'),
@@ -56,6 +57,7 @@ export class HubSettings {
             ] },
             { title: '世界与演出', sub: '主题只换颜色和装饰，按钮位置不变。', items: [
                 sel('world.theme', '界面主题', [['auto', '跟随当前世界（自动判断）'], ['default', '诸天（默认）'], ['xianxia', '仙侠 · 玉简 / 星图 / 阵纹'], ['cyber', '赛博 · 全息终端'], ['eerie', '诡异 · 异常与侵蚀']], this.worldDesc()),
+                sel('palette', '配色方案', PALETTE_OPTIONS, '固定配色会覆盖世界主题的颜色（世界装饰保留）；仙侠主题 0.8.4 起改为墨玉金。'),
                 sw('world.prompt', '提示 AI 记录穿越（当前世界 / 世界类型）', '穿越时 AI 在数据块「变量更新」里写一行；星图也可以手动记录。'),
                 sel('fx.mode', '演出', [['full', '完整演出（≤2 秒，可跳过）'], ['brief', '只显示结果卡片'], ['off', '关闭']], '只在账本写入并读回后播放；失败则显示失败。系统开启“减少动态效果”时自动只显示卡片。'),
                 sw('fx.outside', '终端关闭时在聊天角落显示剧情提示卡片'),

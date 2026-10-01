@@ -43,32 +43,103 @@ export function legacyVoiceActive(c) {
     return lists.some(list => Array.isArray(list) && list.some(r => r && !r.disabled && (r.id === LEGACY_VOICE_ID || /data-lilith-voice/.test(String(r.replaceString || '')))));
 }
 /** 0.8.2 fix — character-card status bars (Tavern Helper front-end code blocks) vanished when this extension was on.
- *  Tavern Helper wraps each front-end <pre> of a floor in div.TH-render and mounts its iframe there ONCE per render event.
- *  Our floor renderer used to rebuild .mes_text with innerHTML (voice card, 诸天 data block, macros): that destroyed the
- *  wrapper and Tavern Helper never drew the card's status bar again. Now the new content is built off-DOM and swapped in
- *  around those wrappers — they stay in place (no iframe reload) and keep their position among the new nodes. */
+ *  0.8.4 — generalised to every other renderer / beautification. Our floor renderer rebuilds .mes_text (voice card,
+ *  诸天 data block, macros) from SillyTavern's own messageFormatting. Anything ANOTHER extension put into the floor after
+ *  SillyTavern rendered it — Tavern Helper's div.TH-render, 小白X / other iframe renderers, JS beautifiers that wrap or
+ *  restyle paragraphs, a code block replaced by a rendered card — used to be lost (or shown twice: raw code + card).
+ *
+ *  How: `ref` is SillyTavern's untouched render of the same message. Old top-level nodes that are neither ours nor in
+ *  `ref` are foreign → they stay in place (same node, an iframe inside is NOT reloaded). An ST node a foreign node
+ *  replaced (a <pre>, or on a floor we never touched any node) is not re-added next to it, so nothing appears twice.
+ *  A node edited in place (same text, other markup: a JS beautifier wrapping words, adding classes) is kept too.
+ *  New nodes are inserted around the kept ones in order. Without `ref`, only div.TH-render is treated as foreign (0.8.2). */
 export const FOREIGN_SELECTOR = 'div.TH-render';
-const preText = el => (el?.matches?.('pre') ? el : el?.querySelector?.('pre'))?.textContent ?? '';
+const OWN = new WeakSet();                                   // nodes this renderer inserted (survive between passes)
 const FRONTEND = /<(?:!doctype|html|head|body|script|style)\b/i;
-export function swapContent(target, box) {
-    const kept = [...target.querySelectorAll(FOREIGN_SELECTOR)];
-    if (!kept.length) { target.replaceChildren(...box.childNodes); return 0; }
-    const pool = kept.slice(), plan = [];
-    const take = pre => {
-        let i = pool.findIndex(k => preText(k) === pre.textContent);
-        if (i < 0 && FRONTEND.test(pre.textContent)) i = pool.findIndex(k => FRONTEND.test(preText(k)));   // macro/edit changed the text
-        return i < 0 ? null : pool.splice(i, 1)[0];
-    };
-    for (const n of [...box.childNodes]) {
-        const k = n.nodeType === 1 && n.tagName === 'PRE' ? take(n) : null;
-        plan.push(k || n);
+const blank = n => (n.nodeType === 3 && !n.nodeValue.trim()) || n.nodeType === 8;
+const sig = n => n.nodeType === 1 ? n.outerHTML : n.nodeType === 3 ? '#' + n.nodeValue.trim() : '';
+const OURS_SEL = '.zt-render-mark,.zt-lilith-voice,[data-lilith-voice],[data-zt-native],[data-zt-frame],.' + STATUSBAR_CLASS;
+export const isOurs = n => OWN.has(n) || (n.nodeType === 1 && (!!n.matches?.(OURS_SEL) || /(^|\s)zt-/.test(typeof n.className === 'string' ? n.className : '')));
+const hasFrame = n => n.nodeType === 1 && (n.matches('iframe,' + FOREIGN_SELECTOR) || !!n.querySelector('iframe,' + FOREIGN_SELECTOR));
+const isPre = n => n.nodeType === 1 && (n.tagName === 'PRE' || (n.childElementCount === 1 && n.firstElementChild.tagName === 'PRE' && !n.textContent.replace(n.firstElementChild.textContent, '').trim()));
+/** Longest common subsequence of two signature lists → matched index pairs. */
+export function lcsPairs(a, b) {
+    const n = a.length, m = b.length; if (!n || !m) return [];
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const out = []; let i = 0, j = 0;
+    while (i < n && j < m) { if (a[i] === b[j]) { out.push([i, j]); i++; j++; } else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++; }
+    return out;
+}
+/** Text-only key: a node another script edited IN PLACE (wrapped words in spans, added classes / styles, swapped a
+ *  <p> for a <div>) keeps its text. Empty-text elements (hr, img) fall back to their tag. */
+const textKey = n => n.nodeType === 1 ? (n.textContent.replace(/\s+/g, ' ').trim() || '<' + n.tagName + '>') : sig(n);
+/** In-place edits: old node ≈ ST's node by text but differs in markup, and our new node IS ST's node (we did not change
+ *  it) → the old, edited node replaces our copy. Frames are left to the foreign path (moving an iframe reloads it). */
+function keepEdited(O, box, ref) {
+    const A = [...ref.childNodes].filter(n => !blank(n)), N = [...box.childNodes].filter(n => !blank(n));
+    const aToN = new Map(lcsPairs(A.map(sig), N.map(sig))); let kept = 0;
+    for (const [i, j] of lcsPairs(O.map(textKey), A.map(textKey))) {
+        const o = O[i], a = A[j], n = N[aToN.get(j)];
+        if (!n || o.nodeType !== 1 || sig(o) === sig(a) || hasFrame(o) || o.matches?.(OURS_SEL) || o.querySelector?.(OURS_SEL)) continue;
+        n.replaceWith(o); kept++;
     }
-    // nested code blocks (inside details/blockquote): swap the new <pre> for the old wrapper (that one has to move)
-    for (const pre of [...box.querySelectorAll('pre')]) { if (!pool.length) break; if (pre.parentNode === box) continue; const k = take(pre); if (k) pre.replaceWith(k); }
-    const keep = new Set(plan.filter(n => kept.includes(n) && n.parentNode === target));
-    for (const n of [...target.childNodes]) if (!keep.has(n)) n.remove();          // only the kept wrappers stay put
+    return kept;
+}
+export function swapContent(target, box, ref = null) {
+    // O is taken BEFORE edited nodes move into `box`: they stay in it, so the old ↔ new alignment (and with it the
+    // position of foreign nodes next to them) still sees them on both sides.
+    const O = [...target.childNodes].filter(n => !blank(n));
+    if (ref) keepEdited(O, box, ref);
+    let foreign;
+    if (ref) {
+        const A = [...ref.childNodes].filter(n => !blank(n)), Nk = [...box.childNodes].filter(n => !blank(n));
+        const inA = new Set(lcsPairs(O.map(sig), A.map(sig)).map(([i]) => i)), inN = new Set(lcsPairs(O.map(sig), Nk.map(sig)).map(([i]) => i));
+        foreign = O.filter((n, i) => !isOurs(n) && !inA.has(i) && !inN.has(i));
+    } else foreign = [...target.querySelectorAll(':scope > ' + FOREIGN_SELECTOR)];
+    // nested Tavern Helper wrappers (inside details/blockquote of an ST node): keep the 0.8.2 behaviour — the new <pre>
+    // is swapped for the old wrapper (which has to move; only happens when the surrounding node is rebuilt).
+    const nestedTH = [...target.querySelectorAll(FOREIGN_SELECTOR)].filter(w => !foreign.some(f => f === w || f.contains(w)));
+    if (!foreign.length && !nestedTH.length) {
+        const nodes = [...box.childNodes]; target.replaceChildren(...nodes); nodes.forEach(n => OWN.add(n)); return 0;
+    }
+    const preText = el => (el?.matches?.('pre') ? el : el?.querySelector?.('pre'))?.textContent ?? '';
+    for (const pre of [...box.querySelectorAll('pre')]) {
+        if (!nestedTH.length) break; if (pre.parentNode === box) continue;
+        let i = nestedTH.findIndex(k => preText(k) === pre.textContent);
+        if (i < 0 && FRONTEND.test(pre.textContent)) i = nestedTH.findIndex(k => FRONTEND.test(preText(k)));
+        if (i >= 0) pre.replaceWith(nestedTH.splice(i, 1)[0]);
+    }
+    // positions: align old ↔ new; each foreign node goes after the new node matching its last matched old predecessor
+    const N = [...box.childNodes], Nk = N.filter(n => !blank(n));
+    const pairs = lcsPairs(O.map(sig), Nk.map(sig)), oToN = new Map(pairs);
+    const gapOfForeign = new Map(); let last = -1;
+    for (let i = 0; i < O.length; i++) { if (oToN.has(i)) last = oToN.get(i); else if (foreign.includes(O[i])) gapOfForeign.set(O[i], last); }
+    const gapsWithForeign = new Set(gapOfForeign.values()), framed = new Set([...gapOfForeign].filter(([f]) => hasFrame(f)).map(([, g]) => g));
+    const pristine = !O.some(n => OWN.has(n));                // first pass over an ST render: foreign may have replaced any node
+    const matchedN = new Set(pairs.map(([, j]) => j));
+    const drop = new Set(); last = -1;
+    Nk.forEach((n, j) => {
+        if (matchedN.has(j)) { last = j; return; }
+        if (!gapsWithForeign.has(last)) return;
+        const replaced = ref ? [...ref.childNodes].some(a => !blank(a) && sig(a) === sig(n)) && !O.some(o => sig(o) === sig(n)) : false;
+        if ((replaced && (isPre(n) || pristine)) || (framed.has(last) && isPre(n) && FRONTEND.test(n.textContent))) drop.add(n);
+    });
+    const plan = []; last = -1; let k = 0;
+    const flush = g => { for (const [f, gf] of gapOfForeign) if (gf === g && !plan.includes(f)) plan.push(f); };
+    flush(-1);
+    for (const n of N) {
+        if (blank(n)) { plan.push(n); continue; }
+        const j = Nk.indexOf(n, k); k = j + 1;
+        if (!drop.has(n)) plan.push(n);
+        if (matchedN.has(j)) { last = j; flush(j); }
+        else if (j === Nk.length - 1 || matchedN.has(j + 1)) flush(last);   // end of a run of new nodes: foreign of that gap
+    }
+    for (const f of gapOfForeign.keys()) if (!plan.includes(f)) plan.push(f);
+    const keep = new Set(plan.filter(n => n.parentNode === target && foreign.includes(n)));
+    for (const n of [...target.childNodes]) if (!keep.has(n)) n.remove();          // only the kept foreign nodes stay put
     let cursor = target.firstChild;
-    for (const n of plan) { if (n === cursor) { cursor = cursor.nextSibling; continue; } target.insertBefore(n, cursor); }
+    for (const n of plan) { if (n === cursor) { cursor = cursor.nextSibling; continue; } target.insertBefore(n, cursor); if (!keep.has(n)) OWN.add(n); }
     return keep.size;
 }
 export function tavernHelperPresent() { return !!(globalThis.TavernHelper || document.querySelector('iframe[id^="TH-message--"], #tavern_helper')); }
@@ -143,7 +214,7 @@ export class StatusBarHost {
         for (const f of el.querySelectorAll('.' + STATUSBAR_CLASS + ' iframe')) this.release(f);
         delete el.dataset.ztSig;
         const text = el.querySelector('.mes_text');
-        if (text && m) { const box = document.createElement('div'); box.innerHTML = this.ctx().messageFormatting(m.mes, m.name, m.is_system, m.is_user, id); swapContent(text, box); }
+        if (text && m) { const box = document.createElement('div'); box.innerHTML = this.ctx().messageFormatting(m.mes, m.name, m.is_system, m.is_user, id); swapContent(text, box, box.cloneNode(true)); }
     }
     render(el, m, id, live, p) {
         const c = this.ctx(), text = el.querySelector('.mes_text'); if (!text) return;
@@ -172,7 +243,9 @@ export class StatusBarHost {
         }
         panels.forEach((pn, i) => { if (!usedP.has(i)) box.append(this.mount(pn, id, live)); }); // markdown swallowed the slot: still show it
         voices.forEach((v, i) => { if (!usedV.has(i)) box.append(this.voiceCard(v)); });
-        swapContent(text, box);
+        // SillyTavern's own render of this message: what other extensions saw and may have changed (see swapContent)
+        const ref = document.createElement('div'); ref.innerHTML = c.messageFormatting(m.mes || '', m.name, m.is_system, m.is_user, id);
+        swapContent(text, box, ref);
         this.counts.panels += panels.length; this.counts.voices += voices.length;
         const mark = document.createElement('span'); mark.className = 'zt-render-mark'; mark.hidden = true; text.append(mark);
     }
@@ -234,6 +307,16 @@ export class StatusBarHost {
         let html = this.template.replace('$1', () => escapeText(content));
         html = html.replace(/<head>/i, m => m + boot).replace(/<\/body>/i, m => (opts.fill ? '' : fit) + m);
         if (opts.fill) { iframe.removeAttribute('scrolling'); iframe.style.cssText = 'width:100%;height:100%;border:0;display:block;background:transparent;'; iframe.className = 'zt-engine-frame'; iframe.title = '诸天系统引擎 · 楼 ' + id; }
+        // 0.8.4: the status bar's own ⚙ API dialog wrote only the status-bar copy of the API config (a third place).
+        // Its gear now opens the one API 中心 (terminal 连接 page when the terminal is open, otherwise the popup).
+        iframe.addEventListener('load', () => {
+            const d = iframe.contentDocument; if (!d) return;
+            d.addEventListener('click', e => {
+                if (!e.target?.closest?.('.btn-open-api,label[for="api-modal-toggle"]')) return;
+                if (typeof this.openApi !== 'function') return;     // no app hook: keep the original dialog
+                e.preventDefault(); e.stopPropagation(); this.openApi();
+            }, true);
+        });
         iframe.srcdoc = html;
         return iframe;
     }

@@ -6,6 +6,7 @@
 // Every chat write is serialized under the same Web Lock as the guarded ledger service and refuses to run
 // while a previous ledger write is uncertain.
 import { ID, STORAGE, LEGACY_SCRIPT_ID, identity } from './contracts.js';
+import { streamedCompletion, errorText } from './api-stream.js';
 
 const clone = value => value === undefined ? undefined : structuredClone(value);
 const plainObject = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -168,46 +169,62 @@ export class Bridge {
         if (!model) throw Error('请先设置独立 API 的模型名称');
         const cap = Number(config.maxTokens); if (Number.isInteger(cap) && cap >= 64 && cap <= 65536) maxTokens = cap;
         const body = { model, messages, stream: false, max_tokens: maxTokens, ...(temperature === undefined ? (plain ? {} : { temperature: 0 }) : { temperature }) };
+        // 0.8.4: streamed on both paths (see api-stream.js) — the non-stream relay was where the 502s came from.
+        const send = b => fetch(chat, { method: 'POST', redirect: 'error', credentials: 'omit', cache: 'no-store', signal, headers: { 'Content-Type': 'application/json', ...(config.key ? { Authorization: 'Bearer ' + config.key } : {}) }, body: JSON.stringify(b) });
+        const relay = b => fetch('/api/backends/chat-completions/generate', { method: 'POST', signal, headers: this.ctx().getRequestHeaders(), body: JSON.stringify({
+            chat_completion_source: 'custom', custom_url: base, model, messages, stream: !!b.stream, max_tokens: maxTokens, temperature: body.temperature ?? 1,
+            custom_include_headers: config.key ? JSON.stringify({ Authorization: 'Bearer ' + config.key }) : '',
+        }) });
         let response, direct = true;
-        try {
-            response = await fetch(chat, { method: 'POST', redirect: 'error', credentials: 'omit', cache: 'no-store', signal, headers: { 'Content-Type': 'application/json', ...(config.key ? { Authorization: 'Bearer ' + config.key } : {}) }, body: JSON.stringify(body) });
-        } catch (error) {
+        try { response = await streamedCompletion(send, body); }
+        catch (error) {
             if (signal?.aborted) throw Error('请求已取消或超时');
             direct = false;
-            response = await fetch('/api/backends/chat-completions/generate', { method: 'POST', signal, headers: this.ctx().getRequestHeaders(), body: JSON.stringify({
-                chat_completion_source: 'custom', custom_url: base, model, messages, stream: false, max_tokens: maxTokens, temperature: body.temperature ?? 1,
-                custom_include_headers: config.key ? JSON.stringify({ Authorization: 'Bearer ' + config.key }) : '',
-            }) }).catch(() => { throw Error('网络连接失败：浏览器直连被拦截，经酒馆服务器转发也失败'); });
+            try { response = await streamedCompletion(relay, body); }
+            catch (e2) { if (signal?.aborted) throw Error('请求已取消或超时'); throw Error('网络连接失败：浏览器直连被拦截，经酒馆服务器转发也失败（' + (e2?.message || e2) + '）'); }
         }
-        if (!response.ok) throw Error(`${direct ? '独立 API' : '酒馆转发'}返回 HTTP ${response.status}`);
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw Error(`${direct ? '独立 API' : '酒馆转发'}返回 HTTP ${response.status}${data?.error?.message ? ' · ' + data.error.message : ''}`);
         if (data?.error) throw Error('接口错误：' + (data.error.message || JSON.stringify(data.error)).slice(0, 200));
         const choice = data?.choices?.[0], text = choice?.message?.content ?? choice?.text;
         if (choice?.finish_reason === 'length' && !String(text || '').trim()) throw Error('模型思考占满了输出额度，没给出正文；可调大最大输出长度或换用不带思考的模型');
         if (typeof text !== 'string' || !text.trim()) throw Error('接口未返回文字内容');
         return { text, via: direct ? 'direct' : 'st-proxy' };
     }
-    async listModels(url, key) {
+    /** Model ids for an OpenAI-compatible base URL. Direct first (skipped when the caller already saw the browser block
+     *  it), then the user's own SillyTavern server (not subject to CORS). Errors carry a readable reason and .status. */
+    async listModels(url, key, { direct = true, signal } = {}) {
         if (isMainApi(url)) return [MAIN_API_MODEL];
         const { base } = endpointOf(url); let error = null;
-        for (const u of [base + '/models', ...(/\/v\d+$/.test(base) ? [] : [base + '/v1/models'])]) {
+        const pick = d => (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : Array.isArray(d?.data?.data) ? d.data.data : Array.isArray(d?.models) ? d.models : Array.isArray(d?.data?.models) ? d.data.models : [])
+            .map(x => typeof x === 'string' ? x : x?.id || x?.name).filter(Boolean);
+        const fail = (msg, status) => Object.assign(Error(msg), { status });
+        const bare = !/\/v\d+[a-z]*$/i.test(base);
+        if (direct) for (const u of [base + '/models', ...(bare ? [base + '/v1/models'] : [])]) {
             try {
-                const r = await fetch(u, { headers: key ? { Authorization: 'Bearer ' + key } : {}, credentials: 'omit', cache: 'no-store', signal: AbortSignal.timeout(20000) });
-                if (!r.ok) { error = Error('HTTP ' + r.status); continue; }
-                const d = await r.json(); const list = (Array.isArray(d) ? d : d.data || d.models || []).map(x => typeof x === 'string' ? x : x.id || x.name).filter(Boolean);
-                if (list.length) return list;
-            } catch (e) { error = e; }
+                const r = await fetch(u, { headers: key ? { Authorization: 'Bearer ' + key } : {}, credentials: 'omit', cache: 'no-store', signal: signal || AbortSignal.timeout(8000) });
+                if (!r.ok) { error = fail(`HTTP ${r.status} · ${errorText(await r.text().catch(() => ''), r.status)}`, r.status); continue; }
+                const list = pick(await r.json().catch(() => null)); if (list.length) return list;
+            } catch (e) { if (signal?.aborted) throw e; error = e; }
         }
-        // Browser blocked (CORS) → ask the user's own SillyTavern server, which is not subject to CORS. ST appends
-        // /models to custom_url itself, so try the base as written and, for a bare domain, base + /v1.
-        for (const custom of [base, ...(/\/v\d+$/.test(base) ? [] : [base + '/v1'])]) {
-            const r = await fetch('/api/backends/chat-completions/status', { method: 'POST', headers: this.ctx().getRequestHeaders(), body: JSON.stringify({ chat_completion_source: 'custom', custom_url: custom, custom_include_headers: key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '' }) }).catch(() => null);
-            if (!r?.ok) { error = Error('酒馆服务器转发失败（HTTP ' + (r?.status ?? '无响应') + '）'); continue; }
-            const d = await r.json().catch(() => null); const list = (d?.data?.data || d?.data || []).map(x => typeof x === 'string' ? x : x?.id || x?.name).filter(Boolean);
-            if (list.length) return list;
-            if (d?.error) error = Error('浏览器直连被拦截（CORS），经酒馆服务器转发也没拿到模型列表：请检查地址和 Key');
+        // ST appends /models to custom_url itself: try the base as written and, for a bare domain, base + /v1.
+        let lastStatus = 0;
+        for (const custom of [base, ...(bare ? [base + '/v1'] : [])]) {
+            let r = null;
+            try { r = await fetch('/api/backends/chat-completions/status', { method: 'POST', signal, headers: this.ctx().getRequestHeaders(), body: JSON.stringify({ chat_completion_source: 'custom', custom_url: custom, custom_include_headers: key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '' }) }); }
+            catch (e) { if (signal?.aborted) throw e; error = fail('连不上酒馆服务器（' + (e?.message || e) + '）', 502); continue; }
+            const t = await r.text().catch(() => ''); let d = null; try { d = JSON.parse(t); } catch { /* not json */ }
+            if (!r.ok) {
+                lastStatus = r.status;
+                error = r.status === 403 ? fail('酒馆服务器拒绝了转发请求（HTTP 403，多半是登录/CSRF 失效：刷新酒馆页面后再试）', 403)
+                    : fail(`经酒馆服务器转发：服务商返回 HTTP ${r.status}${r.status === 401 ? ' · Key 无效或缺失' : r.status === 404 ? ' · 地址不对（检查是否少了或多了 /v1）' : ''}`, r.status);
+                continue;
+            }
+            const list = pick(d); if (list.length) return list;
+            if (d?.error) error = fail('经酒馆服务器转发也没拿到模型列表：' + (typeof d.error === 'string' ? d.error : d.error?.message || '请检查地址和 Key'), 502);
+            else error = fail('服务商返回了空的模型列表：可以直接手动填写模型名', 404);
         }
-        throw error || Error('没有拉取到模型');
+        throw error || fail('没有拉取到模型', lastStatus || 502);
     }
     /** SillyTavern's currently connected main API (generateRaw), for the API center's explicit "酒馆主API" choice and
      *  for status-bar calls without an independent API. Messages keep their roles (system prompts stay separate). */

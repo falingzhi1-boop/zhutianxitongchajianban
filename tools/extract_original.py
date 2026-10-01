@@ -30,7 +30,9 @@ a_prefix = ('// Original Lilith window + connection + workbench + v1.1 host adap
             '// Executed only through src/assistant-host.js, which supplies a native SillyTavern bridge as the private scope.\n'
             'export default function mountOriginalAssistant(env) {\n'
             'const globalThis = env.globalThis, window = env.window, fetch = env.fetch;\n'
-            'const getTavernVersion = env.getTavernVersion, getTavernHelperVersion = env.getTavernHelperVersion;\n')
+            'const getTavernVersion = env.getTavernVersion, getTavernHelperVersion = env.getTavernHelperVersion;\n'
+            '// 0.8.4 wrapper adaptation: host timer (stretches the fixed 60 s request aborts to the user setting).\n'
+            "const setTimeout = typeof env.setTimeout === 'function' ? env.setTimeout : window.setTimeout;\n")
 a_suffix = '\n}\n'
 a_output = a_prefix + '\n'.join(parts[i] for i in assistant) + a_suffix
 (folder / 'assistant-runtime.js').write_text(a_output)

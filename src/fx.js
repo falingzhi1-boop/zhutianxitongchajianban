@@ -7,6 +7,7 @@
 //   * Terminal modules (聊天群, 星图 …) call `fx.play()` only after their own `commit()` has read the write back.
 // Performances are optional decoration: mode full | brief | off, prefers-reduced-motion → brief, Esc / click / 跳过 skips.
 // The result card (what changed, "账本已确认", a link to the record) is shown in every mode except off.
+import { fxCss, isPalette } from './palettes.js';
 import { TIERS } from './ledger-ops.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -206,10 +207,12 @@ export class FX {
             const h = document.createElement('div'); h.id = 'zhutian-fx-host'; document.body.append(h);
             const sh = h.attachShadow({ mode: 'open' });
             const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = this.app.base + 'styles/fx.css'; sh.append(link);
+            const pal = document.createElement('style'); pal.textContent = fxCss(); sh.append(pal);   // 0.8.4 配色方案
             const box = document.createElement('div'); box.className = 'zt-fx-out'; sh.append(box);
             this.outHost = h; this.outBox = box;
         }
         this.outHost.dataset.ztWorld = this.app.world?.theme || 'default';
+        const pid = this.settings.get('palette'); if (isPalette(pid)) this.outHost.dataset.ztPalette = pid; else delete this.outHost.dataset.ztPalette;
         return { root: this.outBox, inside: false };
     }
     show(ev, mode) {

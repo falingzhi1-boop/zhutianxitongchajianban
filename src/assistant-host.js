@@ -5,6 +5,7 @@
 //   window     -> the real window, except `pagehide` which is routed to our own dispose (extension disable hook)
 //   fetch      -> the real fetch, falling back to the user's own SillyTavern server when CORS blocks the API
 import mountOriginalAssistant from '../vendor/original/assistant-runtime.js';
+import { streamedCompletion, reportApiError } from './api-stream.js';
 import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL } from './th-bridge.js';
 
 const LEGACY_DOM_ID = 'zt-memory-assistant-v1';
@@ -38,30 +39,60 @@ export function proxiedFetch(bridge) {
             }
             return json({ error: { message: '不支持的主 API 路径' } }, 404);
         }
+        const text = String(url), method = String(init.method || 'GET').toUpperCase();
+        let u; try { u = new URL(text, location.href); } catch { return real(url, init); }
+        if (u.origin === location.origin) return real(url, init);
+        const headers = init.headers || {}, auth = String(headers.Authorization || headers.authorization || ''), key = auth.replace(/^Bearer\s+/i, '');
+        const extra = key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '';
+        // 0.8.4: chat completions are always streamed (direct and relayed) and handed back as one JSON response —
+        // keeps long 私聊/记忆 requests alive behind proxies (the 502s) without touching the original code.
+        if (method === 'POST' && /\/chat\/completions$/.test(u.pathname)) {
+            let body = {}; try { body = JSON.parse(init.body || '{}'); } catch { return real(url, init); }
+            const direct = b => real(url, { ...init, body: JSON.stringify(b) });
+            const relay = b => real('/api/backends/chat-completions/generate', { method: 'POST', signal: init.signal, headers: bridge.ctx().getRequestHeaders(), body: JSON.stringify({
+                chat_completion_source: 'custom', custom_url: u.href.replace(/\/chat\/completions$/, ''), model: body.model, messages: body.messages,
+                max_tokens: body.max_tokens, temperature: body.temperature ?? 1, stream: !!b.stream, custom_include_headers: extra }) });
+            let r;
+            try { r = await streamedCompletion(direct, body); }
+            catch (error) {
+                if (init?.signal?.aborted) throw error;
+                try { r = await streamedCompletion(relay, body); }
+                catch (e2) { if (init?.signal?.aborted) throw e2; r = json({ error: { message: '浏览器直连被拦截（CORS），经酒馆服务器转发也失败：' + (e2?.message || e2) } }, 502); }
+            }
+            if (!r.ok) { const j = await r.clone().json().catch(() => null); reportApiError('独立 API', `HTTP ${r.status} · ${j?.error?.message || ''}`); }
+            return r;
+        }
         try { return await real(url, init); }
         catch (error) {
             if (init?.signal?.aborted) throw error;
-            const text = String(url), method = String(init.method || 'GET').toUpperCase();
-            const headers = init.headers || {}, auth = String(headers.Authorization || headers.authorization || ''), key = auth.replace(/^Bearer\s+/i, '');
-            const extra = key ? JSON.stringify({ Authorization: 'Bearer ' + key }) : '';
-            let u; try { u = new URL(text, location.href); } catch { throw error; }
-            if (u.origin === location.origin) throw error;
-            if (method === 'POST' && /\/chat\/completions$/.test(u.pathname)) {
-                const body = JSON.parse(init.body || '{}');
-                return real('/api/backends/chat-completions/generate', { method: 'POST', signal: init.signal, headers: bridge.ctx().getRequestHeaders(), body: JSON.stringify({
-                    chat_completion_source: 'custom', custom_url: u.href.replace(/\/chat\/completions$/, ''), model: body.model, messages: body.messages,
-                    max_tokens: body.max_tokens, temperature: body.temperature ?? 1, stream: false, custom_include_headers: extra }) });
-            }
             if (method === 'GET' && /\/models$/.test(u.pathname)) {
-                // Keep the user's base path (…/v1): stripping it made the server-side relay ask the wrong URL.
-                const list = await bridge.listModels(u.href.replace(/\/models$/, ''), key);
-                return new Response(JSON.stringify({ data: list.map(id => ({ id })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+                // Never throw here: the original connection page shows its fixed "CORS" sentence for ANY throw, which hid
+                // the real reason (wrong path, bad key, relay refused). A status + JSON reaches the page as "HTTP xxx".
+                try {
+                    // Keep the user's base path (…/v1): stripping it made the server-side relay ask the wrong URL.
+                    const list = await bridge.listModels(u.href.replace(/\/models$/, ''), key, { direct: false, signal: init.signal });
+                    return json({ data: list.map(id => ({ id })) });
+                } catch (e) {
+                    if (init?.signal?.aborted) throw error;
+                    const msg = e?.message || String(e);
+                    reportApiError('拉取模型', msg);
+                    return json({ error: { message: msg } }, Number(e?.status) || 502);
+                }
             }
             throw error;
         }
     };
 }
 
+export const TIMEOUT_CHOICES = [60, 120, 180, 300, 600];
+export function clampTimeout(v) { const n = Number(v); return TIMEOUT_CHOICES.includes(n) ? n : 180; }
+/** The original's fixed "超过60秒" wording, corrected to the timeout actually in force. */
+export function retimeError(e, sec) {
+    if (!(e instanceof Error) || sec === 60) return e;
+    const m = String(e.message || '').replace(/超过60秒/g, `超过${sec}秒`);
+    if (m === e.message) return e;
+    const out = Error(m); out.cause = e; return out;
+}
 export class AssistantHost {
     constructor({ adapter, bridge, original, settings, openTerminal }) {
         Object.assign(this, { adapter, bridge, original, settings, openTerminal });
@@ -80,6 +111,17 @@ export class AssistantHost {
         // Hand the original portrait stage (speak / rig / bubble / zones) to the native touch layer, unmodified.
         const Motion = this.original.ZhuTianLilithMotion;
         if (Motion?.mount) G.ZhuTianLilithMotion = Object.create(Motion, { mount: { enumerable: true, value: opts => { const m = Motion.mount(opts); this.motion = m; try { this.onMotion?.(m); } catch (e) { console.warn('[诸天] 触摸层挂载失败', e); } return m; } } });
+        // 0.8.4 私聊: the original private chat closed the main window when it opened (E.collapseWorkbench → ui.close).
+        // That window IS the terminal now, so tapping 私聊 inside the terminal shut the whole terminal, and on phones the
+        // close side effects (history step, float re-tuck) sometimes swallowed the panel too. The chat panel already sits
+        // above the window (z-index), so it simply opens on top and the terminal stays. Requests keep the original code;
+        // only the "超过60秒" text follows the real timeout setting.
+        const Chat = this.original.ZhuTianLilithChat;
+        if (Chat?.mount) G.ZhuTianLilithChat = Object.create(Chat, { mount: { enumerable: true, value: opts => {
+            const o = { ...opts, collapseWorkbench: () => {} };
+            if (typeof opts?.request === 'function') o.request = async (...args) => { try { return await opts.request(...args); } catch (e) { throw retimeError(e, this.apiTimeoutSec()); } };
+            const c = Chat.mount.call(Chat, o); this.companion = c; return c;
+        } } });
         Object.assign(G, {
             getVariables: o => b.getVariables(o), updateVariablesWith: (f, o) => b.updateVariablesWith(f, o),
             replaceVariables: (v, o) => b.replaceVariables(v, o), insertOrAssignVariables: (v, o) => b.insertOrAssignVariables(v, o),
@@ -100,9 +142,12 @@ export class AssistantHost {
         });
         // The original connection page calls `root.fetch(…/models)` where root is this private globalThis — not the
         // module-level `fetch`. Without this the call threw a TypeError and the page always reported "CORS" (0.8.1 fix).
-        const shimFetch = proxiedFetch(b); G.fetch = shimFetch;
+        const shimFetch = proxiedFetch(b); G.fetch = shimFetch; this.shimFetch = shimFetch;   // also for diagnostics / QA
         mountOriginalAssistant({
             globalThis: G, window: windowShim, fetch: shimFetch,
+            // The original aborts every independent-API request after a fixed 60 s; behind slow providers / thinking models
+            // that is too short. Only that exact delay is stretched, every other timer is the platform's.
+            setTimeout: (fn, ms, ...rest) => globalThis.setTimeout(fn, ms === 60000 ? this.apiTimeoutSec() * 1000 : ms, ...rest),
             getTavernVersion: async () => a.version + '（原生扩展）',
             getTavernHelperVersion: async () => '不需要 · 原生桥接（' + (a.support?.tested ? '已验收宿主' : '能力探测') + '）',
         });
@@ -115,6 +160,8 @@ export class AssistantHost {
         this.decorate();
         return this;
     }
+    /** 独立 API 超时 (seconds) used for the original's private chat / memory / workbench requests. */
+    apiTimeoutSec() { return clampTimeout(this.settings?.get?.('apiTimeout')); }
     /** Real health of the original assistant: its own status line says 未启动 when a capability check failed. */
     health() {
         const sh = this.shadow; if (!sh) return { ok: false, text: '莉莉丝窗口未创建' };

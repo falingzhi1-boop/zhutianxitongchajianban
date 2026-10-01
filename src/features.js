@@ -7,7 +7,7 @@ import { promptFilterStats } from './prompt-filter.js';
 import { readConfigs } from './api-center.js';
 import { isMainApi } from './th-bridge.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
-import { latestRules, mergeWorldbook, WORLDBOOK_REV } from './worldbook.js';
+import { latestRules, mergeWorldbook, WORLDBOOK_REV, moduleStates, applyModules, BALANCE_MODULES } from './worldbook.js';
 import { findBindings, unbindAll, restoreBindings, describe as describeBindings } from './wb-unbind.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
@@ -63,6 +63,21 @@ export class Features {
         await c.saveWorldInfo(WORLD_NAME, r.book, true);
         await c.updateWorldInfoList?.();
         return { ...(await this.worldbookStatus()), backup, replaced: r.replaced, added: r.added, kept: r.kept };
+    }
+    /** 0.8.4 强力模块: current on/off of the switchable entries in the installed book (book-wide, all chats). */
+    async moduleStates() {
+        let book = null; try { book = await this.ctx.loadWorldInfo(WORLD_NAME); } catch { book = null; }
+        return { exists: !!(book?.entries && Object.keys(book.entries).length), list: moduleStates(book) };
+    }
+    /** Switches entries of the installed book ({comment: on}). Only `disable` changes; nothing else is rewritten. */
+    async setModules(want) {
+        const c = this.ctx; let book = null;
+        try { book = await c.loadWorldInfo(WORLD_NAME); } catch { book = null; }
+        if (!book?.entries || !Object.keys(book.entries).length) throw Error(`还没有安装“${WORLD_NAME}”世界书：设置 → 世界书安装 / 绑定。`);
+        const allowed = Object.fromEntries(Object.entries(want || {}).filter(([k]) => BALANCE_MODULES.some(m => m.comment === k)));
+        const r = applyModules(book, allowed);
+        if (r.changed) { await c.saveWorldInfo(WORLD_NAME, r.book, true); await c.updateWorldInfoList?.(); }
+        return { changed: r.changed, list: moduleStates(r.book) };
     }
     /** The same book as a SillyTavern world-info JSON file (for manual import / sharing). */
     exportWorldbook() {

@@ -128,15 +128,20 @@ class H(BaseHTTPRequestHandler):
         with open(args.log, 'a', encoding='utf8') as f:
             f.write(json.dumps({'t': time.time(), 'path': self.path, 'auth': self.headers.get('Authorization', ''), 'body': body}, ensure_ascii=False) + '\n')
         reply = route(text_of(body.get('messages')) or str(body.get('prompt', '')))
+        # 0.8.4 timeout check: a message containing 慢速测试 takes ~66 s (longer than the original fixed 60 s abort)
+        slow = '慢速测试' in (text_of(body.get('messages')) or '')
+        if slow: reply = '慢速回复：' + '流' * 10
         model = body.get('model') or 'mock-zt'
         if body.get('stream'):
             self.send_response(200); self.send_header('Content-Type', 'text/event-stream'); self.send_header('Cache-Control', 'no-cache')
             self.send_header('Access-Control-Allow-Origin', '*'); self.end_headers()
-            for i in range(0, len(reply), 24):
-                chunk = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {'content': reply[i:i + 24]}, 'finish_reason': None}]}
-                self.wfile.write(('data: ' + json.dumps(chunk, ensure_ascii=False) + '\n\n').encode()); self.wfile.flush(); time.sleep(0.01)
+            step = 2 if slow else 24
+            for i in range(0, len(reply), step):
+                chunk = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {'content': reply[i:i + step]}, 'finish_reason': None}]}
+                self.wfile.write(('data: ' + json.dumps(chunk, ensure_ascii=False) + '\n\n').encode()); self.wfile.flush(); time.sleep(9 if slow else 0.01)
             end = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]}
             self.wfile.write(('data: ' + json.dumps(end) + '\n\ndata: [DONE]\n\n').encode()); self.wfile.flush(); return
+        if slow: time.sleep(66)
         self._json({'id': 'mock', 'object': 'chat.completion', 'model': model,
                     'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': reply}}],
                     'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}})

@@ -3,6 +3,8 @@
 export default function mountOriginalAssistant(env) {
 const globalThis = env.globalThis, window = env.window, fetch = env.fetch;
 const getTavernVersion = env.getTavernVersion, getTavernHelperVersion = env.getTavernHelperVersion;
+// 0.8.4 wrapper adaptation: host timer (stretches the fixed 60 s request aborts to the user setting).
+const setTimeout = typeof env.setTimeout === 'function' ? env.setTimeout : window.setTimeout;
 /* Lilith shell: isolated styles, modeless floating window, pointer-safe drag/resize. */
 (function(root){'use strict';
 const icon=(name)=>{const paths={star:'M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z',memory:'M5 4h14v16H5z M8 8h8 M8 12h8 M8 16h5',book:'M12 5v15 M3 4c4-1 7 0 9 2 2-2 5-3 9-2v15c-4-1-7 0-9 2-2-2-5-3-9-2z',plug:'M8 3v5 M16 3v5 M6 8h12v3a6 6 0 01-12 0z M12 17v4',pulse:'M2 12h5l3-7 4 14 3-7h5',close:'M6 6l12 12 M18 6L6 18',move:'M12 2v20 M2 12h20 M8 6l4-4 4 4 M8 18l4 4 4-4 M6 8l-4 4 4 4 M18 8l4 4-4 4',minus:'M5 12h14',reset:'M4 9a8 8 0 111 9 M4 3v6h6'};return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+(paths[name]||paths.star)+'"/></svg>';};

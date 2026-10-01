@@ -15,7 +15,7 @@ import {Portrait} from './src/portrait.js';
 import {MacroLikeHost} from './src/macro-like.js';
 import {installInterceptor} from './src/prompt-filter.js';
 import {TouchLayer} from './src/touch.js';
-import {openApiCenter} from './src/api-center.js';
+import {openApiCenter,mountApiInline} from './src/api-center.js';
 import {Takeover} from './src/takeover.js';
 import {World} from './src/world.js';
 import {HubAtlas} from './src/hub-atlas.js';
@@ -67,11 +67,17 @@ class App {
         // 0.8.2: phones never show the portrait inside the window — Lilith floats on the page instead (and speaks there).
         try{this.float=new LilithFloat(this).start();this.parts.push(this.float);}catch(e){console.warn('[诸天] 悬浮莉莉丝未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
+        // 0.8.4: one API setting — the terminal's 连接 page shows the API 中心 form (the original v1.1 form wrote only Lilith's copy).
+        if(this.hub)this.hub.hook('onPage',p=>{if(p==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}});
+        if(this.statusbar)this.statusbar.openApi=()=>this.openApiCenter();
+        if(this.hub?.page==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}
         this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
         globalThis.__zhutianApp=this;
     }
     openTerminal(page){if(this.hub)this.hub.open(page);else this.assistant?.open();}
-    openApiCenter(){return openApiCenter({bridge:this.bridge,ns:original.ZhuTianMemoryCore?.NS,notify:()=>this.adapter.notify?.()});}
+    apiOpts(){return {bridge:this.bridge,ns:original.ZhuTianMemoryCore?.NS,notify:()=>this.adapter.notify?.()};}
+    /** Inside the open terminal the 连接 page is the API 中心; elsewhere (diagnostics popup) the same form opens as a dialog. */
+    openApiCenter(){if(this.hub?.isOpen){this.hub.go('api');return null;}return openApiCenter(this.apiOpts());}
     async runTakeover(){
         const t=globalThis.toastr,list=this.takeover.pending();
         if(!list.length){t?.info('没有发现仍在启用的旧版正则或酒馆助手脚本；世界书由插件自动安装绑定。','诸天 · 接管');return {items:[],reload:false};}

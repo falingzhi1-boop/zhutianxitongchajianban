@@ -187,3 +187,10 @@ dialog[data-compact=true] .zt-g-claims>*{flex:none}
 dialog[data-compact=true] .zt-g-head>div:first-child{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 dialog[data-compact=true] .zt-g-head small{display:inline;margin-top:0}
 
+
+/* 0.8.4: 连接 = API 中心. The original v1.1 connection form stays in the DOM (untouched) but hidden; it wrote only the
+   Lilith copy of the API config, so having both made the two drift apart. */
+#page-api.zt-api-unified > :not(.zt-api-inline){display:none!important}
+#page-api .zt-api-inline{max-width:640px}
+#page-api .zt-api-inline label{display:grid;gap:4px}
+#page-api .zt-api-inline label:has(> input[type=radio]),#page-api .zt-api-inline label:has(> input[type=checkbox]){display:flex}

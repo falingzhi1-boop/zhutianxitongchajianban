@@ -63,8 +63,8 @@ test('setting floatSize: default m, offered in 设置 → 莉莉丝, applied liv
     assert.match(read('src/lilith-float.js'), /k === 'floatSize'\) \{ this\.applySize\(\)/);
 });
 
-test('version 0.8.3 and the floating Lilith capability row mentions it', () => {
-    assert.equal(VERSION, '0.8.3');
+test('version ≥ 0.8.3 and the floating Lilith capability row mentions it', () => {
+    assert.match(VERSION, /^0\.8\.[3-9]$/);
     assert.ok(CAPABILITIES.some(c => c.name.includes('悬浮莉莉丝') && c.scope.includes('0.8.3')));
 });
 

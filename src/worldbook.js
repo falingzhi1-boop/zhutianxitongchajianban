@@ -1,8 +1,32 @@
-// 诸天 worldbook as installed by this extension (0.8.1).
+// 诸天 worldbook as installed by this extension (0.8.1; 0.8.4 强力模块 defaults).
 // The 35 original v1.1 entries stay byte-for-byte in vendor/original (provenance-checked); this file only applies the
 // small native corrections on top when the book is built, and adds the entries for features the original never had.
 // Patches are exact text replacements: if a replaced text is missing (an edited copy), that patch is skipped, never guessed.
-export const WORLDBOOK_REV = '0.8.1';
+export const WORLDBOOK_REV = '0.8.4';
+
+/** 0.8.4 强力模块: worldbook entries the user can switch from 外挂管理 (book-wide). `def` = state in a NEW install;
+ *  神豪挥霍 and 诸天打手 are constant (injected every turn) in v1.1 and dominate the economy/fights, so they start off.
+ *  An existing book is never changed automatically — 外挂管理 shows the recommendation and a one-click button. */
+export const BALANCE_MODULES = Object.freeze([
+    { name: '神豪挥霍', comment: '08｜核心｜神豪挥霍', def: false, strong: true, desc: '常驻注入：无限财富、消费返利、金钱降维打击；会让系统点 / 物价失去意义' },
+    { name: '诸天打手', comment: '13｜外挂｜诸天打手', def: false, strong: true, desc: '常驻注入：随时召唤强力打手代打' },
+    { name: '现实状态改写', comment: '20｜成长｜现实状态改写', def: true, strong: true, desc: '关键词触发：直接改写现实状态' },
+    { name: '言灵改字', comment: '21｜成长｜言灵改字', def: true, strong: true, desc: '关键词触发：改字即成真' },
+    { name: '系统点万用', comment: '10｜商城｜系统点万用', def: true, desc: '关键词触发：兜底许愿（溢价）' },
+    { name: '本源复刻·图鉴复刻', comment: '19｜成长｜本源复刻·图鉴复刻', def: true, desc: '关键词触发：复刻他人能力' },
+]);
+export const DEFAULT_OFF = BALANCE_MODULES.filter(m => !m.def).map(m => m.comment);
+/** Pure: {comment → on} from a loaded book (null = entry missing). */
+export function moduleStates(book) {
+    const list = Object.values(book?.entries || {});
+    return BALANCE_MODULES.map(m => { const e = list.find(x => x?.comment === m.comment); return { ...m, exists: !!e, on: e ? !e.disable : null }; });
+}
+/** Pure: the book with the given modules switched ({comment: on}); other entries untouched. */
+export function applyModules(book, want) {
+    const out = structuredClone(book || { entries: {} }); let changed = 0;
+    for (const e of Object.values(out.entries || {})) if (e && Object.prototype.hasOwnProperty.call(want, e.comment)) { const dis = !want[e.comment]; if (!!e.disable !== dis) { e.disable = dis; changed++; } }
+    return { book: out, changed };
+}
 
 const PATCHES = [
     { comment: '05｜核心｜状态栏规则补充',
@@ -41,6 +65,7 @@ export function latestRules(original) {
     }
     const have = new Set(rules.map(r => r.comment));
     for (const e of extraEntries(rules)) if (!have.has(e.comment)) rules.push(e);
+    for (const r of rules) if (DEFAULT_OFF.includes(r.comment)) r.disable = true;   // 0.8.4: new installs start balanced
     rules.forEach((r, i) => { r.uid = i; r.displayIndex = i; });
     return { rules, applied, skipped };
 }

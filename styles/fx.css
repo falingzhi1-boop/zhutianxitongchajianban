@@ -1,7 +1,7 @@
 /* 诸天终端 0.7.0 · 演出. Used inside the terminal (Lilith window shadow root) and by the standalone story-hint host.
    Every performance is ≤ 2.1 s, skippable (click / Esc / 跳过), and ends in a result card. Reduced motion: card only. */
 :host{--fx-a:var(--zt-accent,#c59bee);--fx-g:var(--zt-gold,#d8bf92);--fx-ink:var(--zt-ink,#f3edf7);--fx-muted:var(--zt-muted,#ac9bbd);--fx-bg:#150f1dee}
-:host([data-zt-world=xianxia]){--fx-a:#8fd6b2;--fx-g:#dcc48a;--fx-bg:#0d1714ee}
+:host([data-zt-world=xianxia]){--fx-a:#d4b46c;--fx-g:#9fcfbf;--fx-bg:#111315ee}
 :host([data-zt-world=cyber]){--fx-a:#4fe3ff;--fx-g:#ffd166;--fx-bg:#060e16ee}
 :host([data-zt-world=eerie]){--fx-a:#c27a6a;--fx-g:#bba77c;--fx-bg:#0e0c0cf0}
 

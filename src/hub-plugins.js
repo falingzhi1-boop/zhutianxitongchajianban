@@ -5,6 +5,7 @@
 //    through the ledger (write → read back) before the action is written into the input box.
 import { STORAGE, inert } from './contracts.js';
 import { esc, fmtNum } from './hub.js';
+import { DEFAULT_OFF } from './worldbook.js';
 
 export const BUILTIN = ['无限口袋', '诸天打手', '洞察之眼', '分身派遣', '随身洞天', '万物熔炉'];
 export const GRADES = ['凡品', '灵品', '仙品', '神品', '禁忌'];
@@ -46,7 +47,7 @@ export function pluginPrompt(enabled, off) {
 }
 
 export class HubPlugins {
-    constructor(app) { this.app = app; this.disposers = []; this.editing = null; }
+    constructor(app) { this.app = app; this.disposers = []; this.editing = null; this.mods = null; this.modOff = new Set(); }
     get hub() { return this.app.hub; }
     get ctx() { return this.app.adapter.context(); }
     start() {
@@ -57,7 +58,23 @@ export class HubPlugins {
         hub.onEngine = (frame, doc) => { prevEngine?.(frame, doc); this.applyEngine(doc); };
         this.disposers.push(this.app.adapter.subscribe(() => this.syncPrompt()));
         this.syncPrompt();
+        this.refreshModules().catch(() => {});
         return this;
+    }
+    /** 0.8.4 强力模块 (worldbook entries, book-wide). Off modules are hidden in the engine and listed as 未装载. */
+    async refreshModules() {
+        const r = await this.app.features?.moduleStates?.(); if (!r) return null;
+        this.mods = r; this.modOff = new Set(r.list.filter(m => m.on === false).map(m => m.name));
+        this.lastPrompt = null; this.syncPrompt(); this.applyEngine(this.hub?.engineFrame?.contentDocument);
+        return r;
+    }
+    modulesHtml() {
+        const r = this.mods;
+        if (!r) return '<div class="zt-note">正在读取世界书…</div>';
+        if (!r.exists) return '<div class="zt-note">还没有安装“诸天万界最强系统”世界书（设置 → 世界书安装 / 绑定）。新安装时神豪挥霍、诸天打手默认关闭。</div>';
+        const risky = r.list.filter(m => !m.def && m.on);
+        return `${risky.length ? `<div class="zt-card zt-note" style="margin:0 0 8px">${risky.map(m => esc(m.name)).join('、')} 当前开启（v1.1 旧版默认常驻注入），会明显破坏数值平衡。建议关闭。<div class="zt-actions" style="margin-top:6px"><button type="button" class="zt-btn primary small" data-mods-balance>一键平衡：关闭 ${risky.map(m => esc(m.name)).join('、')}</button></div></div>` : ''}
+${r.list.map(m => `<div class="zt-row"><span>${esc(m.name)}${m.strong ? ' <span class="zt-chip">强力</span>' : ''}<span class="zt-desc">${esc(m.desc)}${m.exists ? '' : ' · 世界书里没有这条'}</span></span><label class="zt-switch"><input type="checkbox" data-module="${esc(m.comment)}" ${m.on ? 'checked' : ''} ${m.exists ? '' : 'disabled'} aria-label="${esc(m.name)}"><i></i></label></div>`).join('')}`;
     }
     // ---------- storage ----------
     library() { try { const v = JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); return Array.isArray(v) ? v.map(normalizePlugin).filter(Boolean) : []; } catch { return []; } }
@@ -75,13 +92,14 @@ export class HubPlugins {
         try {
             const zt = !!this.app.adapter.ledger?.() && !!this.app.adapter.currentIdentity();
             const st = zt ? this.chatState() : { off: [] };
-            const text = zt ? pluginPrompt(this.enabled().filter(p => p.inject), st.off) : '';
+            const text = zt ? pluginPrompt(this.enabled().filter(p => p.inject), [...new Set([...st.off, ...this.modOff])]) : '';
             if (text === this.lastPrompt) return; this.lastPrompt = text;
             this.app.bridge.injectPrompts([{ id: 'plugins', content: text, position: 'in_chat', depth: 4, role: 'system' }]);
         } catch (e) { console.warn('[诸天外挂] 注入失败', e); }
     }
     applyEngine(doc) {
-        if (!doc) return; const off = this.chatState().off;
+        if (!doc) return; const off = [...this.chatState().off, ...this.modOff];
+        doc.querySelectorAll('.shenhao-card').forEach(el => el.setAttribute('data-zt-off', this.modOff.has('神豪挥霍') ? '1' : '0'));
         BUILTIN.forEach((name, i) => {
             const hide = off.includes(name) ? '1' : '0';
             doc.querySelectorAll(`[data-ui-anchor="zt-ui-section-7-${i}"],[data-ui-jump="zt-ui-section-7-${i}"]`).forEach(el => el.setAttribute('data-zt-off', hide));
@@ -148,7 +166,8 @@ export class HubPlugins {
         el.innerHTML = `<div class="zt-actions" style="justify-content:space-between;margin-bottom:8px"><div><div class="zt-eyebrow">EXTRA MODULES · MANAGER</div><h2 class="zt-h">外挂管理</h2></div><button class="zt-btn" data-back type="button">‹ 返回外挂工坊</button></div>
 <p class="zt-sub">开关按聊天保存；关闭的外挂在终端里隐藏、不能使用，也会告诉 AI 不得使用。自拟外挂保存在本机，所有聊天共用。</p>
 ${has ? '' : '<div class="zt-card zt-note">请先打开一个单角色聊天再调整开关。</div>'}
-<section class="zt-card"><h3>原版外挂 <small>本聊天</small></h3>${BUILTIN.map(n => `<div class="zt-row"><span>${n}</span><label class="zt-switch"><input type="checkbox" data-builtin="${n}" ${st.off.includes(n) ? '' : 'checked'} ${has ? '' : 'disabled'} aria-label="${n}"><i></i></label></div>`).join('')}</section>
+<section class="zt-card" data-mods><h3>强力模块 <small>世界书条目 · 对所有聊天生效</small></h3><p class="zt-sub" style="margin:0 0 6px">关掉后这条规则不再发给 AI，终端里对应的入口（神豪模式卡片、打手）也隐藏。</p><div data-mods-body>${this.modulesHtml()}</div></section>
+<section class="zt-card"><h3>原版外挂 <small>本聊天</small></h3>${BUILTIN.map(n => `<div class="zt-row"><span>${n}${this.modOff.has(n) ? ' <span class="zt-desc">世界书里已关闭（强力模块）</span>' : ''}</span><label class="zt-switch"><input type="checkbox" data-builtin="${n}" ${st.off.includes(n) ? '' : 'checked'} ${has ? '' : 'disabled'} aria-label="${n}"><i></i></label></div>`).join('')}</section>
 <section class="zt-card"><h3>自拟外挂 <small>本机外挂库 ${lib.length} 个 · 开关只影响本聊天</small></h3>
 <div class="zt-plug-list">${lib.map(p => `<div class="zt-plug-item"><label class="zt-switch"><input type="checkbox" data-custom="${p.id}" ${st.on.includes(p.id) ? 'checked' : ''} ${has ? '' : 'disabled'} aria-label="${esc(p.name)}"><i></i></label><div><b>${esc(p.name)}</b><span class="zt-grade" data-g="${p.grade}">${p.grade}</span> <span class="zt-chip">${TYPES[p.type]}${p.type === 'daily' ? ' ' + p.daily + '次' : ''}${p.cost.cooldown && p.type === 'active' ? ' · 冷却' + p.cost.cooldown + '回合' : ''}</span> <span class="zt-chip">${this.costLabel(p).replace(/^ · /, '') || '无代价'}</span>${p.inject ? '' : ' <span class="zt-chip">不注入提示词</span>'}<p>${esc(p.rule || '（未写规则）')}</p></div><div class="zt-actions"><button class="zt-btn small" data-edit="${p.id}" type="button">编辑</button><button class="zt-btn small danger" data-del="${p.id}" type="button">删除</button></div></div>`).join('') || '<div class="zt-note">外挂库还是空的。在下面写一个吧。</div>'}</div>
 <div class="zt-actions" style="margin-top:10px"><button class="zt-btn" data-export type="button">导出 .json</button><label class="zt-btn">导入 .json<input type="file" accept=".json,application/json" data-import hidden></label></div></section>
@@ -167,6 +186,7 @@ ${has ? '' : '<div class="zt-card zt-note">请先打开一个单角色聊天再�
 <section class="zt-card"><h3>发动记录 <small>本聊天最近 30 次</small></h3>${(this.ctx?.chatMetadata?.[STORAGE]?.plugins?.log || []).slice().reverse().map(r => `<div class="zt-row"><span>${esc(r.name)} <span class="zt-desc">第 ${r.turn} 回合 · ${new Date(r.at).toLocaleString('zh-CN')}</span></span><span class="zt-chip">${esc(r.cost)}</span></div>`).join('') || '<div class="zt-note">还没有发动过。</div>'}</section>`;
         el.onclick = ev => this.onClick(ev, el);
         el.onchange = ev => this.onChange(ev, el);
+        this.refreshModules().then(() => { const b = el.querySelector('[data-mods-body]'); if (b) b.innerHTML = this.modulesHtml(); }).catch(e => { const b = el.querySelector('[data-mods-body]'); if (b) b.innerHTML = `<div class="zt-note">读取世界书失败：${esc(e.message)}</div>`; });
     }
     formValue(el) {
         const get = f => el.querySelector(`[data-f="${f}"]`);
@@ -176,7 +196,13 @@ ${has ? '' : '<div class="zt-card zt-note">请先打开一个单角色聊天再�
     async onChange(ev, el) {
         const t = ev.target;
         try {
-            if (t.dataset.builtin) { const st = this.chatState(); const off = new Set(st.off); t.checked ? off.delete(t.dataset.builtin) : off.add(t.dataset.builtin); await this.saveChatState({ ...st, off: [...off] }); this.hub.toast(`${t.dataset.builtin} 已${t.checked ? '开启' : '关闭'}`); }
+            if (t.dataset.module) {
+                const r = await this.app.features.setModules({ [t.dataset.module]: t.checked });
+                await this.refreshModules(); this.render(el);
+                this.hub.toast(r.changed ? `已${t.checked ? '开启' : '关闭'}（世界书已保存，对所有聊天生效）` : '没有变化');
+                return;
+            }
+                        if (t.dataset.builtin) { const st = this.chatState(); const off = new Set(st.off); t.checked ? off.delete(t.dataset.builtin) : off.add(t.dataset.builtin); await this.saveChatState({ ...st, off: [...off] }); this.hub.toast(`${t.dataset.builtin} 已${t.checked ? '开启' : '关闭'}`); }
             else if (t.dataset.custom) { const st = this.chatState(); const on = new Set(st.on); t.checked ? on.add(t.dataset.custom) : on.delete(t.dataset.custom); await this.saveChatState({ ...st, on: [...on] }); this.hub.toast(t.checked ? '已在本聊天启用' : '已在本聊天停用'); }
             else if (t.matches('[data-import]') && t.files?.[0]) {
                 const data = JSON.parse(await t.files[0].text()); const incoming = (Array.isArray(data) ? data : data?.plugins || []).map(normalizePlugin).filter(Boolean);
@@ -190,6 +216,13 @@ ${has ? '' : '<div class="zt-card zt-note">请先打开一个单角色聊天再�
     onClick(ev, el) {
         const b = ev.target.closest('button'); if (!b) return;
         if (b.dataset.back !== undefined) return this.hub.go('plug');
+        if (b.dataset.modsBalance !== undefined) {
+            b.disabled = true;
+            this.app.features.setModules(Object.fromEntries(DEFAULT_OFF.map(c => [c, false])))
+                .then(async r => { await this.refreshModules(); this.render(el); this.hub.toast(`已关闭 ${r.changed} 个强力模块（世界书已保存）`); })
+                .catch(e => { b.disabled = false; this.hub.toast(e.message, 4000); });
+            return;
+        }
         if (b.dataset.edit) { this.editing = this.library().find(p => p.id === b.dataset.edit) || null; this.render(el); el.querySelector('#zt-plug-editor')?.scrollIntoView({ block: 'start' }); return; }
         if (b.dataset.cancel !== undefined) { this.editing = null; return this.render(el); }
         if (b.dataset.del) { const p = this.library().find(x => x.id === b.dataset.del); if (p && globalThis.confirm(`从本机外挂库删除「${p.name}」？（所有聊天都会失去它）`)) { this.saveLibrary(this.library().filter(x => x.id !== p.id)); this.syncPrompt(); this.render(el); } return; }

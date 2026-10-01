@@ -9,6 +9,7 @@
 //   * keeps a footprint list `诸天系统.万界足迹` (first / last floor, visits) for the 星图, written through the same
 //     locked commit + read-back as every other terminal write;
 //   * asks the model (small system note, switchable) to write 当前世界 / 世界类型 when the story changes world.
+import { isPalette, shellCss, engineCss } from './palettes.js';
 import * as L from './ledger-ops.js';
 
 export const THEMES = Object.freeze({
@@ -64,8 +65,8 @@ export class World {
     start() {
         this.disposers.push(this.app.bridge.onChange(k => { if (k === 'chat') this.sync(); }));
         this.disposers.push(this.app.adapter.subscribe(() => this.sync()));
-        this.disposers.push(this.settings.onChange(k => { if (k === 'world') this.sync(true); }));
-        this.app.hub?.hook?.('onEngine', (frame, doc) => { if (doc?.documentElement) doc.documentElement.dataset.ztWorld = this.theme; });
+        this.disposers.push(this.settings.onChange(k => { if (k === 'world' || k === 'palette') this.sync(true); }));
+        this.app.hub?.hook?.('onEngine', (frame, doc) => this.paintDoc(doc));
         this.sync(true);
         return this;
     }
@@ -90,11 +91,28 @@ export class World {
         }
         this.lastIdn = idn; this.lastName = cur.name; this.lastType = cur.type;
     }
+    /** 0.8.4 配色方案: a fixed palette overrides the world colours (decorations stay with the world). */
+    palette() { const p = this.settings.get('palette'); return isPalette(p) ? p : ''; }
+    /** The attribute value: with a palette on the default world, 'plain' switches on the variable-driven surfaces of
+     *  world.css (the default world otherwise keeps the original Lilith colours, which a palette must override). */
+    attrWorld() { return this.palette() && this.theme === 'default' ? 'plain' : this.theme; }
+    paletteCss(shadow) {
+        if (!shadow || shadow.getElementById?.('zt-palette-css')) return;
+        const st = document.createElement('style'); st.id = 'zt-palette-css'; st.textContent = shellCss(); shadow.append(st);
+    }
+    paintDoc(doc) {
+        const el = doc?.documentElement; if (!el) return;
+        if (!doc.getElementById('zt-palette-css')) { const st = doc.createElement('style'); st.id = 'zt-palette-css'; st.textContent = engineCss(); (doc.head || el).append(st); }
+        el.dataset.ztWorld = this.attrWorld();
+        const p = this.palette(); if (p) el.dataset.ztPalette = p; else delete el.dataset.ztPalette;
+    }
     apply() {
-        const t = this.theme, host = this.app.hub?.shadow?.host || this.app.assistant?.hostElement;
+        const t = this.attrWorld(), p = this.palette(), host = this.app.hub?.shadow?.host || this.app.assistant?.hostElement;
+        this.paletteCss(this.app.hub?.shadow || this.app.assistant?.shadow);
         host?.setAttribute?.('data-zt-world', t);
-        const doc = this.app.hub?.engineFrame?.contentDocument; if (doc?.documentElement) doc.documentElement.dataset.ztWorld = t;
-        const out = document.getElementById('zhutian-fx-host'); if (out) out.dataset.ztWorld = t;
+        if (p) host?.setAttribute?.('data-zt-palette', p); else host?.removeAttribute?.('data-zt-palette');
+        this.paintDoc(this.app.hub?.engineFrame?.contentDocument);
+        const out = document.getElementById('zhutian-fx-host'); if (out) { out.dataset.ztWorld = t; if (p) out.dataset.ztPalette = p; else delete out.dataset.ztPalette; }
         this.app.hub?.refreshTop?.();
     }
     floor() { const c = this.app.adapter.context(); return Math.max(0, (c.chat?.length || 1) - 1); }
@@ -131,6 +149,6 @@ export class World {
     dispose() {
         this.disposers.splice(0).forEach(f => { try { f(); } catch { /* ignore */ } });
         try { this.app.bridge.uninjectPrompts([WORLD_PROMPT_ID]); } catch { /* ignore */ }
-        (this.app.hub?.shadow?.host || this.app.assistant?.hostElement)?.removeAttribute?.('data-zt-world');
+        const h = this.app.hub?.shadow?.host || this.app.assistant?.hostElement; h?.removeAttribute?.('data-zt-world'); h?.removeAttribute?.('data-zt-palette');
     }
 }

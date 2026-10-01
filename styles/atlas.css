@@ -70,7 +70,7 @@
 @keyframes zt-halo{50%{opacity:.15;transform:scale(1.25)}}
 .zt-dust{fill:var(--zt-ink);opacity:.25}
 .zt-node[data-type=world] circle:first-of-type{fill:color-mix(in srgb,var(--zt-accent) 25%,var(--zt-panel2))}
-.zt-node[data-theme=xianxia] circle:first-of-type{stroke:#8fd6b2}.zt-node[data-theme=cyber] circle:first-of-type{stroke:#4fe3ff}.zt-node[data-theme=eerie] circle:first-of-type{stroke:#c27a6a}
+.zt-node[data-theme=xianxia] circle:first-of-type{stroke:#d4b46c}.zt-node[data-theme=cyber] circle:first-of-type{stroke:#4fe3ff}.zt-node[data-theme=eerie] circle:first-of-type{stroke:#c27a6a}
 .zt-node[data-current="1"] circle:first-of-type{fill:color-mix(in srgb,var(--zt-gold) 35%,var(--zt-panel2));stroke:var(--zt-gold)}
 .zt-node[data-type=rumor] circle{stroke-dasharray:2 3;fill:transparent}
 .zt-node[data-type=root] rect{fill:color-mix(in srgb,var(--zt-accent) 20%,var(--zt-panel2));stroke:var(--zt-accent)}

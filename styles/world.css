@@ -13,11 +13,11 @@
 :host([data-zt-world]) .nav-button[aria-selected=true]{background:linear-gradient(90deg,color-mix(in srgb,var(--zt-sel) 17%,transparent),color-mix(in srgb,var(--zt-sel) 2%,transparent))!important;border-color:color-mix(in srgb,var(--zt-sel) 20%,transparent)!important;color:var(--zt-ink2)!important}
 :host([data-zt-world]) .nav-button[aria-selected=true]::before{background:var(--zt-sel-bar)!important}
 
-/* ---------- 仙侠 · 玉简 / 星图 / 阵纹 ---------- */
-:host([data-zt-world=xianxia]){--accent:#8fd6b2;--gold:#dcc48a;--ink:#eef5ec;--muted:#a3bcae;--line:#d9f0e11a;
-  --zt-win:#0d1714;--zt-win-line:#8fd6b255;--zt-head:linear-gradient(110deg,#17291f,#0f1b17);--zt-side:#101d18;--zt-main:radial-gradient(ellipse at 100% 0,#8fd6b212,transparent 60%),radial-gradient(ellipse at 0 100%,#dcc48a0c,transparent 55%);
-  --zt-surface:#18302a;--zt-surface-h:#224238;--zt-input:#08110e;--zt-top-a:#14261f;--zt-top-b:#0f1c17;--zt-bar:#12211b;--zt-primary-a:#3f8f6c;--zt-primary-b:#8a9a4e;--zt-nav:#9fbcae;--zt-ink2:#eaf6ee;--zt-text2:#cfe0d6;--zt-panel2:#15271f;--zt-sel:#8fd6b2;--zt-sel-bar:#dcc48a;--zt-switch:#4f9f7c;--zt-switch-off:#233a31;--zt-deco:#8fd6b2;--zt-deco2:#dcc48a;--zt-title-font:"Songti SC","STKaiti","KaiTi",Georgia,serif}
-:host([data-zt-world=xianxia]) .zt-card{background:linear-gradient(180deg,#dcc48a08,#8fd6b204);border-color:#dcc48a26;border-radius:4px 14px 4px 14px}
+/* ---------- 仙侠 · 玉简 / 星图 / 阵纹 (0.8.4: 墨玉金 — ink + gold, jade only as the second colour; was mint green) ---------- */
+:host([data-zt-world=xianxia]){--accent:#d4b46c;--gold:#9fcfbf;--ink:#f1ece0;--muted:#b0aa98;--line:#e8d9b01a;
+  --zt-win:#111315;--zt-win-line:#d4b46c55;--zt-head:linear-gradient(110deg,#1d1f1f,#121416);--zt-side:#141618;--zt-main:radial-gradient(ellipse at 100% 0,#d4b46c10,transparent 60%),radial-gradient(ellipse at 0 100%,#9fcfbf0a,transparent 55%);
+  --zt-surface:#1f2222;--zt-surface-h:#2a2d2b;--zt-input:#0b0c0d;--zt-top-a:#1a1c1c;--zt-top-b:#121415;--zt-bar:#151718;--zt-primary-a:#8a6f36;--zt-primary-b:#4f7f72;--zt-nav:#b9b19c;--zt-ink2:#f5efe2;--zt-text2:#d9d2c0;--zt-panel2:#181a1b;--zt-sel:#d4b46c;--zt-sel-bar:#9fcfbf;--zt-switch:#a2853f;--zt-switch-off:#2a2c2b;--zt-deco:#d4b46c;--zt-deco2:#9fcfbf;--zt-title-font:"Songti SC","STKaiti","KaiTi",Georgia,serif}
+:host([data-zt-world=xianxia]) .zt-card{background:linear-gradient(180deg,#d4b46c08,#9fcfbf04);border-color:#dcc48a26;border-radius:4px 14px 4px 14px}
 :host([data-zt-world=xianxia]) .zt-card h3{font-family:var(--zt-title-font)}
 :host([data-zt-world=xianxia]) .zt-hub-top{border-bottom-color:#dcc48a2e}
 /* 玉简: bamboo-slip ruling on the sidebar */

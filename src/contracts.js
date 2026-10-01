@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.8.3';
+export const VERSION = '0.8.4';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -71,4 +71,10 @@ export const CAPABILITIES = [
     {name:'世界书一键解绑 / 关闭插件时自动解绑',state:'implemented',scope:'0.8.2：设置 → 一键解绑：把“诸天万界最强系统”从所有角色卡（主世界书与附加世界书）、全局世界书和当前聊天取下（不删除），记录可恢复；停用插件时（SillyTavern 1.17+ disable 钩子）自动执行，可关'},
     {name:'悬浮莉莉丝（手机）',state:'implemented',scope:'0.8.2：手机/触屏上唤醒按钮换成莉莉丝表情立绘：点开终端、双击戳、长按拖动、拖到边缘躲起来并记住位置；立绘不可见时台词气泡在这里弹出；0.8.3：大小可调（默认 75%），终端开着时点她只说话、不再关闭终端'},
     {name:'角色卡状态栏兼容（酒馆助手前端渲染）',state:'implemented',scope:'0.8.2：楼层渲染不再整段重建 .mes_text，保留酒馆助手的 TH-render 包装，角色卡自带状态栏不再消失；助手宏开启时楼层宏让位'},
+    {name:'独立 API 流式传输与可读报错（502 / “CORS” 误报修复）',state:'implemented',scope:'0.8.4：私聊 / 记忆 / 工作台 / 状态栏 AI 的请求一律以 stream 发出（直连与酒馆转发都是），插件拼回普通 JSON 交给原版；拉取模型失败显示真实原因（HTTP 状态 + 说明），不再统一报“CORS”；原版固定 60 秒超时可调（默认 180 秒，包装层适配，原版代码不变）。以模拟服务商 + SillyTavern 1.16 / 1.19 转发验收；真实服务商未验收'},
+    {name:'手机终端内打开私聊',state:'implemented',scope:'0.8.4：打开私聊不再关闭主窗口（= 终端），私聊面板浮在终端上；“返回”回到终端'},
+    {name:'一处 API 设置（连接页 = API 中心）',state:'implemented',scope:'0.8.4：终端「连接」页直接显示 API 中心表单（同时写入状态栏与莉莉丝两份存储），原版连接表单隐藏；状态栏 ⚙ API 也打开同一表单'},
+    {name:'强力模块开关（神豪挥霍 / 诸天打手默认关闭）',state:'implemented',scope:'0.8.4：外挂管理 → 强力模块：直接开关世界书条目（所有聊天生效），关掉的模块在终端隐藏并告诉 AI 未装载；新安装默认关闭神豪挥霍、诸天打手，已有世界书不自动改动，提供一键平衡'},
+    {name:'配色方案',state:'implemented',scope:'0.8.4：设置 → 世界与演出 → 配色方案，7 套固定配色（紫夜 / 墨金 / 青瓷 / 绯樱 / 霜蓝 / 赤霞 / 石墨）或跟随世界；仙侠主题改为墨玉金'},
+    {name:'其他美化 / 渲染扩展兼容',state:'implemented',scope:'0.8.4：楼层重建时对照酒馆原始渲染，其他扩展加入或替换的节点（iframe 渲染、美化包装）原地保留、不重复；以模拟渲染器在 1.16 / 1.19 验收，具体第三方美化未逐一验收'},
 ];
