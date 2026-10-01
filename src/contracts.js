@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.8.4';
+export const VERSION = '0.8.5';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -77,4 +77,7 @@ export const CAPABILITIES = [
     {name:'强力模块开关（神豪挥霍 / 诸天打手默认关闭）',state:'implemented',scope:'0.8.4：外挂管理 → 强力模块：直接开关世界书条目（所有聊天生效），关掉的模块在终端隐藏并告诉 AI 未装载；新安装默认关闭神豪挥霍、诸天打手，已有世界书不自动改动，提供一键平衡'},
     {name:'配色方案',state:'implemented',scope:'0.8.4：设置 → 世界与演出 → 配色方案，7 套固定配色（紫夜 / 墨金 / 青瓷 / 绯樱 / 霜蓝 / 赤霞 / 石墨）或跟随世界；仙侠主题改为墨玉金'},
     {name:'其他美化 / 渲染扩展兼容',state:'implemented',scope:'0.8.4：楼层重建时对照酒馆原始渲染，其他扩展加入或替换的节点（iframe 渲染、美化包装）原地保留、不重复；以模拟渲染器在 1.16 / 1.19 验收，具体第三方美化未逐一验收'},
+    {name:'AI 接口设置（新手版排版）',state:'implemented',scope:'0.8.5：连接页改为一句话状态 + 三步（选择用哪个 AI → 填写接口 → 测试并保存）；“状态栏 / 莉莉丝助手”两行与“应用到…”收进高级设置；修复单选框被原版样式拉伸成半行宽。'},
+    {name:'账本核验引导',state:'implemented',scope:'0.8.5：记忆页「立即核验最新正文」下方说明用途与前提；未开启时高亮「在当前聊天启用助手与记忆注入」「莉莉丝监管账本与奖励」「保存当前聊天设置」并给出白话提示，替换原版“请先启用当前聊天与账本核验；未写入。”。原版检查逻辑不变。'},
+    {name:'生成状态自愈（手机状态栏不渲染修复）',state:'implemented',scope:'0.8.5：漏掉生成结束事件时（手机切后台、思考模型等），本次生成中出现过的酒馆停止按钮一旦隐藏，过期的“正在生成”自动清除（从未出现过则不解锁，发送锁不变），最后一层照常渲染；停止按钮消失时主动重扫；兼容诊断显示最新楼层是否已渲染并可一键重新渲染。'},
 ];

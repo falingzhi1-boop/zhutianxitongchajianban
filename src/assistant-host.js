@@ -179,10 +179,45 @@ export class AssistantHost {
         this.settings.set('legacyImported', true);
         return data;
     }
+    /** 0.8.5 「请先启用当前聊天与账本核验；未写入。」 — the original 记忆 page's 「立即核验最新正文」 refuses until two switches
+     *  above it are ticked AND 「保存当前聊天设置」 was pressed, and says so only in the small status line at the bottom.
+     *  Users could not tell what or where that is. Now: a hint under the button; pressing it too early points at the
+     *  two switches and the save button (highlight + scroll + toast); the status line gets the same plain explanation.
+     *  The original code and its checks are unchanged (we only read the checkboxes and rewrite that one message). */
+    guideLedgerCheck() {
+        const s = this.shadow, btn = s?.getElementById('ledger-check'); if (!btn || btn.dataset.ztGuided) return;
+        btn.dataset.ztGuided = '1';
+        const on = s.getElementById('enabled'), led = s.getElementById('ledger-assist'), save = s.getElementById('save-chat');
+        const hint = document.createElement('div'); hint.className = 'zt-ledger-hint';
+        hint.style.cssText = 'font-size:12px;line-height:1.6;opacity:.8;margin:-2px 0 8px';
+        hint.textContent = '核验 = 读取最新一条正文末尾的诸天数据块，与账本对照并结算奖励，不请求模型。使用前先勾选上面的「在当前聊天启用助手与记忆注入」和「莉莉丝监管账本与奖励」，再点「保存当前聊天设置」。';
+        btn.after(hint);
+        const GUIDE = '账本核验还没开启（什么都没有写入）：请在本页上方勾选「在当前聊天启用助手与记忆注入」和「莉莉丝监管账本与奖励」，然后点「保存当前聊天设置」，再点「立即核验最新正文」。';
+        const flash = () => {
+            for (const el of [on?.closest('label'), led?.closest('label'), save].filter(Boolean)) {
+                el.style.outline = '2px solid var(--accent,#c59bee)'; el.style.outlineOffset = '3px'; el.style.borderRadius = '6px';
+                setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 4500);
+            }
+            (on?.checked ? save : on)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+        };
+        btn.addEventListener('click', ev => {
+            if (on && led && on.checked && led.checked) return;          // ticked: let the original decide (it also checks "saved")
+            ev.stopImmediatePropagation(); ev.preventDefault();
+            flash(); try { globalThis.toastr?.warning?.(GUIDE, '诸天 · 账本核验', { timeOut: 9000 }); } catch { /* no toastr */ }
+            const st = s.getElementById('status'); if (st) st.textContent = GUIDE;
+        }, true);
+        const st = s.getElementById('status');
+        if (st) new MutationObserver(() => {
+            if (!/请先启用当前聊天与账本核验/.test(st.textContent)) return;
+            st.textContent = on?.checked && led?.checked ? '两个开关已勾选，但还没保存：请点本页的「保存当前聊天设置」，再点「立即核验最新正文」。（什么都没有写入）' : GUIDE;
+            flash();
+        }).observe(st, { childList: true, characterData: true, subtree: true });
+    }
     /** Adds the native-only entries (terminal, status bar) into the original header without touching its code. */
     decorate() {
         const s = this.shadow; if (!s) return;
         const pill = s.querySelector('.version-pill'); if (pill) pill.textContent = '原生 ' + (this.adapter.version || '');
+        try { this.guideLedgerCheck(); } catch (e) { console.warn('[诸天] 账本核验引导', e); }
         // 0.5.0: no separate terminal button any more — this window IS the terminal (see src/hub.js).
     }
     open() { const d = this.shadow?.querySelector('dialog'); if (d?.open) return; this.shadow?.getElementById('entry')?.click(); }

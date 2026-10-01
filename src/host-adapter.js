@@ -4,6 +4,11 @@ import { hostSupport, loadHostModule, fetchHostVersion, probeCapabilities } from
 // 0.3.0: no static `import … from '/script.js'` any more (a missing export would kill module linking on other hosts).
 // sendMessageAsUser / is_send_press are resolved at start() through a dynamic import, verified for 1.16.0–1.19.0.
 
+/** SillyTavern's #mes_stop is visible exactly while the main chat generates (missing element: assume visible). */
+export function stopButtonShown(doc = globalThis.document) {
+    const el = doc?.getElementById?.('mes_stop'); if (!el) return true;
+    try { return el.getClientRects().length > 0 && getComputedStyle(el).display !== 'none'; } catch { return true; }
+}
 export class HostAdapter {
     constructor(original) {
         this.original = original;
@@ -11,6 +16,7 @@ export class HostAdapter {
         this.subscribers = new Set();
         this.busy = false;
         this.generating = false;
+        this.sawStop = false;
         this.dead = false;
         this.generationEpoch = 0;
         this.sendingReceipts = new Set();
@@ -52,14 +58,31 @@ export class HostAdapter {
             c.eventSource.on(event, fn);this.disposers.push(()=>c.eventSource.removeListener(event,fn));
         }
         const on=(key,fn)=>{const e=c.eventTypes[key];if(e){c.eventSource.on(e,fn);this.disposers.push(()=>c.eventSource.removeListener(e,fn));}};
-        on('GENERATION_STARTED',(type,opts,dry)=>{if(!dry){this.generating=true;this.generationEpoch++;this.notify();}});
+        on('GENERATION_STARTED',(type,opts,dry)=>{if(!dry){this.generating=true;this.sawStop=false;this.generationEpoch++;this.notify();}});
         on('GENERATION_ENDED',()=>{this.generating=false;this.notify();});
         on('GENERATION_STOPPED',()=>{this.generating=false;this.notify();});
         on('GENERATION_AFTER_COMMANDS',(type,opts,dry)=>{if(!dry&&!['quiet','impersonate'].includes(type))this.refreshPrompt(type);});
+        const stop=globalThis.document?.getElementById?.('mes_stop');
+        if(stop&&typeof MutationObserver==='function'){const mo=new MutationObserver(()=>this.checkStop());mo.observe(stop,{attributes:true,attributeFilter:['style','class','hidden']});this.disposers.push(()=>mo.disconnect());}
     }
     subscribe(fn) { this.subscribers.add(fn); return ()=>this.subscribers.delete(fn); }
     notify() { if(!this.dead)for(const fn of this.subscribers) { try{fn();}catch(e){console.warn('[诸天终端] 只读刷新失败',e.message);} } }
-    isGenerating() { return this.generating||!!this.host?.isSendPress?.(); }
+    /** 0.8.5: a missed GENERATION_ENDED (phone browser backgrounded mid-stream, a thinking model) left `generating` true
+     *  for good: the status-bar renderer then never touched the last floor (raw <ZhuTianPanel> text on phones) and trades
+     *  refused with 主聊天正在生成. SillyTavern shows its stop button while the main chat generates and hides it at the end
+     *  (also when the end event is lost). So: once the stop button was seen during this generation and is hidden again,
+     *  the generation is over and a stale flag clears itself. GENERATION_STARTED fires *before* SillyTavern sets
+     *  is_send_press and shows the button, and quiet generations never show it: a button that was never seen therefore
+     *  changes nothing (the send lock stays exactly as before). */
+    checkStop() {
+        if(!this.generating)return;
+        if(stopButtonShown())this.sawStop=true;
+        else if(this.sawStop&&!this.host?.isSendPress?.()){this.generating=false;this.sawStop=false;this.notify?.();}
+    }
+    isGenerating() {
+        this.checkStop();
+        return this.generating||!!this.host?.isSendPress?.();
+    }
     currentIdentity() { return identity(this.context()); }
     variables() {
         // Storage corroborated against Tavern Helper variables.ts @519599bc... (type:'chat').

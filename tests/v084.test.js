@@ -251,9 +251,9 @@ test('beautifications: renderer passes SillyTavern\'s own render as reference so
     assert.deepEqual(lcsPairs([], ['a']), []);
 });
 
-test('version 0.8.4 everywhere', () => {
-    const v = '0.8.4';
-    assert.equal(JSON.parse(read('manifest.json')).version, v);
+test('version ≥ 0.8.4 and consistent everywhere (exact value pinned in the newest version test)', () => {
+    const v = JSON.parse(read('manifest.json')).version;
+    assert.match(v, /^0\.8\.[4-9]$/);
     assert.equal(JSON.parse(read('package.json')).version, v);
     const lock = JSON.parse(read('package-lock.json')); assert.equal(lock.version, v); assert.equal(lock.packages[''].version, v);
     assert.match(read('src/contracts.js'), new RegExp(`VERSION = '${v.replace(/\./g, '\\.')}'`));

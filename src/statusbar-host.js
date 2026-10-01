@@ -165,6 +165,9 @@ export class StatusBarHost {
             this.observer = new MutationObserver(list => { if (list.some(m => !(m.target.closest?.('.' + STATUSBAR_CLASS + ',.zt-lilith-voice')))) this.schedule(160); });
             this.observer.observe(chat, { childList: true, subtree: true });
         }
+        // 0.8.5: the stop button hiding = generation over, even when GENERATION_ENDED never arrives (phones).
+        const stop = document.getElementById('mes_stop');
+        if (stop) { const mo = new MutationObserver(() => this.schedule(200)); mo.observe(stop, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] }); this.disposers.push(() => mo.disconnect()); }
         const keys = ['statusbar', 'statusbarMaxDepth', 'compactHistory', 'voiceBox', 'macroLike', 'floorTag'];
         this.disposers.push(this.settings.onChange(k => { if (keys.includes(k)) this.rebuild(); }));
         this.schedule(0);
@@ -195,7 +198,10 @@ export class StatusBarHost {
         const c = this.ctx(); const prev = this.state.mode; this.state = this.decideMode();
         if (prev !== this.state.mode) this.adapter.notify();
         const chat = c.chat || [], last = chat.length - 1, maxDepth = this.maxDepth();
-        const generating = this.adapter.isGenerating();
+        // 0.8.5: only while SillyTavern really streams (its stop button is visible). A stale "generating" state used to
+        // skip the last floor for good — on phones the raw <ZhuTianPanel> text stayed in the chat.
+        const stop = document.getElementById('mes_stop');
+        const generating = this.adapter.isGenerating() && (!stop || (stop.getClientRects().length > 0 && getComputedStyle(stop).display !== 'none'));
         for (const el of document.querySelectorAll('#chat .mes[mesid]')) {
             const id = Number(el.getAttribute('mesid')), m = chat[id];
             const text = el.querySelector('.mes_text');
@@ -209,6 +215,17 @@ export class StatusBarHost {
             this.render(el, m, id, live, p); el.dataset.ztSig = sig;
         }
         this.onScan?.();
+    }
+    /** 0.8.5 兼容诊断: is the newest floor that carries a <ZhuTianPanel> rendered, and if not, why. */
+    diagnoseLast() {
+        const chat = this.ctx().chat || [];
+        let id = -1; for (let i = chat.length - 1; i >= Math.max(0, chat.length - 10); i--) if (/<ZhuTianPanel>/.test(chat[i]?.mes || '')) { id = i; break; }
+        if (id < 0) return { ok: null, text: '最近 10 层里没有 <ZhuTianPanel> 数据块（模型这几轮没输出，或被别的正则改掉了）。' };
+        const el = document.querySelector(`#chat .mes[mesid="${id}"]`), t = el?.querySelector('.mes_text');
+        if (!t) return { ok: null, text: `第 ${id} 层不在当前已加载的聊天里。` };
+        if (!this.active) return { ok: false, floor: id, text: `第 ${id} 层没有处理：${this.state.reason || this.state.mode}` };
+        if (t.querySelector(':scope > .zt-render-mark')) return { ok: true, floor: id, text: `第 ${id} 层已正常显示为诸天数据标签。` };
+        return { ok: false, floor: id, text: `第 ${id} 层还没处理${this.adapter.isGenerating() ? '（插件认为主聊天仍在生成）' : ''}。点「重新渲染楼层」。` };
     }
     unmount(el, m, id) {
         for (const f of el.querySelectorAll('.' + STATUSBAR_CLASS + ' iframe')) this.release(f);

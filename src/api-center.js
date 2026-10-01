@@ -43,31 +43,55 @@ export async function saveConfigs(bridge, ns, { url, key, model, maxTokens }, { 
 }
 
 /** The API form (shared by the popup and the terminal's 连接 page). `inline` = inside the terminal's shadow root, where
- *  SillyTavern's .menu_button styles do not reach, so buttons carry their own look and colours follow the theme vars. */
+ *  SillyTavern's .menu_button styles do not reach, so buttons carry their own look and colours follow the theme vars.
+ *  0.8.5: written for someone who has never seen it — one status line at the top in plain words, then 3 numbered steps.
+ *  The old "状态栏 / 莉莉丝助手" table and the "应用到…" boxes (read as some kind of 绑定) moved into 高级. Radios and
+ *  checkboxes carry width:auto because the original connection page styles every input as width:100%. */
 function formHtml({ status, assistant, inline }) {
     const seed = assistant.url ? assistant : status;
     const main = isMainApi(seed.url);
-    const line = (label, cfg) => `<div style="display:flex;gap:8px;font-size:12px;opacity:.85"><b style="min-width:5.5em">${label}</b><span style="overflow-wrap:anywhere">${cfg?.url ? (isMainApi(cfg.url) ? '酒馆当前主API' : esc(cfg.url) + (cfg.model ? ' · ' + esc(cfg.model) : '')) + (cfg.key && !isMainApi(cfg.url) ? ' · 密钥已设置' : '') : '<i>未设置</i>'}</span></div>`;
-    const field = 'width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid color-mix(in srgb,var(--accent,#c59bee) 30%,transparent);background:var(--zt-input,#0f0c14);color:inherit;font:inherit';
+    const desc = cfg => cfg?.url ? (isMainApi(cfg.url) ? '用酒馆正在用的模型' : esc(cfg.url) + (cfg.model ? ' · 模型 ' + esc(cfg.model) : ' · 还没填模型')) : '还没设置';
+    const field = 'width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid color-mix(in srgb,var(--accent,#c59bee) 30%,transparent);background:var(--zt-input,#0f0c14);color:inherit;font:inherit';
     const btn = inline ? 'class="zt-btn small" style="margin:0;white-space:nowrap"' : 'class="menu_button" style="margin:0;white-space:nowrap"';
-    const same = sameConfig(status, assistant);
-    return `<form ${inline ? '' : 'method="dialog"'} style="padding:${inline ? '4px 2px' : '18px 20px'};display:grid;gap:12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="font-size:16px;letter-spacing:1px">${inline ? '连接 · API 中心' : '诸天 · API 中心'}</b>${inline ? '' : `<button value="close" ${btn}>关闭</button>`}</div>
-      <div style="font-size:12px;opacity:.75">这里是插件唯一的 API 设置：状态栏 AI 功能（进货 / 盲盒 / 许愿 / 招募 / 天眼…）和莉莉丝（记忆、私聊、工作台）共用。0.8.4 起原版「连接」表单合并到这里。</div>
-      <div style="display:grid;gap:3px;padding:9px 11px;border-radius:10px;background:#ffffff0a">${line('状态栏', status)}${line('莉莉丝助手', assistant)}${same ? '' : '<div style="font-size:12px;color:#ffcf8a">两处配置不一致：保存一次即可统一。</div>'}</div>
-      <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="mode" value="custom" ${main ? '' : 'checked'}> 独立 API（OpenAI 兼容，推荐：不占用主聊天）</label>
-      <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="mode" value="main" ${main ? 'checked' : ''}> 使用酒馆当前连接的主 API（无需另填密钥）</label>
-      <div data-custom style="display:grid;gap:8px">
-        <label>接口地址<input name="url" style="${field}" placeholder="https://api.example.com/v1" value="${main ? '' : esc(seed.url)}" autocomplete="off"></label>
-        <label>API 密钥<input name="key" type="password" style="${field}" value="${main ? '' : esc(seed.key)}" autocomplete="off"></label>
-        <label>模型<div style="display:flex;gap:6px"><input name="model" list="zt-api-models" style="${field}" value="${main ? '' : esc(seed.model)}" autocomplete="off"><button type="button" data-act="models" ${btn}>拉取模型</button></div><datalist id="zt-api-models"></datalist></label>
-        <select data-models hidden style="${field}"></select>
+    const tick = 'style="width:auto;min-width:0;flex:none;margin:3px 0 0;accent-color:var(--accent,#c59bee)"';
+    const same = sameConfig(status, assistant), anySet = !!(status?.url || assistant?.url);
+    const both = status?.url && assistant?.url;
+    const state = !anySet
+        ? `<b style="color:#ffcf8a">⚠ 还没有设置 API</b><span>状态栏里的 AI 功能（进货、盲盒、许愿、招募、天眼…）和莉莉丝私聊都要用它。按下面 3 步填好即可。</span>`
+        : same
+            ? `<b style="color:#bfe8c8">✓ 已设置</b><span>${desc(status)}</span><span style="opacity:.75">状态栏的 AI 功能和莉莉丝（私聊 / 记忆）都用这一个。想确认能不能用，点下面的「测试连接」。</span>`
+            : `<b style="color:#ffcf8a">⚠ 两处用的 API 不一致</b><span>状态栏 AI 功能：${desc(status)}</span><span>莉莉丝私聊 / 记忆：${desc(assistant)}</span><span style="opacity:.75">${both ? '' : '有一处还没设置。'}在下面填好后点「保存」，两处就统一了。</span>`;
+    const opt = (value, on, title, sub) => `<label style="display:flex;gap:10px;align-items:flex-start;margin:0;min-height:0;height:auto;padding:10px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--accent,#c59bee) ${on ? 55 : 18}%,transparent);cursor:pointer"><input type="radio" name="mode" value="${value}" ${on ? 'checked' : ''} ${tick}><span style="display:grid;gap:2px;min-width:0"><b>${title}</b><small style="opacity:.72">${sub}</small></span></label>`;
+    const step = (n, t) => `<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--accent,#c59bee) 30%,transparent);font-size:12px;flex:none">${n}</span><b>${t}</b></div>`;
+    const lbl = 'display:grid;gap:4px';
+    return `<form ${inline ? '' : 'method="dialog"'} style="padding:${inline ? '4px 2px' : '18px 20px'};display:grid;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="font-size:16px;letter-spacing:1px">${inline ? '连接 · AI 接口设置' : '诸天 · AI 接口设置'}</b>${inline ? '' : `<button value="close" ${btn}>关闭</button>`}</div>
+      <div data-state style="display:grid;gap:3px;padding:10px 12px;border-radius:10px;background:#ffffff0a;font-size:13px;overflow-wrap:anywhere">${state}</div>
+      ${step(1, '选择用哪个 AI')}
+      <div style="display:grid;gap:8px">
+        ${opt('custom', !main, '单独的 API（推荐）', '填一个 OpenAI 兼容接口（中转站 / 官方都行），不占用你正在聊天的模型')}
+        ${opt('main', main, '直接用酒馆正在用的模型', '不用另填地址和密钥；但每次请求会占用主聊天，主聊天生成时要等它')}
       </div>
-      <label>助手单次输出上限（tokens，可空；思考模型可填 4096）<input name="max" type="number" min="64" max="65536" style="${field}" value="${esc(assistant.maxTokens ?? '')}"></label>
-      <div style="display:flex;gap:14px;flex-wrap:wrap"><label><input type="checkbox" name="toStatus" checked> 应用到状态栏</label><label><input type="checkbox" name="toAssistant" checked> 应用到莉莉丝助手</label></div>
-      <output data-out style="min-height:1.6em;font-size:12px;opacity:.9;white-space:pre-wrap"></output>
+      <div data-custom style="display:grid;gap:10px">
+        ${step(2, '填写接口')}
+        <label style="${lbl}">接口地址<input name="url" style="${field}" placeholder="例如 https://api.example.com/v1" value="${main ? '' : esc(seed.url)}" autocomplete="off"><small style="opacity:.65">一般以 /v1 结尾，从你的 API 服务商那里复制。</small></label>
+        <label style="${lbl}">API 密钥<input name="key" type="password" style="${field}" placeholder="sk-…" value="${main ? '' : esc(seed.key)}" autocomplete="off"></label>
+        <div style="${lbl}"><span>模型</span><div style="display:flex;gap:6px"><input name="model" list="zt-api-models" style="${field}" placeholder="先点右边「拉取模型」，或直接手填" value="${main ? '' : esc(seed.model)}" autocomplete="off" aria-label="模型"><button type="button" data-act="models" ${btn}>拉取模型</button></div><datalist id="zt-api-models"></datalist>
+        <select data-models hidden style="${field}" aria-label="从列表选择模型"></select></div>
+      </div>
+      ${step(main ? 2 : 3, '测试并保存')}
+      <output data-out style="min-height:1.6em;font-size:12px;opacity:.95;white-space:pre-wrap"></output>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button type="button" data-act="test" ${btn}>测试连接</button><button type="button" data-act="save" ${btn}>保存</button></div>
-      <small style="opacity:.6">密钥只保存在本机酒馆设置 / 浏览器里，不会写进聊天记录，也不会随插件上传。请求超时见终端「设置」页的「独立 API 超时」（请求一律流式传输）。</small>
+      <details style="font-size:12px;opacity:.9"><summary style="cursor:pointer">高级设置（一般不用改）</summary>
+        <div style="display:grid;gap:8px;margin-top:8px">
+          <label style="${lbl}">莉莉丝单次回复长度上限（tokens，可留空；思考模型可填 4096）<input name="max" type="number" min="64" max="65536" style="${field}" value="${esc(assistant.maxTokens ?? '')}"></label>
+          <div>保存到（默认两处都保存，保持一致）：</div>
+          <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="toStatus" checked ${tick}> 状态栏的 AI 功能（进货 / 盲盒 / 许愿 / 招募…）</label>
+          <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="toAssistant" checked ${tick}> 莉莉丝（私聊 / 记忆 / 工作台）</label>
+          <div style="opacity:.75">请求超时：终端「设置」页 →「独立 API 超时」。请求一律流式传输。</div>
+        </div>
+      </details>
+      <small style="opacity:.6">密钥只存在你自己的酒馆和浏览器里，不会写进聊天记录，也不会随插件上传。</small>
     </form>`;
 }
 export function sameConfig(a, b) { return ['url', 'key', 'model'].every(k => String(a?.[k] || '').trim() === String(b?.[k] || '').trim()); }
@@ -76,7 +100,11 @@ export function sameConfig(a, b) { return ['url', 'key', 'model'].every(k => Str
 function bindForm(root, { bridge, ns, notify, rerender }) {
     const f = root.querySelector('form'), out = root.querySelector('[data-out]');
     const mode = () => f.querySelector('input[name=mode]:checked')?.value || 'custom';
-    const sync = () => { root.querySelector('[data-custom]').style.display = mode() === 'main' ? 'none' : 'grid'; };
+    const sync = () => {
+        root.querySelector('[data-custom]').style.display = mode() === 'main' ? 'none' : 'grid';
+        for (const r of f.querySelectorAll('input[name=mode]')) r.closest('label').style.borderColor = `color-mix(in srgb,var(--accent,#c59bee) ${r.checked ? 55 : 18}%,transparent)`;
+        const nums = [...f.querySelectorAll(':scope > div > span[style*="border-radius:50%"]')]; if (nums[1]) nums[1].textContent = mode() === 'main' ? '2' : '3';
+    };
     f.addEventListener('change', sync); sync();
     f.addEventListener('submit', e => { if (!f.getAttribute('method')) e.preventDefault(); });
     const current = () => mode() === 'main' ? { url: MAIN_API_URL, key: 'st-main', model: MAIN_API_MODEL, maxTokens: f.max.value } : { url: f.url.value.trim(), key: f.key.value.trim(), model: f.model.value.trim(), maxTokens: f.max.value };

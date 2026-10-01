@@ -244,11 +244,11 @@ export class Features {
         this.popup(`<h3>兼容诊断 · ${VERSION}</h3>
 <p>SillyTavern <b>${esc(a.version)}</b>：${esc(a.support?.reason)}</p><p>已验收版本：${HOST_TESTED.join(' / ')}（每个版本均在隔离真实宿主上跑过浏览器验收）。</p>
 <table class="zt-table"><tr><th>接口</th><th>状态</th></tr>${caps.map(x => `<tr><td>${esc(x.label)}</td><td>${x.ok ? '✅' : '❌ 相关功能自动停用'}</td></tr>`).join('')}</table>
-<p>原生状态栏：${esc(sb.mode)} — ${esc(sb.reason)}</p><p>莉莉丝助手：${(h => h ? (h.ok ? '运行中（原版代码 + 原生桥接）' : '⚠ 窗口已创建但原版未完全启动：' + esc(h.text)) : esc(this.app.assistantError || '未启动'))(this.app.assistant?.health?.())}</p>
+<p>原生状态栏：${esc(sb.mode)} — ${esc(sb.reason)}</p>${(d => d ? `<p>最新楼层：${d.ok === true ? '✅' : d.ok === false ? '⚠' : 'ℹ'} ${esc(d.text)}</p>` : '')(this.app.statusbar?.diagnoseLast?.())}<p>莉莉丝助手：${(h => h ? (h.ok ? '运行中（原版代码 + 原生桥接）' : '⚠ 窗口已创建但原版未完全启动：' + esc(h.text)) : esc(this.app.assistantError || '未启动'))(this.app.assistant?.health?.())}</p>
 <p>立绘：${esc(this.app.portrait?.describe?.() || '原版分层参数动画')}</p>
 <h4>原版 v1.1 取代情况</h4><table class="zt-table"><tr><th>原版组件</th><th>插件接管</th></tr>${this.replacementRows().map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('')}</table>
-<div class="zt-popup-actions"><div class="menu_button" data-diag="takeover">一键接管旧版</div><div class="menu_button" data-diag="api">API 中心</div>${this.wbBudget && !this.wbBudget.ok ? '<div class="menu_button" data-diag="budget">调整世界书预算</div>' : ''}</div>`, true)
-            .addEventListener('click', e => { const act = e.target.closest('[data-diag]')?.dataset.diag; if (act === 'takeover') this.app.runTakeover?.(); if (act === 'api') this.app.openApiCenter?.(); if (act === 'budget' && this.fixWorldbookBudget()) { this.toast('success', '已调整世界书预算。'); this.worldbookBudget(); } });
+<div class="zt-popup-actions"><div class="menu_button" data-diag="takeover">一键接管旧版</div><div class="menu_button" data-diag="api">AI 接口设置</div><div class="menu_button" data-diag="rerender">重新渲染楼层</div>${this.wbBudget && !this.wbBudget.ok ? '<div class="menu_button" data-diag="budget">调整世界书预算</div>' : ''}</div>`, true)
+            .addEventListener('click', e => { const act = e.target.closest('[data-diag]')?.dataset.diag; if (act === 'takeover') this.app.runTakeover?.(); if (act === 'api') this.app.openApiCenter?.(); if (act === 'rerender') { this.app.statusbar?.rebuild(); this.toast('success', '已重新渲染聊天楼层'); } if (act === 'budget' && this.fixWorldbookBudget()) { this.toast('success', '已调整世界书预算。'); this.worldbookBudget(); } });
     }
     /** One row per piece of the original v1.1 install: what replaces it now and what is still left over. */
     replacementRows() {
@@ -256,7 +256,7 @@ export class Features {
         const left = kind => legacy.filter(i => i.kind === kind);
         const on = (k, yes, no = '已关闭') => st.get(k) === false ? '⏸ ' + no : '✅ ' + yes;
         let api = { status: {}, assistant: {} }; try { api = readConfigs(app.bridge, app.original.ZhuTianMemoryCore?.NS); } catch { /* bridge gone */ }
-        const apiText = c => c?.url ? (isMainApi(c.url) ? '酒馆主 API' : esc(new URL(c.url).host) + (c.model ? ' · ' + esc(c.model) : '')) : '⚠ 未设置（打开 API 中心）';
+        const apiText = c => c?.url ? (isMainApi(c.url) ? '酒馆主 API' : esc(new URL(c.url).host) + (c.model ? ' · ' + esc(c.model) : '')) : '⚠ 未设置（打开 AI 接口设置）';
         const counts = sb?.counts || {};
         return [
             ['世界书「诸天万界最强系统」', ({ chat: '✅ 已绑定到当前聊天', 'auto-bound': '✅ 已自动安装并绑定到当前聊天', global: '✅ 已作为全局世界书启用', character: '✅ 已绑定在角色卡上', 'other-chat-book': '⚠ 当前聊天绑定了别的世界书，未自动替换（可在“世界书安装/绑定”手动处理）', 'not-zhutian': '… 当前聊天还不是诸天存档（有账本或状态栏后自动绑定）', off: '⏸ 自动绑定已关闭' })[this.wbAuto] || esc(this.wbAuto || '检查中') + '（内置 35 条，逐条与原版一致）'],

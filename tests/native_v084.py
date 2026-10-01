@@ -124,6 +124,7 @@ def slow_chat_suite(page):
 # ---------------------------------------------------------------- 强力模块
 def modules_suite(page):
     js(page, """const c=SillyTavern.getContext();await fetch('/api/worldinfo/delete',{method:'POST',headers:c.getRequestHeaders(),body:JSON.stringify({name:arg})});
+      try{(await import('/scripts/world-info.js')).worldInfoCache?.delete?.(arg);}catch{}   // raw delete bypasses ST's cache (0.8.5: stale book from a previous run)
       await c.updateWorldInfoList?.();await app.features.installWorldbook('none');""", WB)
     r = js(page, "const s=await app.features.moduleStates();return s.list.map(m=>[m.name,m.on])")
     d = dict(r)
