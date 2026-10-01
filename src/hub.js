@@ -218,7 +218,7 @@ export class Hub {
         this.on(document, 'pointerdown', e => {
             if (!this.isOpen || !this.outsideClose()) return;
             const path = e.composedPath(); if (path.includes(this.shell.dialog) || path.includes(this.shadow.host)) return;
-            if (path.some(n => n?.classList?.contains?.('popup') || n?.id === 'toast-container')) return;
+            if (path.some(n => n?.classList?.contains?.('popup') || n?.id === 'toast-container' || n?.id === 'zhutian-lilith-float')) return;   // 0.8.3: tapping the floating Lilith is not "outside"
             this.close();
         }, true);
         // Phone back gesture: opening pushes one history entry; going back closes the terminal instead of leaving ST.

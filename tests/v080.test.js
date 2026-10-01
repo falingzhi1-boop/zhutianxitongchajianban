@@ -121,7 +121,7 @@ test('0.8.0 settings defaults and version files', () => {
     assert.deepEqual(s.get('skills'), { prompt: true, practice: true, cardAuto: false });
     assert.equal(s.get('lilith').story, true); assert.equal(store[ID].lilith.camera, true);
     const m = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url))), p = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))), l = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url)));
-    assert.equal(VERSION, '0.8.2'); assert.equal(m.version, VERSION); assert.equal(p.version, VERSION); assert.equal(l.version, VERSION); assert.equal(l.packages[''].version, VERSION);
+    assert.equal(VERSION, '0.8.3'); assert.equal(m.version, VERSION); assert.equal(p.version, VERSION); assert.equal(l.version, VERSION); assert.equal(l.packages[''].version, VERSION);
     assert.match(p.scripts.check, /src\/skill-sync\.js/);
     for (const n of ['修行 · 熟练度', '莉莉丝气泡播报', '管理员控制台入口']) assert.ok(CAPABILITIES.some(c => c.name.startsWith(n)), n);
 });

@@ -22,6 +22,7 @@ const DEFAULTS = Object.freeze({
     wbUnbindOnDisable: true,     // 0.8.2: disabling the extension (1.17+ hook) unbinds the 诸天 worldbook from cards / global / open chat
     wbUnbound: null,             // 0.8.2: what the last unbind removed (for 恢复绑定)
     floatLilith: 'auto',         // 0.8.2: floating Lilith portrait — auto (phones / touch) | on | off
+    floatSize: 'm',              // 0.8.3: floating Lilith size xs 55 % | s 65 % | m 75 % (default) | l 90 % | xl 100 % (= 0.8.2)
     floatPos: null,              // 0.8.2: {x, y, edge, tucked} of the floating portrait
     macroLike: true,             // {{get_chat_variable::…}} for the worldbook without Tavern Helper
     touchGestures: true,         // stroke / long-press / touch look on the Lilith portrait

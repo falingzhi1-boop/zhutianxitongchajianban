@@ -128,7 +128,6 @@ test('status bar renderer keeps Tavern Helper render wrappers (character-card st
     assert.match(src, /tavernHelperMacrosActive\(this\.ctx\(\)\)/);
 });
 
-test('version 0.8.2 and capability rows', () => {
-    assert.equal(VERSION, '0.8.2');
+test('0.8.2 capability rows (version checked in v083)', () => {
     for (const k of ['世界书一键解绑', '悬浮莉莉丝', '角色卡状态栏']) assert.ok(CAPABILITIES.some(c => c.name.includes(k)), k);
 });
