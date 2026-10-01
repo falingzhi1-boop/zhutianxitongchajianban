@@ -39,7 +39,7 @@ test('禁忌 never passes, even at shop level 5 and tier 8', () => {
 
 test('points packet: capped by member tier price and shop level', () => {
     const r = parseGroupReply('@叶清寒: [红包] 系统点 999999 3 | 见者有份', members, { shop: 5 });
-    assert.equal(r[0].packet.amount, 1e4, 'tier 2 price');
+    assert.equal(r[0].packet.amount, 1500, 'tier 2: capped by its 入群费 (0.8.2)');
     const s = parseGroupReply('@白浅: [红包] 系统点 999999 3 | 见者有份', members, { shop: 1 });
     assert.equal(s[0].packet.amount, 2000, 'shop Lv1 cap');
     assert.equal(s[0].packet.downgraded, true);

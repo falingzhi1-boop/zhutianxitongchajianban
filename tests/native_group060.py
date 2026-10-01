@@ -80,7 +80,8 @@ def run(page):
     ok('1–6 members answered; lines from non-members dropped', any('群主好' in t for t in texts) and not any('必须被忽略' in t for t in texts), str(texts)[:200])
     packs = list(g['红包'].values())
     pts_pk = next((p for p in packs if p['kind'] == 'points'), None); item_pk = next((p for p in packs if p['kind'] == 'item'), None)
-    ok('points red packet created (3000, 3 shares) from the member', pts_pk and pts_pk['total'] == 3000 and len(pts_pk['shares']) == 3 and sum(pts_pk['shares']) == 3000, str(pts_pk)[:160])
+    # 0.8.2: the total is capped by the member's own 入群费 too — 叶清寒 (武道宗师, 入群费 1,500) asks 3,000 → 1,500, marked downgraded
+    ok('points red packet created from the member, capped at the member’s 入群费 (asked 3000 → 1500, 3 shares)', pts_pk and pts_pk['total'] == 1500 and pts_pk.get('downgraded') and len(pts_pk['shares']) == 3 and sum(pts_pk['shares']) == 1500, str(pts_pk)[:160])
     ok('item red packet auto-downgraded 仙品 → 灵品 (shop Lv2)', item_pk and item_pk['item']['品级'] == '灵品' and item_pk['downgraded'], str(item_pk)[:160])
     gifts = g['待领取']
     ok('gift becomes a 待领取 card, 神品 → 灵品', len(gifts) == 1 and gifts[0]['item']['品级'] == '灵品' and gifts[0]['item']['名称'] == '太虚剑谱残卷', str(gifts)[:160])
@@ -95,10 +96,10 @@ def run(page):
     ok('packet card no longer offers 抢 after grabbing', r == 'gone')
     click(page, f'[data-grab="{item_pk["id"]}"]', 1200)
     got = bag(page, '青丘桃花酿')
-    ok('物品红包: item in the bag with source 白浅@青丘', got and got[0]['品级'] == '灵品' and got[0]['来源'] == '白浅@青丘', str(got))
+    ok('物品红包: item in the bag with source 聊天群·白浅@青丘·红包 (0.8.2)', got and got[0]['品级'] == '灵品' and got[0]['来源'] == '聊天群·白浅@青丘·红包', str(got))
     click(page, f'[data-claim="{gifts[0]["id"]}"]', 1200)
     got = bag(page, '太虚剑谱残卷')
-    ok('赠礼 领取: booked into the bag, 待领取 cleared', got and got[0]['来源'] == '白浅@青丘' and not grp(page)['待领取'], str(got))
+    ok('赠礼 领取: booked into the bag, 待领取 cleared', got and got[0]['来源'] == '聊天群·白浅@青丘·赠礼' and not grp(page)['待领取'], str(got))
     # --- host red packets ---
     click(page, '[data-g=sheet-packet]', 300); fill(page, '[data-f=amount]', '1000'); fill(page, '[data-f=count]', '3')
     p0 = z(page)['系统点']; fav0 = {m['名称']: m['好感'] for m in grp(page)['成员']}
@@ -161,7 +162,7 @@ def run(page):
     page.screenshot(path=str(SHOTS / 'g060-market.png'))
     # --- capacity / settings / injection ---
     tab(page, 'members'); p0 = z(page)['系统点']; click(page, '[data-g=expand]', 900)
-    ok('扩建: 5 → 10 for 10,000', grp(page)['容量'] == 10 and z(page)['系统点'] == p0 - 10000)
+    ok('扩建: 5 → 10 for 5,000 (0.8.2: 1,000 per seat)', grp(page)['容量'] == 10 and z(page)['系统点'] == p0 - 5000)
     pr = page.evaluate("SillyTavern.getContext().extensionPrompts['zhutian-covenant-terminal/group']?.value||''")
     ok('group summary injected (members + recent chat)', '诸天万界聊天群' in pr and '叶清寒（问剑宗·武道宗师）' in pr and '最近群聊' in pr, pr[:160])
     tab(page, 'admin'); click(page, '[data-g=inject]', 900)
@@ -169,8 +170,11 @@ def run(page):
     fill(page, '[data-f=notice]', '本群禁止刷屏'); click(page, '[data-g=meta]', 900)
     ok('公告 saved', grp(page)['公告'] == '本群禁止刷屏')
     click(page, '[data-g=auto]', 900)
-    before = len(mock_requests()); page.evaluate(f"__zhutianApp.group.onStoryReply({last_ai})"); page.wait_for_timeout(3000)
-    ok('每轮剧情自动闲聊: one group request after a story reply', len(fired('【宿主没有发言】', before)) == 1)
+    before = len(mock_requests())
+    page.evaluate(f"(async()=>{{await __zhutianApp.group.onStoryReply({last_ai});await __zhutianApp.group.onStoryReply({last_ai});}})()"); page.wait_for_timeout(1500)
+    quiet = len(fired('【宿主没有发言】', before))
+    page.evaluate(f"__zhutianApp.group.onStoryReply({last_ai})"); page.wait_for_timeout(3000)
+    ok('自动闲聊 every 3 story replies (0.8.2 default): none after 2, one after the 3rd', quiet == 0 and len(fired('【宿主没有发言】', before)) == 1, f'{quiet}')
     tab(page, 'chat'); page.screenshot(path=str(SHOTS / 'g060-chat-end.png'))
     lv = hub(page, "return [sr.getElementById('zt-top-shop').textContent, el.querySelector('.zt-g-head small').textContent, app.bridge.getVariables({type:'chat'}).诸天系统.商城等级]")
     ok('shop level agrees: terminal top bar = group header = ledger 商城等级', lv[0] == f'Lv.{lv[2]}' and f'商城 Lv{lv[2]}' in lv[1], str(lv))
