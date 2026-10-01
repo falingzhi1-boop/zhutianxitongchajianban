@@ -132,14 +132,9 @@ export class AssistantHost {
     decorate() {
         const s = this.shadow; if (!s) return;
         const pill = s.querySelector('.version-pill'); if (pill) pill.textContent = '原生 ' + (this.adapter.version || '');
-        const head = s.querySelector('#close')?.parentElement; if (!head || s.getElementById('zt-open-terminal')) return;
-        const mk = (id, label, title, fn) => { const b = document.createElement('button'); b.id = id; b.type = 'button'; b.className = 'icon-btn zt-native-btn'; b.textContent = label; b.title = title; b.setAttribute('aria-label', title); b.addEventListener('click', fn); return b; };
-        head.insertBefore(mk('zt-open-terminal', '终端', '打开契约终端（账本、交易、诊断）', () => this.openTerminal?.()), s.querySelector('#close'));
-        const style = document.createElement('style');
-        style.textContent = '.zt-native-btn{font:600 12px/1 inherit;padding:6px 8px;border-radius:8px;border:1px solid #b38bbc55;background:#2a1d33;color:#f1e4f6;cursor:pointer;margin-right:6px}.zt-native-btn:hover{background:#3b2748}';
-        s.append(style);
+        // 0.5.0: no separate terminal button any more — this window IS the terminal (see src/hub.js).
     }
-    open() { this.shadow?.getElementById('entry')?.click(); }
+    open() { const d = this.shadow?.querySelector('dialog'); if (d?.open) return; this.shadow?.getElementById('entry')?.click(); }
     portraitHost() { return this.shadow?.getElementById('lilith-portrait') || null; }
     stage() { return this.motion?.stages?.[0] || null; }
     dispose() { try { this.disposeOriginal?.(); } finally { this.adapter.assistantOwnsPrompt = null; this.hostElement?.remove(); this.hostElement = null; } }

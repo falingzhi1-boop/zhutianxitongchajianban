@@ -64,17 +64,18 @@ export class StatusBarHost {
             this.observer = new MutationObserver(list => { if (list.some(m => !(m.target.closest?.('.' + STATUSBAR_CLASS + ',.zt-lilith-voice')))) this.schedule(160); });
             this.observer.observe(chat, { childList: true, subtree: true });
         }
-        const keys = ['statusbar', 'statusbarMaxDepth', 'compactHistory', 'voiceBox', 'macroLike'];
+        const keys = ['statusbar', 'statusbarMaxDepth', 'compactHistory', 'voiceBox', 'macroLike', 'floorTag'];
         this.disposers.push(this.settings.onChange(k => { if (keys.includes(k)) this.rebuild(); }));
         this.schedule(0);
     }
     decideMode() {
         const want = this.settings.get('statusbar'), c = this.ctx();
-        if (want === 'off') return { mode: 'off', reason: '已在设置中关闭原生状态栏。' };
-        if (want === 'auto' && legacyRegexActive(c) && tavernHelperPresent()) return { mode: 'yield', reason: '检测到旧状态栏正则与酒馆助手同时启用：原生状态栏自动让位，避免两个引擎写同一账本。用“一键接管旧版”停用旧正则，或把模式改为“强制原生”即可接管。' };
-        return { mode: 'native', reason: legacyRegexActive(c) ? '旧状态栏正则仍启用，但原生渲染会先拆出面板块，旧正则不会再生效（酒馆助手未运行）。' : '原生状态栏运行中（无需酒馆助手、无需正则）。' };
+        if (want === 'off') return { mode: 'off', reason: '已在设置中关闭诸天系统面板处理。' };
+        if (want !== 'native' && legacyRegexActive(c) && tavernHelperPresent()) return { mode: 'yield', reason: '检测到旧状态栏正则与酒馆助手同时启用：插件自动让位，避免两个引擎写同一账本。请在终端「设置」里用“一键接管旧版”停用旧正则。' };
+        if (want === 'native') return { mode: 'native', reason: '兼容模式：聊天楼层内仍渲染原版 3.1 状态栏（终端里同样可操作）。' };
+        return { mode: 'terminal', reason: '终端模式：系统数据块由终端记账，楼层内只留一个小标签，不再显示状态栏。' };
     }
-    get active() { return this.state.mode === 'native'; }
+    get active() { return this.state.mode === 'native' || this.state.mode === 'terminal'; }
     schedule(ms = 120) { if (this.dead) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.scan(), ms); }
     rebuild() { for (const el of document.querySelectorAll('#chat .mes[mesid]')) delete el.dataset.ztSig; this.schedule(0); }
     maxDepth() { const n = Number(this.settings.get('statusbarMaxDepth')); return Number.isFinite(n) && n >= 0 ? Math.min(10, Math.floor(n)) : 1; }
@@ -82,7 +83,7 @@ export class StatusBarHost {
     plan(m) {
         const text = m?.mes || '';
         PANEL_RE.lastIndex = 0;
-        const panels = this.state.mode === 'native' && PANEL_RE.test(text); PANEL_RE.lastIndex = 0;
+        const panels = (this.state.mode === 'native' || this.state.mode === 'terminal') && PANEL_RE.test(text); PANEL_RE.lastIndex = 0;
         const yieldPanels = this.state.mode === 'yield' && /<ZhuTianPanel>/.test(text);
         const voice = !yieldPanels && this.settings.get('voiceBox') !== false && !m.is_user && !m.is_system && voiceRegex().test(text);
         const macro = !yieldPanels && !!this.macros?.has(text);
@@ -102,10 +103,11 @@ export class StatusBarHost {
             if (!p.any) { if (ours || el.querySelector('.' + STATUSBAR_CLASS)) this.unmount(el, m, id); continue; }
             if (generating && id === last) continue;               // never fight the streaming renderer
             const live = last - id <= maxDepth;
-            const sig = [id, m.swipe_id ?? 0, hash(m.mes || ''), live ? 1 : 0, p.panels ? 1 : 0, p.voice ? 1 : 0, p.macro ? 1 : 0, this.settings.get('compactHistory') === false ? 0 : 1].join(':');
+            const sig = [this.state.mode, id, m.swipe_id ?? 0, hash(m.mes || ''), live ? 1 : 0, p.panels ? 1 : 0, p.voice ? 1 : 0, p.macro ? 1 : 0, this.settings.get('compactHistory') === false ? 0 : 1].join(':');
             if (el.dataset.ztSig === sig && ours) continue;
             this.render(el, m, id, live, p); el.dataset.ztSig = sig;
         }
+        this.onScan?.();
     }
     unmount(el, m, id) {
         for (const f of el.querySelectorAll('.' + STATUSBAR_CLASS + ' iframe')) this.release(f);
@@ -145,6 +147,7 @@ export class StatusBarHost {
     voiceCard(v) { return buildVoiceCard(document, v, this.voiceKit); }
     mount(panel, id, live) {
         const box = document.createElement('div'); box.className = STATUSBAR_CLASS; box.dataset.floor = String(id);
+        if (this.state.mode === 'terminal') return this.tag(box, panel, id);
         if (!live) {
             const sum = this.settings.get('compactHistory') !== false ? compactSummary(panel) : null;
             if (sum) {
@@ -163,7 +166,28 @@ export class StatusBarHost {
         }
         box.append(this.frame(panel, id)); return box;
     }
-    frame(panel, id) {
+    /** Terminal mode: the data block is kept out of the story; one small chip says it was recorded and opens the terminal. */
+    tag(box, panel, id) {
+        box.classList.add('zt-floor-tag-box');
+        if (this.settings.get('floorTag') === false) { box.hidden = true; return box; }
+        const sum = compactSummary(panel), chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'zt-floor-tag'; chip.dataset.floor = String(id);
+        chip.title = '诸天系统 · 本楼数据已由终端记录（点击打开终端）';
+        chip.innerHTML = `<span class="zt-floor-tag-mark">✧</span><span>系统已记录</span>${sum ? `<span class="zt-floor-tag-v">系统点 ${escapeText(sum.points)}</span><span class="zt-floor-tag-v">${escapeText(sum.task)}</span>` : ''}<span class="zt-floor-tag-go">查看 ›</span>`;
+        chip.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); this.openHub?.('ov', id); });
+        box.append(chip); this.counts.compact++; return box;
+    }
+    /** Latest floor that carries a data block (what the terminal engine is bound to). */
+    latestPanel() {
+        const chat = this.ctx()?.chat || [];
+        for (let i = chat.length - 1; i >= 0; i--) {
+            const m = chat[i]; if (!m || m.is_user || m.is_system) continue;
+            PANEL_RE.lastIndex = 0; const hit = PANEL_RE.exec(m.mes || ''); PANEL_RE.lastIndex = 0;
+            if (hit) { const all = splitPanels(m.mes || '').panels; return { id: i, panel: all.at(-1) ?? hit[1] }; }
+        }
+        return null;
+    }
+    frame(panel, id, opts = {}) {
         const token = 'f' + (++this.seq) + '-' + Date.now().toString(36);
         const iframe = document.createElement('iframe');
         iframe.className = 'zt-sb-frame'; iframe.dataset.ztFrame = token; iframe.title = '诸天系统状态栏 · 楼 ' + id;
@@ -171,18 +195,19 @@ export class StatusBarHost {
         const c = this.ctx(); let content = panel;
         try { content = c.substituteParams(panel); } catch { /* same as the regex engine; keep raw on failure */ }
         if (this.macros) content = this.macros.replace(content, { message_id: id, role: 'assistant' });
-        this.registry.frames.set(token, this.bridge.frameApi(() => id));
+        this.registry.frames.set(token, this.bridge.frameApi(() => id, opts.lastId));
         this.frames.set(iframe, token);
         const boot = `<script>(function(){var api=parent.${BRIDGE_KEY}&&parent.${BRIDGE_KEY}.frames.get(frameElement&&frameElement.dataset.ztFrame);if(!api){document.documentElement.setAttribute('data-zt-bridge','missing');return;}for(var k in api)window[k]=api[k];window.SillyTavern=parent.SillyTavern;var nf=window.fetch.bind(window);window.fetch=function(u,o){return nf(u,o).catch(function(e){var s=String(u);if((!o||!o.method||o.method==='GET')&&/\\/models$/.test(s)){var a=o&&o.headers&&o.headers.Authorization;return api.listModels(s.replace(/\\/(v1\\/)?models$/,''),a?String(a).replace(/^Bearer\\s+/,''):'').then(function(l){return new Response(JSON.stringify({data:l.map(function(x){return{id:x}})}),{status:200,headers:{'Content-Type':'application/json'}})});}throw e;});};document.documentElement.setAttribute('data-zt-bridge','native');})();<\/script>`;
         const fit = `<script>(function(){var f=frameElement;if(!f)return;var last=0;function fit(){var h=Math.ceil(Math.max(document.body?document.body.scrollHeight:0,document.documentElement.scrollHeight));if(h&&Math.abs(h-last)>1){last=h;f.style.height=h+'px';}}new ResizeObserver(fit).observe(document.documentElement);if(document.body)new ResizeObserver(fit).observe(document.body);addEventListener('load',fit);setTimeout(fit,50);setTimeout(fit,600);})();<\/script>`;
         let html = this.template.replace('$1', () => escapeText(content));
-        html = html.replace(/<head>/i, m => m + boot).replace(/<\/body>/i, m => fit + m);
+        html = html.replace(/<head>/i, m => m + boot).replace(/<\/body>/i, m => (opts.fill ? '' : fit) + m);
+        if (opts.fill) { iframe.removeAttribute('scrolling'); iframe.style.cssText = 'width:100%;height:100%;border:0;display:block;background:transparent;'; iframe.className = 'zt-engine-frame'; iframe.title = '诸天系统引擎 · 楼 ' + id; }
         iframe.srcdoc = html;
         return iframe;
     }
     release(iframe) { const t = this.frames.get(iframe); if (t) { this.registry?.frames.delete(t); this.frames.delete(iframe); } }
     latestFrame() { const all = [...document.querySelectorAll('#chat .' + STATUSBAR_CLASS)]; return all.at(-1) || null; }
-    focusLatest() { const box = this.latestFrame(); if (!box) return false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.querySelector('button.zt-sb-history,.zt-sb-compact')?.click(); return true; }
+    focusLatest() { if (this.openHub) { this.openHub('ov'); return true; } const box = this.latestFrame(); if (!box) return false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.querySelector('button.zt-sb-history,.zt-sb-compact')?.click(); return true; }
     /** New-chat initialization using the ORIGINAL ensureSystemVars() of the status bar (same defaults, same schema). */
     async initializeChat() {
         if (!this.template) throw Error('原版状态栏模板未加载。');

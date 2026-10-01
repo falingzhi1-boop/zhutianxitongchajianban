@@ -17,11 +17,10 @@ export const VARIANTS = [
     { id: 'smug', label: '坏笑', file: 'smug.webp', mood: 'smug' },
     { id: 'sad', label: '委屈', file: 'sad.webp', mood: 'sad' },
 ];
-export const POSES = [
-    { id: 'pose-heart', label: '比心', file: 'pose-heart.webp' },
-    { id: 'pose-arms', label: '抱臂', file: 'pose-arms.webp' },
-    { id: 'pose-sit', label: '侧坐', file: 'pose-sit.webp' },
-];
+// 0.5.0: the three AI pose sheets (比心 / 抱臂 / 侧坐) were removed — they changed the original outfit. A retry with the
+// original full-body art as reference was refused by the image model, so no pose sheet ships; the original layered rig
+// (breath, wings, tail, hair, arm swing) provides body motion instead.
+export const POSES = [];
 // Heuristic mood -> model expression names (Cubism samples use f00…, many community models use words).
 const MOOD_HINTS = {
     neutral: /^(f00|normal|neutral|default|idle|平静|普通)/i, smile: /(smile|happy|joy|laugh|f01|f07|笑|开心)/i,

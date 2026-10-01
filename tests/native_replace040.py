@@ -58,6 +58,8 @@ def _boot(page):
         page.wait_for_timeout(500)
     page.wait_for_function(ready, timeout=90000)
     page.wait_for_function('!!globalThis.__zhutianApp', timeout=60000)
+    # 0.5.0 moved the engine into the terminal; this 0.4.0 regression suite drives the in-message bar, i.e. compatibility mode.
+    page.evaluate("__zhutianApp.settings.set('statusbar','native')"); page.wait_for_timeout(600)
 
 def connect_main_api(page):
     """Chat Completion → Custom (OpenAI-compatible) → mock, through the real ST connection UI."""

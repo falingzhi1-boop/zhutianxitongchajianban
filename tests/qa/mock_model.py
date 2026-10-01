@@ -50,7 +50,29 @@ def recorder_reply(allt):
     return json.dumps({'upserts': ups}, ensure_ascii=False)
 
 
+def group_reply(allt):
+    """诸天聊天群: answer as the listed members; the host's test phrases ask for a red packet / a gift / an over-grade item."""
+    names = re.findall(r'(?m)^- ([^（\n]+)（', allt)
+    names = [n for n in names if '禁言中' not in allt.split(f'- {n}（', 1)[1].split('\n', 1)[0]] or ['无名']
+    said = allt.rsplit('【宿主刚发】', 1)[-1] if '【宿主刚发】' in allt else ''
+    a, b = names[0], names[1 % len(names)]
+    out = [f'@{a}: 群主好！今天{("你那边" if said else "")}的剧情挺热闹啊。']
+    if '发红包' in said: out.append(f'@{a}: [红包] 系统点 3000 3 | 见者有份')
+    if '物品红包' in said: out.append(f'@{b}: [红包] 物品 青丘桃花酿/仙品/消耗品/饮后心神安宁 3 | 尝尝我们青丘的酒')
+    if '送礼' in said: out.append(f'@{b}: [赠礼] 太虚剑谱残卷/神品/功法/记载太虚剑意的前三式 | 这个你用得上')
+    if len(names) > 1: out.append(f'@{b}: 我在呢，有事说事。')
+    out.append('@不在群里的人: 这行必须被忽略')
+    return '\n'.join(out)
+
+
 def route(allt):
+    if '你是诸天万界聊天群的招募系统。' in allt:
+        if '青丘' in allt: return '白浅|青丘|4|清冷护短|青丘桃花酿'
+        return '叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗' if '叶清寒' not in allt.split('已有群员：', 1)[-1].split('（', 1)[0] else '苏小蛮|东海渔村|1|活泼话多|东海咸鱼干'
+    if '你是诸天万界聊天群的任务发布系统。' in allt: return '寻找失落剑谱|前往问剑宗后山寻回《太虚剑谱》残卷|5000 系统点'
+    if '你是诸天万界聊天群的群直播。' in allt: return '问剑宗山门前，数百弟子列阵练剑。\n剑光汇成一条银河，直冲云霄。\n掌门立于峰顶，目光望向镜头。'
+    if '你是诸天万界聊天群的群员私聊' in allt: return '（剑穗轻晃）群主找我何事？若是切磋，随时奉陪。'
+    if '你是诸天万界聊天群。' in allt: return group_reply(allt)
     if '回复两个字：成功' in allt: return '成功'
     if '你是诸天系统外挂世界书的事实记录员' in allt: return recorder_reply(allt)
     if '只返回JSON {"answer"' in allt or '只返回JSON{"answer"' in allt:

@@ -187,9 +187,9 @@ export class Features {
     mountHud() {
         const form = document.getElementById('send_form'); if (!form || this.hud) return;
         const hud = document.createElement('div'); hud.id = ID + '-hud'; hud.className = 'zt-hud'; hud.setAttribute('role', 'button'); hud.tabIndex = 0;
-        hud.title = '诸天账本速览 · 点击跳到最新状态栏';
+        hud.title = '诸天账本速览 · 点击打开诸天终端';
         form.parentElement.insertBefore(hud, form); this.hud = hud;
-        const go = () => { if (!this.app.statusbar?.focusLatest()) this.app.assistant?.open(); };
+        const go = () => this.app.openTerminal('ov');
         hud.addEventListener('click', go); hud.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
         this.refreshHud();
     }
@@ -205,9 +205,8 @@ export class Features {
         const fn = e => {
             if (!this.app.settings.get('hotkeys') || !e.altKey || e.ctrlKey || e.metaKey) return;
             const k = e.key.toLowerCase();
-            if (k === 'z') { e.preventDefault(); this.app.assistant?.open(); }
-            else if (k === 'x') { e.preventDefault(); this.app.openTerminal(); }
-            else if (k === 's') { e.preventDefault(); this.app.statusbar?.focusLatest(); }
+            if (k === 'z' || k === 'x') { e.preventDefault(); if (this.app.hub?.isOpen) this.app.hub.close(); else this.app.openTerminal(); }
+            else if (k === 's') { e.preventDefault(); this.app.openTerminal('ov'); }
         };
         document.addEventListener('keydown', fn); this.disposers.push(() => document.removeEventListener('keydown', fn));
     }
@@ -220,18 +219,19 @@ export class Features {
                 const [cmd, ...rest] = String(value || 'open').trim().split(/\s+/);
                 const f = app.features;
                 switch (cmd) {
-                    case 'open': app.assistant?.open(); return '';
-                    case 'terminal': app.openTerminal(); return '';
-                    case 'status': return app.statusbar?.focusLatest() ? '' : '当前聊天没有状态栏';
+                    case 'open': case 'terminal': app.openTerminal(rest[0]); return '';
+                    case 'status': app.openTerminal('ov'); return '';
+                    case 'shop': app.openTerminal('shop'); return '';
+                    case 'bag': app.openTerminal('bag'); return '';
                     case 'init': f.initChat().then(r => f.toast('success', r.created ? '已初始化诸天账本' : '账本已存在，已补齐缺失字段')).catch(e => f.toast('error', e.message)); return '';
                     case 'world': f.openWorldbook(); return '';
                     case 'backup': f.openMigration(); return '';
                     case 'diag': f.openDiagnostics(); return '';
                     case 'points': return String(ledgerSummary(app.adapter.variables())?.points ?? '');
                     case 'live2d': app.portrait?.setMode(rest[0] === 'off' ? 'rig' : 'live2d'); return '';
-                    default: return '用法：/zt open|terminal|status|init|world|backup|diag|points|live2d [off]';
+                    default: return '用法：/zt open [页面]|status|shop|bag|init|world|backup|diag|points|live2d [off]';
                 }
-            }, ['zhutian'], '<span class="monospace">/zt open|terminal|status|init|world|backup|diag|points|live2d</span> – 诸天 · 莉莉丝契约终端', true, true);
+            }, ['zhutian'], '<span class="monospace">/zt open [页面]|status|shop|bag|init|world|backup|diag|points|live2d</span> – 诸天终端', true, true);
         }
         if (!globalThis.__zhutianMacros && (typeof c.macros?.register === 'function' || typeof c.registerMacro === 'function')) {
             globalThis.__zhutianMacros = true;

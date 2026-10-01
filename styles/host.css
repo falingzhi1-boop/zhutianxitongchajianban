@@ -11,3 +11,11 @@
 .zt-popup{text-align:left;line-height:1.7}.zt-popup h3{margin:0 0 8px}.zt-popup fieldset{border:1px solid #8886;border-radius:8px;margin:10px 0;padding:8px 12px}.zt-popup label{display:inline-block;margin:4px 12px 4px 0}
 .zt-popup .text_pole{min-width:12em}.zt-popup-actions{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.zt-note{opacity:.75;font-size:.9em}.zt-out{min-height:1.4em;font-weight:600}
 .zt-table{width:100%;border-collapse:collapse;margin:6px 0}.zt-table td,.zt-table th{border-bottom:1px solid #8884;padding:4px 6px;text-align:left}
+
+/* 0.5.0 · terminal mode: a data block leaves only this chip in the story */
+.zt-floor-tag-box{margin:6px 0 2px}
+.zt-floor-tag{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 10px;max-width:100%;padding:4px 12px;border-radius:999px;border:1px solid rgba(185,134,211,.35);background:rgba(155,111,199,.10);color:inherit;font:12px/1.6 inherit;cursor:pointer;opacity:.82;transition:opacity .15s,background .15s}
+.zt-floor-tag:hover,.zt-floor-tag:focus-visible{opacity:1;background:rgba(155,111,199,.2)}
+.zt-floor-tag-mark{color:#c59bee}
+.zt-floor-tag-v{opacity:.75;max-width:16em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zt-floor-tag-go{opacity:.6}

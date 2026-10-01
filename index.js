@@ -1,6 +1,8 @@
 import original from './vendor/original/runtime.js';
 import {HostAdapter} from './src/host-adapter.js';
-import {Terminal} from './src/terminal.js';
+import {Hub} from './src/hub.js';
+import {HubSettings} from './src/hub-settings.js';
+import {HubPlugins} from './src/hub-plugins.js';
 import {ID, VERSION} from './src/contracts.js';
 import {hooksSupported, fetchHostVersion} from './src/compat.js';
 import {Settings} from './src/settings.js';
@@ -29,42 +31,28 @@ class App {
         this.settings=new Settings(a);
         this.bridge=new Bridge(a,this.settings);this.parts.push(this.bridge);
         a.statusbarActive=()=>!!this.statusbar?.active;
-        this.terminal=new Terminal(a,original,base);this.terminal.mount();this.parts.push(this.terminal);
-        const syncLauncher=()=>{if(this.terminal.launcher)this.terminal.launcher.hidden=!this.settings.get('terminalLauncher')&&!!this.assistant;};
         this.macros=new MacroLikeHost(a,this.settings);try{this.macros.start();this.parts.push(this.macros);}catch(e){console.warn('[诸天] 变量宏未启动',e);}
         const V=original.ZhuTianLilithVoice,voiceKit=V?{cardStyle:V.cardStyle,labelStyle:V.labelStyle,avatarStyle:V.avatarStyle,decorate:V.decorate,avatars:original.ZhuTianLilithAvatars}:null;
         this.takeover=new Takeover(a,this.settings);
         try{this.statusbar=new StatusBarHost(a,this.bridge,this.settings,base,{macros:this.macros,voice:voiceKit});await this.statusbar.start();this.parts.push(this.statusbar);}
         catch(e){this.statusbarError=e.message;console.error('[诸天] 原生状态栏未启动',e);this.statusbar=null;}
         if(this.settings.get('assistant')){
-            try{this.assistant=new AssistantHost({adapter:a,bridge:this.bridge,original,settings:this.settings,openTerminal:()=>this.openTerminal()}).start();this.parts.push(this.assistant);}
+            try{this.assistant=new AssistantHost({adapter:a,bridge:this.bridge,original,settings:this.settings,openTerminal:p=>this.openTerminal(p)}).start();this.parts.push(this.assistant);}
             catch(e){this.assistantError=e.message;this.assistant=null;console.warn('[诸天] 莉莉丝助手未启动：',e.message);globalThis.toastr?.warning(e.message,'诸天 · 莉莉丝');}
         }
-        syncLauncher();
-        if(this.assistant){
-            // Lilith's entry is draggable and dodges the send form, so a fixed CSS spot for the optional terminal launcher collides with it.
-            // Keep the launcher docked just above wherever the entry currently sits.
-            const dock=()=>{const l=this.terminal.launcher;if(!l||l.hidden)return;const e=this.assistant.shadow?.getElementById('entry');if(!e)return;
-                const r=e.getBoundingClientRect();if(!r.width)return;const h=l.offsetHeight||56;
-                const top=r.top-h-10>=8?r.top-h-10:Math.min(innerHeight-h-8,r.bottom+10);l.style.top=Math.round(top)+'px';l.style.left=Math.round(Math.max(8,r.left))+'px';l.style.bottom='auto';};
-            const t=setInterval(dock,600);addEventListener('resize',dock);dock();
-            this.launcherDock={dock,dispose(){clearInterval(t);removeEventListener('resize',dock);}};this.parts.push(this.launcherDock);
-        }
+        // 0.5.0: ONE window. The Lilith window is the shell; the hub adds every system page into it.
+        this.hubSettings=new HubSettings(this);
+        try{this.hub=new Hub(this).start();this.parts.push(this.hub);}catch(e){this.hubError=e.message;console.error('[诸天] 终端未启动',e);}
+        try{this.plugins=new HubPlugins(this).start();this.parts.push(this.plugins);}catch(e){console.warn('[诸天] 外挂管理未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
         try{await this.portrait.start();}catch(e){console.warn('[诸天] 立绘模式回退到原版分层动画：',e.message);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
-        this.settings.onChange(k=>{if(k==='terminalLauncher'){syncLauncher();this.launcherDock?.dock();}if(k==='assistant')globalThis.toastr?.info('刷新页面后生效','诸天');});
-        this.settings.mountDrawer({
-            open:()=>this.assistant?this.assistant.open():this.openTerminal(),terminal:()=>this.openTerminal(),live2d:()=>this.portrait.openSettings(),
-            api:()=>this.openApiCenter(),takeover:()=>this.runTakeover(),restore:()=>this.restoreLegacy(),
-            worldbook:()=>this.features.openWorldbook(),migrate:()=>this.features.openMigration(),diagnose:()=>this.features.openDiagnostics(),
-            init:()=>this.features.initChat().then(r=>globalThis.toastr?.success(r.created?`已按原版规则初始化账本（系统点 ${r.points}）`:'账本已存在；已按原版规则补齐缺失字段','诸天')).catch(e=>globalThis.toastr?.error(e.message,'诸天')),
-        });
+        this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
         globalThis.__zhutianApp=this;
     }
-    openTerminal(){this.terminal?.open();}
+    openTerminal(page){if(this.hub)this.hub.open(page);else this.assistant?.open();}
     openApiCenter(){return openApiCenter({bridge:this.bridge,ns:original.ZhuTianMemoryCore?.NS,notify:()=>this.adapter.notify?.()});}
     async runTakeover(){
         const t=globalThis.toastr,list=this.takeover.pending();

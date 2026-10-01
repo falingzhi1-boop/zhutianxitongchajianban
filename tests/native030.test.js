@@ -107,8 +107,9 @@ test('PSD encoder: valid header, layer count, Unicode names, composite', async (
 
 test('version is consistent across manifest, package.json, package-lock and contracts', () => {
     const m = json('manifest.json'), p = json('package.json'), l = json('package-lock.json');
-    assert.equal(VERSION, '0.4.0');
+    assert.match(VERSION, /^\d+\.\d+\.\d+$/);
     assert.equal(m.version, VERSION); assert.equal(p.version, VERSION); assert.equal(l.version, VERSION); assert.equal(l.packages[''].version, VERSION);
     assert.equal(m.minimum_client_version, HOST_MIN);
-    assert.ok(readFileSync(new URL('docs/CHANGES-0.4.0.md', root), 'utf8').includes('0.4.0'));
+    assert.ok(readFileSync(new URL(`docs/CHANGES-${VERSION}.md`, root), 'utf8').includes(VERSION));
+    assert.ok(readFileSync(new URL(`docs/ACCEPTANCE-${VERSION}.md`, root), 'utf8').includes(VERSION));
 });

@@ -21,11 +21,11 @@ with sync_playwright() as p:
  page.add_init_script('window.__ztTestBase='+json.dumps('/scripts/extensions/third-party/'+args.extension_folder))
  page.goto(args.base_url.rstrip('/')+'/')
  page.wait_for_function("typeof SillyTavern !== 'undefined' && SillyTavern.getContext().eventSource.autoFireLastArgs.has(SillyTavern.getContext().eventTypes.APP_READY)",timeout=60000)
- page.evaluate("async()=>{let c=SillyTavern.getContext();await c.selectCharacterById(c.characters.findIndex(x=>x.name==='莉莉丝 · 隔离验收'));const {HostAdapter}=await import(window.__ztTestBase+'/src/host-adapter.js');const {default:original}=await import(window.__ztTestBase+'/vendor/original/runtime.js');window.__qaAdapter=new HostAdapter(original);await __qaAdapter.start();}")
+ page.evaluate("async()=>{let c=SillyTavern.getContext();const i=c.characters.findIndex(x=>x.name==='莉莉丝 · 隔离验收');await c.selectCharacterById(i>=0?i:c.characters.findIndex(x=>x.name==='莉莉丝 · 诸天验收'));const {HostAdapter}=await import(window.__ztTestBase+'/src/host-adapter.js');const {default:original}=await import(window.__ztTestBase+'/vendor/original/runtime.js');window.__qaAdapter=new HostAdapter(original);await __qaAdapter.start();}")
  def run(expr):return page.evaluate(expr)
  # Block attachments: native attachment input contains a real File, but no upload/send is allowed.
  page.locator('#file_form_input').set_input_files({'name':'isolated-test.txt','mimeType':'text/plain','buffer':b'ISOLATED TEST FILE - MUST NOT UPLOAD'})
- attachment=run("async()=>{let n=SillyTavern.getContext().chat.length;try{await __qaAdapter.send(__qaAdapter.draft('莉莉丝','附件阻断测试'));return {blocked:false};}catch(e){return {blocked:e.message.includes('附件'),unchanged:n===SillyTavern.getContext().chat.length};}}")
+ attachment=run("async()=>{let n=SillyTavern.getContext().chat.length;try{await __qaAdapter.send(__qaAdapter.draft('莉莉丝','附件阻断测试'));return {blocked:false};}catch(e){return {blocked:e.message.includes('附件'),unchanged:n===SillyTavern.getContext().chat.length,...(e.message.includes('附件')?{}:{why:e.message})};}}")
  assert attachment=={'blocked':True,'unchanged':True},attachment
  page.locator('#file_form_input').set_input_files([])
  # A genuine host edit event invalidates a previous draft even when the final message has not changed.

@@ -250,7 +250,7 @@ export class Bridge {
     }
 
     /** API exposed to status-bar iframes. `messageId` is the floor that hosts the iframe. */
-    frameApi(messageId) {
+    frameApi(messageId, lastId) {
         const self = this;
         return {
             getVariables: o => self.getVariables(o),
@@ -258,7 +258,7 @@ export class Bridge {
             updateVariablesWith: (fn, o) => self.updateVariablesWith(fn, o),
             insertOrAssignVariables: (v, o) => self.insertOrAssignVariables(v, o),
             getCurrentMessageId: () => messageId(),
-            getLastMessageId: () => self.getLastMessageId(),
+            getLastMessageId: () => (typeof lastId === 'function' ? lastId() : self.getLastMessageId()),
             generateRaw: o => self.generateRaw(o),
             listModels: (u, k) => self.listModels(u, k),
         };
