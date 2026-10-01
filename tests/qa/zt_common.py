@@ -77,3 +77,10 @@ def setup_chat(page):
     }''', floors)
     page.wait_for_timeout(3000)
 
+
+
+def open_chat(page):
+    """Re-open the fixture character's existing chat (after a reload) without resetting it."""
+    page.evaluate('''async name=>{const c=SillyTavern.getContext(); const i=c.characters.findIndex(x=>x.name===name); if(i>=0 && c.name2!==name) await c.selectCharacterById(i);}''', CARD)
+    page.wait_for_function(f"SillyTavern.getContext().name2==={json.dumps(CARD)} && SillyTavern.getContext().chat.length>1", timeout=30000)
+    page.wait_for_timeout(2000)

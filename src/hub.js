@@ -7,6 +7,7 @@
 // Bridge, bound to the latest floor that carries a <ZhuTianPanel> block.
 import { ID, VERSION, STORAGE } from './contracts.js';
 import { hash } from './statusbar-host.js';
+import { shopLevel } from './ledger-ops.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const fmtNum = x => { const n = Number(x); return Number.isFinite(n) ? n.toLocaleString('zh-CN') : '—'; };
@@ -148,7 +149,7 @@ export class Hub {
         $('zt-top-pts').textContent = l ? fmtNum(l.系统点) : '—';
         const r = l?.专属资源 && typeof l.专属资源 === 'object' ? l.专属资源 : {};
         $('zt-top-res').innerHTML = RES_KEYS.map(k => `<span title="${k}"><small>${k}</small><b>${fmtNum(r[k] ?? 0)}</b></span>`).join('');
-        $('zt-top-shop').textContent = l?.商城等级 ? 'Lv.' + l.商城等级 : 'Lv.1';
+        $('zt-top-shop').textContent = 'Lv.' + shopLevel(l);
         this.onTop?.(l);
     }
 

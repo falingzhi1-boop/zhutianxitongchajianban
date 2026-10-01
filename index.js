@@ -3,6 +3,7 @@ import {HostAdapter} from './src/host-adapter.js';
 import {Hub} from './src/hub.js';
 import {HubSettings} from './src/hub-settings.js';
 import {HubPlugins} from './src/hub-plugins.js';
+import {HubGroup} from './src/hub-group.js';
 import {ID, VERSION} from './src/contracts.js';
 import {hooksSupported, fetchHostVersion} from './src/compat.js';
 import {Settings} from './src/settings.js';
@@ -44,6 +45,7 @@ class App {
         this.hubSettings=new HubSettings(this);
         try{this.hub=new Hub(this).start();this.parts.push(this.hub);}catch(e){this.hubError=e.message;console.error('[诸天] 终端未启动',e);}
         try{this.plugins=new HubPlugins(this).start();this.parts.push(this.plugins);}catch(e){console.warn('[诸天] 外挂管理未启动',e);}
+        try{this.group=new HubGroup(this).start();this.parts.push(this.group);}catch(e){console.warn('[诸天] 聊天群未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);

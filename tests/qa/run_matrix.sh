@@ -16,6 +16,8 @@ for v in $VERSIONS; do
   echo "== $v ($(curl -s http://127.0.0.1:$port/version | python3 -c 'import sys,json;print(json.load(sys.stdin)["gitRevision"])'))"
   timeout 900 python3 tests/native_terminal050.py --isolated-test-only --base-url "http://127.0.0.1:$port" --shots "$OUT/shots050-$v" > "$OUT/terminal050-$v.log" 2>&1
   echo "   native_terminal050: $(tail -n 1 "$OUT/terminal050-$v.log")"; grep '^FAIL' "$OUT/terminal050-$v.log" | sed 's/^/     /'
+  timeout 900 python3 tests/native_group060.py --isolated-test-only --base-url "http://127.0.0.1:$port" --shots "$OUT/shots060-$v" > "$OUT/group060-$v.log" 2>&1
+  echo "   native_group060: $(tail -n 1 "$OUT/group060-$v.log")"; grep '^FAIL' "$OUT/group060-$v.log" | sed 's/^/     /'
   timeout 900 python3 tests/native_replace040.py --isolated-test-only --base-url "http://127.0.0.1:$port" --legacy-dir "$LEGACY" --shots "$OUT/shots-$v" > "$OUT/replace040-$v.log" 2>&1
   echo "   native_replace040: $(tail -n 1 "$OUT/replace040-$v.log")"; grep '^FAIL' "$OUT/replace040-$v.log" | sed 's/^/     /'
   for t in native_guards; do
