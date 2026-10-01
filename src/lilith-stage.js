@@ -108,7 +108,9 @@ export class LilithStage {
     stageVisible(st = this.stage()) { return !!(st && typeof st.speak === 'function' && st.frame?.isConnected && st.frame.getClientRects().length); }
     /** Original speak(zone) for motion + expression, then our text in the original bubble (kept long enough to read). */
     speakText(text, zone = 'chest', { story = false } = {}) {
-        const st = this.stage(); if (!this.stageVisible(st)) return false;
+        const st = this.stage();
+        // 0.8.2: portrait not visible (phone layout, small window, terminal closed) → the floating Lilith says it.
+        if (!this.stageVisible(st)) return !!this.app.float?.say?.(text, { zone });
         try {
             st.speak(zone);
             if (st.bubble) st.bubble.textContent = text;
@@ -129,6 +131,7 @@ export class LilithStage {
         this.heard = key;
         if (!this.cfg.story) return;
         if (this.app.hub?.isOpen && this.broadcast(text)) return;
+        if (this.app.float?.say?.(clip(text, 90), { zone: 'chest' })) return;   // 0.8.2: phones — she says it right away
         this.unheard = text;                       // terminal closed: say it the next time it opens
     }
     broadcast(text) {

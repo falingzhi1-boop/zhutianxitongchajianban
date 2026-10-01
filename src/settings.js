@@ -19,6 +19,10 @@ const DEFAULTS = Object.freeze({
     promptStripPanels: true,     // original "旧楼层不发给AI": status blocks of older floors are removed from the prompt
     promptPanelKeepDepth: 2,     // original minDepth 2: the two newest floors keep their panel in the prompt
     worldbookAuto: true,         // install + bind the 诸天 worldbook on 诸天 chats (never overwrites, skips if already active)
+    wbUnbindOnDisable: true,     // 0.8.2: disabling the extension (1.17+ hook) unbinds the 诸天 worldbook from cards / global / open chat
+    wbUnbound: null,             // 0.8.2: what the last unbind removed (for 恢复绑定)
+    floatLilith: 'auto',         // 0.8.2: floating Lilith portrait — auto (phones / touch) | on | off
+    floatPos: null,              // 0.8.2: {x, y, edge, tucked} of the floating portrait
     macroLike: true,             // {{get_chat_variable::…}} for the worldbook without Tavern Helper
     touchGestures: true,         // stroke / long-press / touch look on the Lilith portrait
     haptics: true,               // vibration feedback for touch gestures (phones that support it)
