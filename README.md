@@ -66,6 +66,10 @@ https://github.com/falingzhi1-boop/zhutianxitongchajianban
 - 请勿同时安装旧的 `zhutian-covenant-terminal` 手动副本和这个 Git 仓库副本。
 - **“扩展可以安装”不等于“全部原版功能已经迁完”。** Git 安装验收的具体结果以 `docs/INSTALL_ACCEPTANCE.md` 为准。
 
+### 已安装时如何更新
+
+在酒馆里打开「扩展 → 管理扩展」，找到「诸天 · 莉莉丝契约终端」，点这一行的更新按钮；提示更新完成后再刷新酒馆网页。只刷新网页不会下载 GitHub 新代码。首次从旧版更新到包含 `auto_update: true` 的版本时，仍需手动更新一次；之后可以开启酒馆的「通知扩展更新」。如果管理界面没有显示 Git 分支和提交号，请确认当初是用上面的仓库地址安装，而不是复制文件夹或导入 ZIP。
+
 ## 0.8.4
 
 完整变更见 [CHANGES-0.8.4](docs/CHANGES-0.8.4.md)，验收结果见 [ACCEPTANCE-0.8.4](docs/ACCEPTANCE-0.8.4.md)。
