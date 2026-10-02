@@ -71,6 +71,8 @@ export class HubSettings {
             ] },
             { title: '兼容与维护', items: [
                 act('diagnose', '兼容诊断…'),
+                act('copy-diag', '复制诊断信息', '版本、设备、设置和最近的报错，反馈问题时直接粘贴。不含 API Key 和聊天内容。'),
+                act('selftest', '手机真机自检…', '在手机上一步步检查全屏、各页面、键盘、私聊、横屏和返回键，大约 2 分钟；结果可以一键复制。'),
                 act('takeover', '一键接管旧版', '停用（不删除）旧正则与旧酒馆助手脚本。'),
                 act('restore', '恢复旧版', '', 'danger'),
             ] },
@@ -108,6 +110,8 @@ export class HubSettings {
             api: () => app.openApiCenter(), 'go-api': () => app.hub.go('api'), live2d: () => app.portrait?.openSettings(),
             takeover: () => app.runTakeover(), restore: () => app.restoreLegacy(),
             'fx-preview': () => app.fx?.preview(),
+            'copy-diag': () => app.features.copyDiagnostics(),
+            selftest: () => app.deviceCheck?.run(),
             admin: () => app.hub.openAdmin(),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(e.message, '诸天')),
         };

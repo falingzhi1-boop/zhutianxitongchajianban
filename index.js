@@ -24,6 +24,8 @@ import {LilithStage} from './src/lilith-stage.js';
 import {SkillSync} from './src/skill-sync.js';
 import {LilithFloat} from './src/lilith-float.js';
 import {MobileLayout} from './src/mobile.js';
+import {ErrorLog} from './src/diag-report.js';
+import {DeviceCheck} from './src/device-check.js';
 import {unbindAll} from './src/wb-unbind.js';
 import {WORLD_NAME} from './src/features.js';
 
@@ -38,6 +40,8 @@ class App {
     constructor(adapter){this.adapter=adapter;this.original=original;this.base=base;this.parts=[];}
     async start(){
         const a=this.adapter;
+        // 0.9.1: remember the last plugin errors for 复制诊断信息 (first, so start-up failures are caught too)
+        try{this.errorLog=new ErrorLog(base).start();this.parts.push(this.errorLog);}catch(e){console.warn('[诸天] 报错记录未启动',e);}
         this.settings=new Settings(a);
         this.bridge=new Bridge(a,this.settings);this.parts.push(this.bridge);
         a.statusbarActive=()=>!!this.statusbar?.active;
@@ -70,6 +74,8 @@ class App {
         // 0.8.2: phones never show the portrait inside the window — Lilith floats on the page instead (and speaks there).
         try{this.float=new LilithFloat(this).start();this.parts.push(this.float);}catch(e){console.warn('[诸天] 悬浮莉莉丝未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
+        // 0.9.1: 手机真机自检 (runs only when the user starts it)
+        this.deviceCheck=new DeviceCheck(this);this.parts.push(this.deviceCheck);
         // 0.8.4: one API setting — the terminal's 连接 page shows the API 中心 form (the original v1.1 form wrote only Lilith's copy).
         if(this.hub)this.hub.hook('onPage',p=>{if(p==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}});
         if(this.statusbar)this.statusbar.openApi=()=>this.openApiCenter();

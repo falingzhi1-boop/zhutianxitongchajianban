@@ -1,0 +1,17 @@
+# 0.9.1: one line ending everywhere. Text files are LF in the repository AND in every checkout (also on Windows with
+# core.autocrlf=true), so FILELIST.sha256 matches what users install and diffs never show whole-file changes.
+* text=auto eol=lf
+# byte-for-byte originals: never touch (provenance hashes in vendor/original/*provenance.json)
+vendor/** -text -diff
+# binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.psd binary
+*.moc3 binary
+*.zip binary
+*.woff binary
+*.woff2 binary

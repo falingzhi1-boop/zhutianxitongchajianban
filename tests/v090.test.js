@@ -117,12 +117,11 @@ test('capabilities list 手机端适配 and say it is not tested on real phones'
     assert.ok(c && c.state === 'implemented'); assert.match(c.scope, /未在真机上测试/);
 });
 
-test('version 0.9.0 everywhere', () => {
-    const v = '0.9.0';
-    assert.equal(VERSION, v);
+test('version ≥ 0.9.0 and consistent everywhere (exact value pinned in tests/version.test.js)', () => {
+    const v = VERSION;
+    assert.match(v, /^(?:0\.9\.\d+|0\.(?:[1-9]\d+)\.\d+|[1-9]\d*\.\d+\.\d+)$/);
     assert.equal(JSON.parse(read('manifest.json')).version, v);
     assert.equal(JSON.parse(read('package.json')).version, v);
     const lock = JSON.parse(read('package-lock.json')); assert.equal(lock.version, v); assert.equal(lock.packages[''].version, v);
-    assert.ok(read('README.md').includes(v)); assert.ok(read('docs/FEATURE_MATRIX.md').includes(v));
-    assert.ok(read('docs/CHANGES-0.9.0.md').includes(v));
+    assert.ok(read('docs/CHANGES-0.9.0.md').includes('0.9.0'));
 });

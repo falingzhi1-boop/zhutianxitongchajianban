@@ -1,0 +1,37 @@
+# 0.9.1: static gates on every push / pull request (about a minute). The browser suites (tests/native_*.py) need a
+# throwaway SillyTavern and stay manual — see tests/qa/run_matrix.sh.
+name: check
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - name: syntax + byte-for-byte originals
+        run: npm run check
+      - name: unit tests
+        run: npm test
+      - name: FILELIST.sha256 is up to date
+        run: npm run filelist:check
+      - name: no line-ending drift (CR characters in text files)
+        run: |
+          bad=$(git ls-files --eol | awk '$1 ~ /crlf|mixed/ || $2 ~ /crlf|mixed/ {print $NF}')
+          if [ -n "$bad" ]; then echo "CRLF found:"; echo "$bad"; exit 1; fi
+      - name: no secrets
+        run: |
+          if git grep -nIE '(sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY)' -- . ':!package-lock.json' ':!tests/*'; then
+            echo "something that looks like a key is committed"; exit 1; fi

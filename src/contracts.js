@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.9.0';
+export const VERSION = '0.9.1';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -81,4 +81,6 @@ export const CAPABILITIES = [
     {name:'账本核验引导',state:'implemented',scope:'0.8.5：记忆页「立即核验最新正文」下方说明用途与前提；未开启时高亮「在当前聊天启用助手与记忆注入」「莉莉丝监管账本与奖励」「保存当前聊天设置」并给出白话提示，替换原版“请先启用当前聊天与账本核验；未写入。”。原版检查逻辑不变。'},
     {name:'生成状态自愈（手机状态栏不渲染修复）',state:'implemented',scope:'0.8.5：漏掉生成结束事件时（手机切后台、思考模型等），本次生成中出现过的酒馆停止按钮一旦隐藏，过期的“正在生成”自动清除（从未出现过则不解锁，发送锁不变），最后一层照常渲染；停止按钮消失时主动重扫；兼容诊断显示最新楼层是否已渲染并可一键重新渲染。'},
     {name:'手机端适配',state:'implemented',scope:'0.9.0：手机上终端全屏（竖屏顶部导航、横屏左侧导航栏），窗口跟随输入法键盘变矮、输入框不被挡住，安全区留白；私聊同样全屏；点按目标放大、输入框 16px 防止 iOS 放大页面；浮动莉莉丝在终端打开时停在下角、点台词即收起；手机会话不再覆盖电脑上记住的窗口大小。设置 → 手机上的终端与私聊窗口（自动 / 总是全屏 / 浮动窗口）。仅 Playwright 触摸模拟验收，未在真机上测试'},
+    {name:'复制诊断信息',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 / 兼容诊断 / /zt copydiag：插件与酒馆版本、设备与屏幕、手机布局、宿主接口、状态栏与最新楼层、AI 接口（只有域名和模型名）、插件设置（白名单）、上次真机自检和最近 30 条插件报错；不含 API Key、脚本变量、聊天内容，输出前再统一脱敏；手机上非 HTTPS 时用备用复制方式，仍不行就显示文本框手动复制'},
+    {name:'手机真机自检',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 → 手机真机自检（或 /zt selftest）：在用户自己的手机上逐步检查全屏、全部终端页面、聊天群与私聊的键盘、悬浮莉莉丝、横屏、返回键，需要操作的步骤可跳过；不写账本和聊天；结果保存在设置里并可一键复制。键盘检测新增整页缩放的 WebView。仅在 Chromium 手机模拟中验收，尚未收到真机结果'},
 ];

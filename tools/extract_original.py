@@ -10,10 +10,10 @@ import re, json, hashlib, sys
 
 root = Path(__file__).resolve().parents[1]
 folder = root / 'vendor/original'
-provenance = json.loads((folder / 'provenance.json').read_text())
+provenance = json.loads((folder / 'provenance.json').read_text(encoding='utf-8'))
 for name, digest in provenance['sourceHashes'].items():
     assert hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest, 'Baseline changed: ' + name
-source = (folder / 'assistant-v1.1.js').read_text()
+source = (folder / 'assistant-v1.1.js').read_text(encoding='utf-8')
 starts = [m.start() for m in re.finditer(r'^/\*', source, re.M)] + [len(source)]
 assert len(starts) == 17, 'Unexpected source section structure; manual review required'
 parts = [source[a:b] for a, b in zip(starts, starts[1:])]
@@ -21,7 +21,7 @@ parts = [source[a:b] for a, b in zip(starts, starts[1:])]
 prefix = '// Original pure modules, private scope; host adapter deliberately excluded.\nconst platformAtob = globalThis.atob.bind(globalThis);\nconst original = (() => {\nconst globalThis = { atob: platformAtob };\n'
 suffix = '\nreturn globalThis;\n})();\nexport default original;\n'
 output = prefix + '\n'.join(parts[i] for i in provenance['sectionIndices']) + suffix
-(folder / 'runtime.js').write_text(output)
+(folder / 'runtime.js').write_text(output, encoding='utf-8', newline='\n')
 print('Rebuilt runtime:', len(output.encode()), 'bytes; old Tavern Helper adapter excluded.')
 
 assistant = provenance.get('assistantSectionIndices', [5, 6, 7, 15])
@@ -35,7 +35,7 @@ a_prefix = ('// Original Lilith window + connection + workbench + v1.1 host adap
             "const setTimeout = typeof env.setTimeout === 'function' ? env.setTimeout : window.setTimeout;\n")
 a_suffix = '\n}\n'
 a_output = a_prefix + '\n'.join(parts[i] for i in assistant) + a_suffix
-(folder / 'assistant-runtime.js').write_text(a_output)
+(folder / 'assistant-runtime.js').write_text(a_output, encoding='utf-8', newline='\n')
 print('Rebuilt assistant runtime:', len(a_output.encode()), 'bytes; sha256', hashlib.sha256(a_output.encode()).hexdigest())
 if '--check' in sys.argv:
     assert hashlib.sha256(output.encode()).hexdigest() == provenance['runtimeSha256'], 'runtime.js drifted'

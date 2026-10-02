@@ -45,6 +45,16 @@ function clearBox(el) {
     el.removeAttribute('data-zt-mobile'); el.removeAttribute('data-zt-kb');
     for (const v of ['--zt-vvh', '--zt-vvw', '--zt-vvt', '--zt-vvl']) el.style?.removeProperty(v);
 }
+/** Is the on-screen keyboard up? (pure, for tests) Two ways phones show it:
+ *   * the visual viewport shrinks, the layout viewport stays (Chrome ≥ 108, Safari): kb = hidden height;
+ *   * the whole page is resized (older Android WebViews, interactive-widget=resizes-content): innerHeight itself drops,
+ *     so kb stays 0 — then a focused text field plus a page at least 120 px shorter than the tallest seen in this
+ *     orientation means the keyboard. Returns 'visual' | 'resize' | ''. */
+export function keyboardState({ kb = 0, innerH = 0, fullH = 0, typing = false } = {}) {
+    if (kb > 120) return 'visual';
+    if (typing && fullH - innerH > 120) return 'resize';
+    return '';
+}
 const TEXT_INPUT = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=file]):not([type=color]),textarea,select,[contenteditable=true]';
 export const MOBILE_LAYOUTS = Object.freeze([['auto', '自动：手机上全屏（推荐）'], ['full', '总是全屏'], ['window', '浮动窗口（0.8.5 及以前的样子）']]);
 
@@ -69,13 +79,14 @@ export class MobileLayout {
         }
         const sh = hub?.shadow;
         // keyboard: once it is up, bring the focused field into view inside its own scroll box
-        this.on(sh, 'focusin', e => this.reveal(e.composedPath?.()[0] || e.target));
+        this.on(sh, 'focusin', e => { this.reveal(e.composedPath?.()[0] || e.target); this.schedule(); });
+        this.on(sh, 'focusout', () => setTimeout(() => this.schedule(), 60));
         // a scroll inside the terminal hides Lilith's line so it never sits on top of what you are reading
         this.on(sh, 'scroll', () => { if (this.full && this.app.float?.speaking) this.app.float.quiet(); }, { capture: true, passive: true });
         this.apply();
         return this;
     }
-    schedule() { if (this.raf) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.apply(); }); }
+    schedule() { if (this.raf || this.dead) return; this.raf = requestAnimationFrame(() => { this.raf = 0; this.apply(); }); }
     apply() {
         const d = this.dialog; if (!d) return;
         let coarse = false; try { coarse = matchMedia('(pointer: coarse)').matches; } catch { /* ignore */ }
@@ -89,7 +100,10 @@ export class MobileLayout {
         this.mode = mode;
         if (d.dataset.ztMobile !== mode) d.dataset.ztMobile = mode;
         if (host && host.getAttribute('data-zt-mobile') !== mode) host.setAttribute('data-zt-mobile', mode);
-        const kb = box.kb > 120 ? 'open' : '';
+        // tallest layout height seen at this width (a rotation or a resized window starts over)
+        if (this.fullW !== innerWidth) { this.fullW = innerWidth; this.fullH = innerHeight; } else this.fullH = Math.max(this.fullH || 0, innerHeight);
+        this.kbMode = keyboardState({ kb: box.kb, innerH: innerHeight, fullH: this.fullH, typing: this.typing() });
+        const kb = this.kbMode ? 'open' : '';
         if ((d.dataset.ztKb || '') !== kb) { if (kb) d.dataset.ztKb = kb; else delete d.dataset.ztKb; }
         if (host && (host.getAttribute('data-zt-kb') || '') !== kb) { if (kb) host.setAttribute('data-zt-kb', kb); else host.removeAttribute('data-zt-kb'); }
         // the same numbers on the dialog (terminal) and on the shadow host (private chat #lc-panel lives in that shadow)
@@ -107,6 +121,10 @@ export class MobileLayout {
         if (this.mode === 'land') { const box = nav.closest('.sidebar') || nav, s = box.getBoundingClientRect(); if (r.top < s.top || r.bottom > s.bottom) box.scrollTop += r.top - s.top - (s.height - r.height) / 2; }
         else if (r.left < n.left || r.right > n.right) nav.scrollLeft += r.left - n.left - (n.width - r.width) / 2;
     }
+    /** A text field inside the terminal / private chat has the focus. */
+    typing() {
+        try { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return !!a?.matches?.(TEXT_INPUT); } catch { return false; }
+    }
     reveal(el) {
         if (!this.full || !el?.matches?.(TEXT_INPUT)) return;
         clearTimeout(this.revealT);
@@ -114,7 +132,7 @@ export class MobileLayout {
         this.revealT = setTimeout(() => { try { if (el.isConnected && el.getRootNode()?.activeElement === el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { /* ignore */ } }, 420);
     }
     dispose() {
-        clearTimeout(this.revealT); if (this.raf) cancelAnimationFrame(this.raf);
+        this.dead = true; clearTimeout(this.revealT); if (this.raf) cancelAnimationFrame(this.raf);
         this.disposers.splice(0).forEach(f => { try { f(); } catch { /* ignore */ } });
         clearBox(this.dialog); clearBox(this.app.hub?.shadow?.host);
         this.mode = '';
