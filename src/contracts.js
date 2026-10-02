@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.9.1';
+export const VERSION = '0.9.2';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -83,4 +83,5 @@ export const CAPABILITIES = [
     {name:'手机端适配',state:'implemented',scope:'0.9.0：手机上终端全屏（竖屏顶部导航、横屏左侧导航栏），窗口跟随输入法键盘变矮、输入框不被挡住，安全区留白；私聊同样全屏；点按目标放大、输入框 16px 防止 iOS 放大页面；浮动莉莉丝在终端打开时停在下角、点台词即收起；手机会话不再覆盖电脑上记住的窗口大小。设置 → 手机上的终端与私聊窗口（自动 / 总是全屏 / 浮动窗口）。仅 Playwright 触摸模拟验收，未在真机上测试'},
     {name:'复制诊断信息',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 / 兼容诊断 / /zt copydiag：插件与酒馆版本、设备与屏幕、手机布局、宿主接口、状态栏与最新楼层、AI 接口（只有域名和模型名）、插件设置（白名单）、上次真机自检和最近 30 条插件报错；不含 API Key、脚本变量、聊天内容，输出前再统一脱敏；手机上非 HTTPS 时用备用复制方式，仍不行就显示文本框手动复制'},
     {name:'手机真机自检',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 → 手机真机自检（或 /zt selftest）：在用户自己的手机上逐步检查全屏、全部终端页面、聊天群与私聊的键盘、悬浮莉莉丝、横屏、返回键，需要操作的步骤可跳过；不写账本和聊天；结果保存在设置里并可一键复制。键盘检测新增整页缩放的 WebView。仅在 Chromium 手机模拟中验收，尚未收到真机结果'},
+    {name:'楼层美化不重复',state:'implemented',scope:'0.9.2：别的扩展（关键词高亮等）先改过的段落、或变量扩展在酒馆画完后又改了消息时，【莉莉丝】台词不再出现“原文 + 语音框”两份，<ZhuTianPanel> 的 系统点 / 好感度 原文不再露在楼层里；代码块（角色卡前端状态栏）里的 莉莉丝：… 不再被改成语音框。iframe 前端卡与原地美化照常保留。真机待复测'},
 ];

@@ -12,16 +12,26 @@ export const voiceRegex = () => new RegExp(VOICE_SOURCE, VOICE_FLAGS);
 export const VOICE_SLOT = i => `ZTVOICESLOT${i}ZT`;
 
 /** Replaces every voice line with a slot token. Returns the new source text and the extracted voices. */
+// 0.9.2: code is not dialogue. A 莉莉丝：… line inside a fenced code block (a character card's front-end status bar that
+// Tavern Helper / 小白X renders) or inside <script>/<style>/<textarea>/<pre> stays exactly as written — turning it into a
+// slot broke that renderer's code and put the card somewhere else in the floor.
+export const CODE_RE = /(^|\n)[ \t]*(```|~~~)[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)|<(script|style|textarea|pre)\b[\s\S]*?(?:<\/\3\s*>|$)/gi;
+/** Splits text into [prose, code, prose, code, …] (pure, for tests). */
+export function splitCode(text) {
+    const s = String(text ?? ''), out = []; let last = 0; CODE_RE.lastIndex = 0;
+    for (let m; (m = CODE_RE.exec(s));) { const start = m.index + (m[1] || '').length; out.push(s.slice(last, start), s.slice(start, m.index + m[0].length)); last = m.index + m[0].length; if (!m[0].length) CODE_RE.lastIndex++; }
+    out.push(s.slice(last)); return out;
+}
 export function extractVoices(text) {
     const voices = [];
-    const out = String(text ?? '').replace(voiceRegex(), (_m, g1, g2, g3, g4, g5) => {
+    const out = splitCode(text).map((part, i) => (i % 2 ? part : part.replace(voiceRegex(), (_m, g1, g2, g3, g4, g5) => {
         const cue = (g1 || '') + (g2 || '') + (g4 || ''), body = (g3 || '') + (g5 || '');
         voices.push({ cue, text: body });
         return VOICE_SLOT(voices.length - 1);
-    });
+    }))).join('');
     return { text: out, voices };
 }
-export function hasVoice(text) { return voiceRegex().test(String(text ?? '')); }
+export function hasVoice(text) { return splitCode(text).some((part, i) => !(i % 2) && voiceRegex().test(part)); }
 
 // Styles of the original regex card (identical to ZhuTianLilithVoice.cardStyle/labelStyle/avatarStyle).
 const CARD = "display:block;position:relative;box-sizing:border-box;width:100%;max-width:760px;margin:14px 0;padding:16px 19px;border:1px solid rgba(198,168,217,.30);border-left:2px solid #c4a0d6;border-radius:4px 18px 18px 18px;background:linear-gradient(125deg,#2c2038,#19151f);color:#eee5f5;box-shadow:0 8px 25px #10081725;font:14px/1.9 system-ui,'Microsoft YaHei',sans-serif;overflow-wrap:anywhere;min-width:0;text-align:left;";

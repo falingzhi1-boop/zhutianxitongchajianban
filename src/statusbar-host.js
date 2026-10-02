@@ -9,7 +9,7 @@
 //   * {{get_chat_variable::…}} in displayed text → value                     (Tavern Helper macro-like on render)
 // Depth is SillyTavern's regex depth: 0 = newest floor.
 import { BRIDGE_KEY, STATUSBAR_CLASS } from './contracts.js';
-import { extractVoices, buildVoiceCard, voiceRegex, LEGACY_VOICE_ID } from './voice-box.js';
+import { extractVoices, buildVoiceCard, hasVoice, LEGACY_VOICE_ID } from './voice-box.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
 
 export const PANEL_RE = /<ZhuTianPanel>([\s\S]*?)<\/ZhuTianPanel>/g;
@@ -86,7 +86,35 @@ function keepEdited(O, box, ref) {
     }
     return kept;
 }
-export function swapContent(target, box, ref = null) {
+/** 0.9.2 — is an old node that matches nothing really another extension's, or SillyTavern's own text that someone
+ *  touched? Phones showed the 【莉莉丝】 line twice (raw + card) and the raw 系统点 / 好感度 lines of the data block: a
+ *  keyword highlighter had wrapped words of those paragraphs (or a variable extension had changed the message after
+ *  SillyTavern drew it), so they no longer equalled SillyTavern's render and were kept as "foreign".
+ *  SillyTavern text = no frame inside AND (its text is a whole node of the reference, OR its text appears in the
+ *  reference prose — code blocks excluded, so a card rendered from a code block is still foreign — OR it contains the
+ *  text of a voice line / data block this renderer replaced). Those are never kept: our render shows them correctly. */
+const squash = s => String(s ?? '').replace(/\s+/g, '');
+export function stText(n, ref, consumed = []) {
+    if (n.nodeType !== 1 && n.nodeType !== 3) return false;
+    if (n.nodeType === 1 && hasFrame(n)) return false;
+    const T = squash(n.textContent); if (!T) return false;
+    // a voice line's text alone is enough; data-block lines need two (a card may show one 好感度 line of its own)
+    for (const g of consumed) { const hit = (g?.snips || []).filter(c => c && T.includes(c)).length; if (hit && hit >= Math.min(g.need || 1, g.snips.length)) return true; }
+    if (!ref) return false;
+    const A = [...ref.childNodes].filter(a => !blank(a));
+    if (A.some(a => squash(a.textContent) === T)) return true;
+    if (T.length < 2) return false;
+    const prose = ref.cloneNode(true); prose.querySelectorAll('pre,script,style,textarea').forEach(x => x.remove());
+    return squash(prose.textContent).includes(T);
+}
+/** Snippets of what a floor render replaced (voice line text, data block lines) → stText(). Pure, for tests. */
+export function consumedSnippets(voices = [], panels = []) {
+    const out = [];
+    for (const v of voices) { const s = squash(v?.text); if (s.length >= 4) out.push({ snips: [s.slice(0, 24)], need: 1 }); }
+    for (const p of panels) { const snips = String(p ?? '').split(/\r?\n/).map(squash).filter(s => /[:：]/.test(s) && s.length >= 4); if (snips.length) out.push({ snips, need: 2 }); }
+    return out;
+}
+export function swapContent(target, box, ref = null, consumed = []) {
     // O is taken BEFORE edited nodes move into `box`: they stay in it, so the old ↔ new alignment (and with it the
     // position of foreign nodes next to them) still sees them on both sides.
     const O = [...target.childNodes].filter(n => !blank(n));
@@ -95,7 +123,7 @@ export function swapContent(target, box, ref = null) {
     if (ref) {
         const A = [...ref.childNodes].filter(n => !blank(n)), Nk = [...box.childNodes].filter(n => !blank(n));
         const inA = new Set(lcsPairs(O.map(sig), A.map(sig)).map(([i]) => i)), inN = new Set(lcsPairs(O.map(sig), Nk.map(sig)).map(([i]) => i));
-        foreign = O.filter((n, i) => !isOurs(n) && !inA.has(i) && !inN.has(i));
+        foreign = O.filter((n, i) => !isOurs(n) && !inA.has(i) && !inN.has(i) && !stText(n, ref, consumed));
     } else foreign = [...target.querySelectorAll(':scope > ' + FOREIGN_SELECTOR)];
     // nested Tavern Helper wrappers (inside details/blockquote of an ST node): keep the 0.8.2 behaviour — the new <pre>
     // is swapped for the old wrapper (which has to move; only happens when the surrounding node is rebuilt).
@@ -125,14 +153,20 @@ export function swapContent(target, box, ref = null) {
         const replaced = ref ? [...ref.childNodes].some(a => !blank(a) && sig(a) === sig(n)) && !O.some(o => sig(o) === sig(n)) : false;
         if ((replaced && (isPre(n) || pristine)) || (framed.has(last) && isPre(n) && FRONTEND.test(n.textContent))) drop.add(n);
     });
+    // 0.9.2: a foreign node that replaced a node of ours (Tavern Helper / 小白X turning a code block into an iframe card)
+    // goes exactly where that node is in the new render — not right after the last matched node, which put the card
+    // status bar ABOVE a voice card that belongs before it ("one card ended up under the status bar").
+    const gapHasDrop = new Set(); last = -1;
+    Nk.forEach((n, j) => { if (matchedN.has(j)) last = j; else if (drop.has(n)) gapHasDrop.add(last); });
     const plan = []; last = -1; let k = 0;
     const flush = g => { for (const [f, gf] of gapOfForeign) if (gf === g && !plan.includes(f)) plan.push(f); };
-    flush(-1);
+    if (!gapHasDrop.has(-1)) flush(-1);
     for (const n of N) {
         if (blank(n)) { plan.push(n); continue; }
         const j = Nk.indexOf(n, k); k = j + 1;
-        if (!drop.has(n)) plan.push(n);
-        if (matchedN.has(j)) { last = j; flush(j); }
+        if (drop.has(n)) { flush(last); continue; }                          // the replaced node's place
+        plan.push(n);
+        if (matchedN.has(j)) { last = j; if (!gapHasDrop.has(j)) flush(j); }
         else if (j === Nk.length - 1 || matchedN.has(j + 1)) flush(last);   // end of a run of new nodes: foreign of that gap
     }
     for (const f of gapOfForeign.keys()) if (!plan.includes(f)) plan.push(f);
@@ -189,7 +223,7 @@ export class StatusBarHost {
         PANEL_RE.lastIndex = 0;
         const panels = (this.state.mode === 'native' || this.state.mode === 'terminal') && PANEL_RE.test(text); PANEL_RE.lastIndex = 0;
         const yieldPanels = this.state.mode === 'yield' && /<ZhuTianPanel>/.test(text);
-        const voice = !yieldPanels && this.settings.get('voiceBox') !== false && !m.is_user && !m.is_system && voiceRegex().test(text);
+        const voice = !yieldPanels && this.settings.get('voiceBox') !== false && !m.is_user && !m.is_system && hasVoice(text);
         const macro = !yieldPanels && !!this.macros?.has(text) && !tavernHelperMacrosActive(this.ctx());   // TH replaces them itself
         return { panels, voice, macro, any: panels || voice || macro };
     }
@@ -262,7 +296,7 @@ export class StatusBarHost {
         voices.forEach((v, i) => { if (!usedV.has(i)) box.append(this.voiceCard(v)); });
         // SillyTavern's own render of this message: what other extensions saw and may have changed (see swapContent)
         const ref = document.createElement('div'); ref.innerHTML = c.messageFormatting(m.mes || '', m.name, m.is_system, m.is_user, id);
-        swapContent(text, box, ref);
+        swapContent(text, box, ref, consumedSnippets(voices, panels));
         this.counts.panels += panels.length; this.counts.voices += voices.length;
         const mark = document.createElement('span'); mark.className = 'zt-render-mark'; mark.hidden = true; text.append(mark);
     }

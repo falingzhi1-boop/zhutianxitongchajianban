@@ -1,4 +1,4 @@
-// 0.9.1: the ONE place that pins the exact version. Older version tests only check "≥ their version and consistent",
+// 0.9.1+: the ONE place that pins the exact version. Older version tests only check "≥ their version and consistent",
 // so a release changes this file (plus src/contracts.js, manifest.json, package.json, package-lock.json and the docs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { VERSION } from '../src/contracts.js';
 
 const read = f => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-const V = '0.9.1';
+const V = '0.9.2';
 
 test(`version ${V} in contracts, manifest, package.json and both package-lock entries`, () => {
     assert.equal(VERSION, V);

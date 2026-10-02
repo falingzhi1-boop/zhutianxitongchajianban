@@ -244,7 +244,7 @@ test('palettes: 仙侠 world is no longer mint green (墨玉金); default world 
 // ---------- beautification compatibility ----------
 test('beautifications: renderer passes SillyTavern\'s own render as reference so foreign nodes survive', async () => {
     const src = read('src/statusbar-host.js');
-    assert.match(src, /swapContent\(text, box, ref\)/);
+    assert.match(src, /swapContent\(text, box, ref[,)]/);   // 0.9.2 adds a 4th argument
     assert.match(src, /swapContent\(text, box, box\.cloneNode\(true\)\)/);
     const { lcsPairs } = await import('../src/statusbar-host.js');
     assert.deepEqual(lcsPairs(['a', 'b', 'c', 'd'], ['a', 'x', 'c', 'd']), [[0, 0], [2, 2], [3, 3]]);

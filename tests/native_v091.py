@@ -26,6 +26,7 @@ Z.configure(args.base_url, args.mock, args.shots)
 SHOTS = Path(args.shots); SHOTS.mkdir(parents=True, exist_ok=True)
 results = []
 FAKE_KEY = 'sk-' + 'zt091testkeyABCDEFGHIJKLMNOPQRSTUVWXYZ12'
+V = json.loads((Path(__file__).resolve().parent.parent / 'manifest.json').read_text(encoding='utf-8'))['version']   # ≥ 0.9.1
 ANDROID_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36'
 
 def ok(name, cond, detail=''):
@@ -70,7 +71,7 @@ def report_suite(browser):
     js(page, "await app.features.copyDiagnostics();await wait(400);")
     clip = page.evaluate("navigator.clipboard.readText()")
     ok('复制诊断信息 (secure context): the report is on the clipboard', clip.startswith('【诸天终端诊断信息】'), clip[:80])
-    for label, needle in [('plugin version', '插件：0.9.1'), ('SillyTavern version', 'SillyTavern：1.19'), ('Android browser', 'Android 14'), ('visible area / keyboard', '可见区域：390×844'),
+    for label, needle in [('plugin version', f'插件：{V}'), ('SillyTavern version', 'SillyTavern：1.19'), ('Android browser', 'Android 14'), ('visible area / keyboard', '可见区域：390×844'),
                           ('phone layout', '手机布局：port'), ('interfaces', '— 宿主接口 —'), ('endpoint host + model', 'api.example.com · m-test-1'), ('settings', '"mobileLayout":"auto"'),
                           ('the plugin error', '测试报错'), ('self-check not yet run', '没有运行过')]:
         ok(f'report contains {label}', needle in clip, needle)
@@ -117,14 +118,14 @@ def selftest_suite(browser):
     res = js(page, "const dc=app.settings.get('deviceCheck');return {text:dc?.text||'',url:location.href}")
     text = res['text']; print('   ', text.replace('\n', '\n    ')[:1800])
     lines = text.split('\n')
-    ok('self-check finished and stored its result in the settings', lines[0].startswith('诸天 0.9.1 真机自检'), lines[0] if lines else '')
+    ok('self-check finished and stored its result in the settings', lines[0].startswith(f'诸天 {V} 真机自检'), lines[0] if lines else '')
     for step in ['全屏', '各页面', '聊天群 + 键盘', '私聊 · 全屏', '私聊 · 键盘', '悬浮莉莉丝', '横屏', '返回键']:
         ln = next((l for l in lines if l[2:].startswith(step + '：') or l[1:].strip().startswith(step + '：')), '')
         ok(f'self-check step 「{step}」 ✅', ln.startswith('✅'), ln[:220])
     ok('the back gesture closed the terminal without leaving SillyTavern', js(page, "return !h.isOpen && !!document.getElementById('chat') && !!globalThis.__zhutianApp"), res['url'])
     tap_card_button(page, '复制结果'); page.wait_for_timeout(500)
     clip = page.evaluate("navigator.clipboard.readText()")
-    ok('复制结果 puts the self-check on the clipboard', clip.startswith('诸天 0.9.1 真机自检'), clip[:60])
+    ok('复制结果 puts the self-check on the clipboard', clip.startswith(f'诸天 {V} 真机自检'), clip[:60])
     tap_card_button(page, '关闭'); page.wait_for_timeout(300)
     ok('关闭 removes the step card', not js(page, "return !!document.getElementById('zhutian-device-check')"))
     rep = js(page, "return (await import(app.base+'src/diag-report.js')).buildReport(app)")
