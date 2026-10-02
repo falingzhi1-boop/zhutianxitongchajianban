@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.9.3';
+export const VERSION = '0.9.4';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -87,4 +87,5 @@ export const CAPABILITIES = [
     {name:'额外世界背景读取世界书',state:'implemented',scope:'0.9.3：规则 → 额外世界背景的「读取书目 / 读取所选」不再提示“当前助手缺少世界书读取接口”。原生桥接补上酒馆助手同名的 getWorldbookNames / getWorldbook（只读）：书名来自酒馆 getContext().getWorldInfoNames（1.19+）、world-info 模块或 /api/settings/get，条目来自 loadWorldInfo 或 /api/worldinfo/get；SillyTavern 与 TauriTavern 共用同一路径，不需要酒馆助手。'},
     {name:'星图更正当前世界',state:'implemented',scope:'0.9.3：星图里选中世界 →「识别错了？更正这个世界」：改世界名 / 世界类型（加锁写入并读回，不算穿越、不播放演出），同名足迹自动合并；非当前世界可从足迹删除。按名称猜的类型在节点上标「?」；当前世界的节点类型与顶栏主题一致（以前可能一个仙侠一个全息）。在记录穿越里填当前世界名也会变成更正类型。'},
     {name:'新手引导',state:'implemented',scope:'0.9.3：首次打开终端且还有步骤没完成时自动打开一次（终端 → 引导，或 设置 → 上手 → 新手引导）：① 导入或更新世界书 ② 设置 AI 接口（一键用酒馆当前主模型，或去连接页填写）③ 在当前聊天启用（按原版规则建账本 + 打开莉莉丝记忆）。每步按真实状态打勾，可跳过；跳过 / 完成会记住。'},
+    {name:'招募令输入框跟随模式',state:'implemented',scope:'0.9.4：聊天群 → 群员 → 发布招募令：选「随机世界」时在输入框里打字，会自动改为「指定世界」（之后仍可改成指定角色），不再出现“填了名字却还是随机”；切回随机会清空输入框；输入框提示随模式变化；指定世界 / 指定角色没填名字时直接提示，不扣 100 点。'},
 ];

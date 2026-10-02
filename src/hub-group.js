@@ -52,6 +52,16 @@ export const groupSource = (src, how) => `聊天群·${src}·${how}`;
 
 /** Recruit prompt (0.8.1). Random mode draws the genre and the target 实力档 locally — the model only fills in a person
  *  — so consecutive recruits really differ, and the target never exceeds what the host can pay for. */
+/** 0.9.4 Pure: what a 发布 click really asks for. A name typed while「随机世界」is selected used to be ignored (the
+ *  recruit was random anyway) — it now means 指定世界; 指定世界 / 指定角色 without a name is refused before any fee. */
+export function recruitMode(mode, hint) {
+    const h = String(hint ?? '').trim().slice(0, 30);
+    const m = mode === 'world' || mode === 'char' ? mode : 'rand';
+    if (m === 'rand') return h ? { mode: 'world', hint: h } : { mode: 'rand', hint: '' };
+    if (!h) throw Error(m === 'char' ? '指定角色时请填写角色名。' : '指定世界时请填写世界名。');
+    return { mode: m, hint: h };
+}
+export const RECRUIT_PLACEHOLDER = Object.freeze({ rand: '随机时不用填；输入名字会自动改为「指定世界」', world: '世界名，例如：斗罗大陆', char: '角色名，例如：孙悟空' });
 export function recruitPrompt(g, { mode = 'rand', hint = '', budget = 0, maxTier = 1, rand = Math.random } = {}) {
     const tiers = L.TIERS.slice(1).map((t, i) => `${i + 1}=${t.n}`).join('，');
     const seen = [...g.成员.map(m => m.名称), ...(g.候选历史 || [])];
@@ -360,7 +370,8 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
     }
 
     // ---------- members ----------
-    async recruit(mode, hint) {
+    async recruit(rawMode, rawHint) {
+        const { mode, hint } = recruitMode(rawMode, rawHint);      // refuses an empty 指定 before the fee is spent
         const z = this.ledger(); if (!z) throw Error('当前聊天没有诸天账本。');
         const g = normGroup(z[KEY]); if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量} 人），先扩建。`);
         await this.write((gg, zz) => { L.spend(zz, RECRUIT_FEE); if (gg.候选) gg.候选历史 = [...gg.候选历史, gg.候选.名称].slice(-12); gg.候选 = null; });
@@ -541,7 +552,7 @@ ${g.待领取.length ? `<div class="zt-g-claims"><span>🎁 待领取 ${g.待领
 <div class="zt-g-body">${this.view === 'members' ? this.membersView(g, z) : this.view === 'market' ? this.marketView(g, z) : this.view === 'admin' ? this.adminView(g) : this.chatView(g, z)}</div></div>`;
         const input = el.querySelector('#zt-g-input'); if (input) { input.value = draft; if (hadFocus) { try { input.focus({ preventScroll: true }); input.setSelectionRange(caret, caret); } catch { } } }
         const log = el.querySelector('.zt-g-log'); if (log) log.scrollTop = atBottom ? log.scrollHeight : oldTop;
-        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('change', e => { const sel = e.target.closest?.('[data-g-sel=every]'); if (sel) this.saveMeta({ 闲聊间隔: Number(sel.value) }).catch(err => this.fail(err)); }); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
+        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('change', e => { const sel = e.target.closest?.('[data-g-sel=every]'); if (sel) this.saveMeta({ 闲聊间隔: Number(sel.value) }).catch(err => this.fail(err)); if (e.target.matches?.('[data-f=rmode]')) this.recruitModeChanged(); }); el.addEventListener('input', e => { if (e.target.matches?.('[data-f=rhint]')) this.recruitHintTyped(); }); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
     }
     avatar(m) { const h = [...String(m?.名称 || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; return `<span class="zt-g-av" style="background:hsl(${h} 45% 38%)">${esc(String(m?.名称 || '?').slice(0, 1))}</span>`; }
     chatView(g, z) {
@@ -584,7 +595,7 @@ ${sheet}
     membersView(g, z) {
         const c = g.候选, pm = this.pm && g.成员.find(m => m.id === this.pm);
         const recruit = `<section class="zt-card"><h3>发布招募令 <small>每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档 · 随机招募按你的系统点挑实力档</small></h3>
-<div class="zt-g-row"><select data-f="rmode"><option value="rand">随机世界</option><option value="world">指定世界</option><option value="char">指定角色</option></select><input type="text" data-f="rhint" maxlength="30" placeholder="世界或角色名（随机时可空）"><button type="button" class="zt-btn primary small" data-g="recruit" ${this.busy || g.成员.length >= g.容量 ? 'disabled' : ''}>发布</button></div>
+<div class="zt-g-row"><select data-f="rmode"><option value="rand">随机世界</option><option value="world">指定世界</option><option value="char">指定角色</option></select><input type="text" data-f="rhint" maxlength="30" placeholder="${RECRUIT_PLACEHOLDER.rand}" aria-label="世界或角色名"><button type="button" class="zt-btn primary small" data-g="recruit" ${this.busy || g.成员.length >= g.容量 ? 'disabled' : ''}>发布</button></div>
 ${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite" ${num(z.系统点) < this.joinPrice(c) ? 'title="系统点不足"' : ''}>邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button>${num(z.系统点) < this.joinPrice(c) ? `<small class="zt-g-warn">系统点不足（有 ${fmtNum(num(z.系统点))}）。放弃后再招募，会换一个人。</small>` : ''}<button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
 <div class="zt-g-row"><span>容量 ${g.成员.length}/${g.容量}</span><button type="button" class="zt-btn small" data-g="expand" ${g.容量 >= MAX_MEMBERS ? 'disabled' : ''}>扩建 +5 · ${fmtNum(expandCost(g.容量))} 点</button></div></section>`;
         const list = g.成员.map(m => `<div class="zt-g-member${pm?.id === m.id ? ' open' : ''}">${this.avatar(m)}<div class="zt-g-minfo"><b>${esc(m.名称)}${m.身份 === '管理员' ? ' <span class="zt-grade">管理员</span>' : ''}${num(m.禁言轮) > 0 ? ` <span class="zt-grade" data-g="禁忌">禁言 ${m.禁言轮} 轮</span>` : ''}${g.降临?.id === m.id ? ` <span class="zt-grade" data-g="仙品">降临中 ${g.降临.轮} 轮</span>` : ''}</b>
@@ -615,6 +626,17 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
 <div class="zt-row"><span>闲聊间隔<span class="zt-desc">每几次正文回复闲聊一次。</span></span><select data-g-sel="every" aria-label="闲聊间隔">${CHAT_EVERY.map(n => `<option value="${n}" ${g.设置.闲聊间隔 === n ? 'selected' : ''}>每 ${n} 轮</option>`).join('')}</select></div></section></div>`;
     }
     val(sel) { return this.el.querySelector(sel)?.value ?? ''; }
+    /** 0.9.4 招募令: typing a name while「随机世界」is selected switches to「指定世界」(指定角色 stays selectable). */
+    recruitHintTyped() {
+        const m = this.el?.querySelector('[data-f=rmode]'), i = this.el?.querySelector('[data-f=rhint]');
+        if (m && i && m.value === 'rand' && i.value.trim()) { m.value = 'world'; i.placeholder = RECRUIT_PLACEHOLDER.world; }
+    }
+    /** Back to「随机世界」clears the name (it would not be used); the placeholder says what the field is for. */
+    recruitModeChanged() {
+        const m = this.el?.querySelector('[data-f=rmode]'), i = this.el?.querySelector('[data-f=rhint]'); if (!m || !i) return;
+        if (m.value === 'rand') i.value = '';
+        i.placeholder = RECRUIT_PLACEHOLDER[m.value] || RECRUIT_PLACEHOLDER.rand;
+    }
     async onClick(e) {
         const t = e.target.closest('button,input[type=checkbox]'); if (!t || t.disabled) return;
         const run = async fn => { try { await fn(); } catch (err) { this.fail(err); this.paint(); } };
