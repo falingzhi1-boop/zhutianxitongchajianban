@@ -52,6 +52,33 @@ export function recordFootprint(list, { name, type = '', theme = 'default', floo
     return out;
 }
 
+/** 0.9.3 Pure: footprint list after correcting a wrongly detected world `from` → `{ name, type, theme }`. No visit is
+ *  counted. When the corrected name already has its own footprint the two records merge (visits add up, the earlier
+ *  first visit and the later last visit are kept). Returns a new array; a world without a footprint leaves it as is. */
+export function correctFootprint(list, from, { name, type = '', theme = 'default' }) {
+    const out = (Array.isArray(list) ? list : []).filter(x => x && x.名称).map(x => ({ ...x }));
+    const f = clean(from), n = clean(name) || f, ty = clean(type);
+    const hit = out.find(x => clean(x.名称) === f); if (!hit) return out;
+    const twin = n !== f ? out.find(x => x !== hit && clean(x.名称) === n) : null;
+    if (twin) {
+        const first = num(hit.首次, Infinity) <= num(twin.首次, Infinity) ? hit : twin, last = num(hit.最近, 0) >= num(twin.最近, 0) ? hit : twin;
+        twin.次数 = (Number(hit.次数) || 1) + (Number(twin.次数) || 1);
+        twin.首次 = first.首次; twin.首次楼层 = first.首次楼层 ?? null; twin.最近 = last.最近; twin.最近楼层 = last.最近楼层 ?? null;
+        twin.类型 = ty; twin.主题 = theme;
+        out.splice(out.indexOf(hit), 1);
+        return out;
+    }
+    hit.名称 = n; hit.类型 = ty; hit.主题 = theme;
+    return out;
+}
+/** 0.9.3 Pure: footprint list without `name`. */
+export function forgetFootprint(list, name) {
+    const n = clean(name);
+    return (Array.isArray(list) ? list : []).filter(x => x && x.名称 && clean(x.名称) !== n).map(x => ({ ...x }));
+}
+const num = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : d);
+export const WORLD_TYPES = Object.freeze(['仙侠', '赛博', '诡异', '都市', '西幻', '末世', '其他']);
+
 export const WORLD_PROMPT_ID = 'world';
 export function worldPrompt(z) {
     const w = clean(z?.当前世界) || '未记录', ty = clean(z?.世界类型) || '未记录';
@@ -141,6 +168,35 @@ export class World {
         }, z => [z.当前世界, z.世界类型 || '', (z.万界足迹 || []).length]); } finally { this.traveling = null; }
         this.lastName = n; this.lastType = clean(type);
         return { from: out.from, to: n, type };
+    }
+    /** 星图 → 更正 (0.9.3): the AI or the name guess got the world wrong. Rewrites 当前世界 / 世界类型 (when it is the
+     *  current world) and its footprint in one locked commit + read-back. Not a 穿越: no visit, no performance. */
+    async correct(from, { name = '', type = '' } = {}) {
+        const f = clean(from); if (!f) throw Error('没有选中世界。');
+        const n = clean(name) || f, ty = clean(type);
+        const theme = classifyWorld({ type: ty, name: n });
+        this.traveling = n;
+        let out;
+        try { out = await L.commit(this.app.bridge, (v, z) => {
+            const isCur = clean(z.当前世界) === f, list = Array.isArray(z.万界足迹) ? z.万界足迹 : [];
+            if (!isCur && !list.some(x => clean(x?.名称) === f)) throw Error('账本里已经没有这个世界了（可能刚被改过），请重新选择。');
+            if (isCur) { z.当前世界 = n; z.世界类型 = ty; }
+            z.万界足迹 = correctFootprint(list, f, { name: n, type: ty, theme });
+            return { current: isCur };
+        }, z => [z.当前世界, z.世界类型 || '', JSON.stringify(z.万界足迹 || [])]); } finally { this.traveling = null; }
+        if (out.current) { this.lastName = n; this.lastType = ty; try { this.app.fx?.drop?.('travel'); } catch { /* fx optional */ } }
+        return { from: f, to: n, type: ty, theme, current: out.current };
+    }
+    /** 星图 → 从足迹删除 (0.9.3): a world that was never really visited. The current world cannot be deleted (correct it). */
+    async forget(name) {
+        const n = clean(name); if (!n) throw Error('没有选中世界。');
+        await L.commit(this.app.bridge, (v, z) => {
+            if (clean(z.当前世界) === n) throw Error('这是当前世界，不能删除；识别错了请用「保存更正」改名或改类型。');
+            const list = Array.isArray(z.万界足迹) ? z.万界足迹 : [];
+            if (!list.some(x => clean(x?.名称) === n)) throw Error('足迹里已经没有这个世界了。');
+            z.万界足迹 = forgetFootprint(list, n);
+        }, z => [z.当前世界, JSON.stringify(z.万界足迹 || [])]);
+        return { name: n };
     }
     prompt(z) {
         const b = this.app.bridge, on = this.settings.get('world')?.prompt !== false && !!z;

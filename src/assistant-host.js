@@ -126,11 +126,14 @@ export class AssistantHost {
             getVariables: o => b.getVariables(o), updateVariablesWith: (f, o) => b.updateVariablesWith(f, o),
             replaceVariables: (v, o) => b.replaceVariables(v, o), insertOrAssignVariables: (v, o) => b.insertOrAssignVariables(v, o),
             getChatMessages: (r, o) => b.getChatMessages(r, o), injectPrompts: l => b.injectPrompts(l), uninjectPrompts: l => b.uninjectPrompts(l),
+            // 0.9.3 规则 → 额外世界背景: read-only worldbook list + entries (TH signatures).
+            getWorldbookNames: () => b.getWorldbookNames(), getWorldbook: name => b.getWorldbook(name),
             eventOn: (t, f) => b.eventOn(t, f), getScriptId: () => NATIVE_SCRIPT_ID, tavern_events: a.context().eventTypes,
             // Inside a Tavern Helper script iframe `SillyTavern` IS the context (getCurrentChatId, name1, groupId…),
             // not the top-level namespace. Resolve a fresh context on every read so chat switches are seen live.
             SillyTavern: stContextProxy(() => a.context()), TavernHelper: undefined,
         });
+        try { b.prefetchWorldbooks?.(); } catch { /* list is fetched again on the first click */ }
         const pagehide = new Set(), realWindow = globalThis.window;
         const windowShim = new Proxy(realWindow, {
             get(target, key) {

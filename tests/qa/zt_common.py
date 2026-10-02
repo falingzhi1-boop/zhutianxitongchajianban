@@ -33,6 +33,9 @@ def _boot(page):
         page.wait_for_timeout(500)
     page.wait_for_function(ready, timeout=90000)
     page.wait_for_function('!!globalThis.__zhutianApp', timeout=60000)
+    # 0.9.3: the fixture answers the first-run 新手引导 (it would otherwise open once on the first terminal open);
+    # tests/native_v093.py clears this to test the wizard itself.
+    page.evaluate("()=>{const s=__zhutianApp.settings;if(!s.get('guide'))s.set('guide',{state:'skipped',at:0,version:'qa-preset'});}")
 
 def connect_main_api(page):
     """Chat Completion → Custom (OpenAI-compatible) → mock, through the real ST connection UI."""

@@ -26,6 +26,7 @@ import {LilithFloat} from './src/lilith-float.js';
 import {MobileLayout} from './src/mobile.js';
 import {ErrorLog} from './src/diag-report.js';
 import {DeviceCheck} from './src/device-check.js';
+import {Onboarding} from './src/onboarding.js';
 import {unbindAll} from './src/wb-unbind.js';
 import {WORLD_NAME} from './src/features.js';
 
@@ -80,6 +81,8 @@ class App {
         if(this.hub)this.hub.hook('onPage',p=>{if(p==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}});
         if(this.statusbar)this.statusbar.openApi=()=>this.openApiCenter();
         if(this.hub?.page==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}
+        // 0.9.3: 新手引导 (after the 连接 page hook, so its 「回到引导」 strip lands on top of the mounted form)
+        if(this.hub)try{this.guide=new Onboarding(this).start();this.parts.push(this.guide);}catch(e){console.warn('[诸天] 新手引导未启动',e);}
         this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
         globalThis.__zhutianApp=this;
     }

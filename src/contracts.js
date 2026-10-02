@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.9.2';
+export const VERSION = '0.9.3';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -84,4 +84,7 @@ export const CAPABILITIES = [
     {name:'复制诊断信息',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 / 兼容诊断 / /zt copydiag：插件与酒馆版本、设备与屏幕、手机布局、宿主接口、状态栏与最新楼层、AI 接口（只有域名和模型名）、插件设置（白名单）、上次真机自检和最近 30 条插件报错；不含 API Key、脚本变量、聊天内容，输出前再统一脱敏；手机上非 HTTPS 时用备用复制方式，仍不行就显示文本框手动复制'},
     {name:'手机真机自检',state:'implemented',scope:'0.9.1：设置 → 兼容与维护 → 手机真机自检（或 /zt selftest）：在用户自己的手机上逐步检查全屏、全部终端页面、聊天群与私聊的键盘、悬浮莉莉丝、横屏、返回键，需要操作的步骤可跳过；不写账本和聊天；结果保存在设置里并可一键复制。键盘检测新增整页缩放的 WebView。仅在 Chromium 手机模拟中验收，尚未收到真机结果'},
     {name:'楼层美化不重复',state:'implemented',scope:'0.9.2：别的扩展（关键词高亮等）先改过的段落、或变量扩展在酒馆画完后又改了消息时，【莉莉丝】台词不再出现“原文 + 语音框”两份，<ZhuTianPanel> 的 系统点 / 好感度 原文不再露在楼层里；代码块（角色卡前端状态栏）里的 莉莉丝：… 不再被改成语音框。iframe 前端卡与原地美化照常保留。真机待复测'},
+    {name:'额外世界背景读取世界书',state:'implemented',scope:'0.9.3：规则 → 额外世界背景的「读取书目 / 读取所选」不再提示“当前助手缺少世界书读取接口”。原生桥接补上酒馆助手同名的 getWorldbookNames / getWorldbook（只读）：书名来自酒馆 getContext().getWorldInfoNames（1.19+）、world-info 模块或 /api/settings/get，条目来自 loadWorldInfo 或 /api/worldinfo/get；SillyTavern 与 TauriTavern 共用同一路径，不需要酒馆助手。'},
+    {name:'星图更正当前世界',state:'implemented',scope:'0.9.3：星图里选中世界 →「识别错了？更正这个世界」：改世界名 / 世界类型（加锁写入并读回，不算穿越、不播放演出），同名足迹自动合并；非当前世界可从足迹删除。按名称猜的类型在节点上标「?」；当前世界的节点类型与顶栏主题一致（以前可能一个仙侠一个全息）。在记录穿越里填当前世界名也会变成更正类型。'},
+    {name:'新手引导',state:'implemented',scope:'0.9.3：首次打开终端且还有步骤没完成时自动打开一次（终端 → 引导，或 设置 → 上手 → 新手引导）：① 导入或更新世界书 ② 设置 AI 接口（一键用酒馆当前主模型，或去连接页填写）③ 在当前聊天启用（按原版规则建账本 + 打开莉莉丝记忆）。每步按真实状态打勾，可跳过；跳过 / 完成会记住。'},
 ];

@@ -22,6 +22,7 @@ const DEFAULTS = Object.freeze({
     wbUnbindOnDisable: true,     // 0.8.2: disabling the extension (1.17+ hook) unbinds the 诸天 worldbook from cards / global / open chat
     wbUnbound: null,             // 0.8.2: what the last unbind removed (for 恢复绑定)
     floatLilith: 'auto',         // 0.8.2: floating Lilith portrait — auto (phones / touch) | on | off
+    guide: null,                 // 0.9.3: 新手引导 answer {state: 'done'|'skipped', at, version}; null = opens once by itself
     deviceCheck: null,           // 0.9.1: last 手机真机自检 result {at, version, text} (no chat data; shown in 复制诊断信息)
     mobileLayout: 'auto',        // 0.9.0: terminal on phones — auto (full screen on phones) | full (always) | window (0.8.5 floating window)
     floatSize: 'm',              // 0.8.3: floating Lilith size xs 55 % | s 65 % | m 75 % (default) | l 90 % | xl 100 % (= 0.8.2)

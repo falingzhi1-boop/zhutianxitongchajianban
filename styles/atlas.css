@@ -89,3 +89,8 @@ dialog[data-compact=true] .zt-atlas-head b{font-size:17px}
 dialog[data-compact=true] .zt-atlas[data-atlas=events] .zt-atlas-svg,dialog[data-compact=true] .zt-atlas[data-atlas=tree] .zt-atlas-svg{min-width:540px}
 dialog[data-compact=true] .zt-atlas[data-atlas=bonds] .zt-atlas-svg,dialog[data-compact=true] .zt-atlas[data-atlas=stars] .zt-atlas-svg{min-width:460px}
 dialog[data-compact=true] .zt-atlas .zt-atlas-canvas{overflow:auto!important;-webkit-overflow-scrolling:touch}
+/* 0.9.3 星图 → 更正 */
+.zt-atlas-fix{margin-top:10px;border-top:1px dashed #ffffff1f;padding-top:8px}
+.zt-atlas-fix summary{cursor:pointer;color:var(--zt-gold);font-size:12px;min-height:28px;display:flex;align-items:center}
+.zt-atlas-fix .zt-sub{font-size:11px;margin:4px 0}
+.zt-atlas-fix .zt-g-row input[type=text]{flex:1 1 120px;min-width:0}

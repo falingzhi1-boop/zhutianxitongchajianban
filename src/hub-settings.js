@@ -18,6 +18,9 @@ export class HubSettings {
     sections() {
         const app = this.app;
         return [
+            { title: '上手', items: [
+                act('guide', '新手引导…', '三步：导入或更新世界书 → 设置 AI 接口 → 在当前聊天启用。每步完成后打勾，可以跳过。'),
+            ] },
             { title: '显示', sub: '终端就是诸天系统；聊天楼层保持干净。', items: [
                 sel('statusbar', '聊天楼层里的系统数据块', [['terminal', '终端记账，楼层只留小标签（推荐）'], ['off', '关闭（不处理数据块）'], ...(this.s.get('statusbar') === 'native' ? [['native', '旧兼容模式（0.7.0 起不再提供，切走后不再显示）']] : [])], '终端模式下 AI 输出的 <ZhuTianPanel> 由终端记账，楼层里不再出现状态栏。'),
                 sw('floorTag', '楼层小标签“系统已记录”', '点击标签直接打开终端。'),
@@ -112,6 +115,7 @@ export class HubSettings {
             'fx-preview': () => app.fx?.preview(),
             'copy-diag': () => app.features.copyDiagnostics(),
             selftest: () => app.deviceCheck?.run(),
+            guide: () => app.guide?.open(),
             admin: () => app.hub.openAdmin(),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(e.message, '诸天')),
         };

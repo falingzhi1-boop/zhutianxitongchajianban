@@ -37,6 +37,21 @@ export const MAIN_API_HOST = 'st-main.zhutian.invalid';
 export const MAIN_API_URL = `https://${MAIN_API_HOST}/v1`;
 export const MAIN_API_MODEL = '酒馆当前主API';
 export function isMainApi(url) { try { return new URL(String(url || '').trim()).hostname === MAIN_API_HOST; } catch { return false; } }
+/** 0.9.3: SillyTavern world-info entries ({uid: entry} or an array) → the Tavern Helper style list that the original
+ *  规则 → 额外世界背景 page hands to normalizeBook (it reads name|comment, key|strategy.keys, content, enabled/disable,
+ *  uid). Plain copies only — the ST cache object is never handed out, so nothing can write back into the book. */
+export function toWorldbookEntries(entries) {
+    const list = Array.isArray(entries) ? entries : plainObject(entries) ? Object.values(entries) : [];
+    const str = v => (typeof v === 'string' ? v : '');
+    return list.filter(plainObject)
+        .map((e, i) => ({ e, i, at: Number.isFinite(Number(e.displayIndex)) ? Number(e.displayIndex) : Number.isFinite(Number(e.uid)) ? Number(e.uid) : i }))
+        .sort((a, b) => a.at - b.at || a.i - b.i)
+        .map(({ e, i }) => {
+            const keys = (Array.isArray(e.key) ? e.key : Array.isArray(e.keys) ? e.keys : []).filter(k => typeof k === 'string');
+            return { uid: e.uid ?? i, name: str(e.comment) || str(e.name), comment: str(e.comment) || str(e.name), key: [...keys], strategy: { keys: [...keys] },
+                content: str(e.content), constant: !!e.constant, enabled: e.disable !== true && e.enabled !== false, disable: e.disable === true || e.enabled === false };
+        });
+}
 /** Chat-completions endpoint normalisation shared by the status bar and the assistant. */
 export function endpointOf(url) {
     const raw = String(url || '').trim().replace(/\/+$/, '');
@@ -154,6 +169,55 @@ export class Bridge {
         }
     }
     uninjectPrompts(ids) { const c = this.ctx(); for (const id of ids || []) c?.setExtensionPrompt?.(`${ID}/${id}`, '', 1, 0, false, 0); }
+
+    // ---------- worldbooks (read-only; 0.9.3) ----------
+    // The original 规则 → 额外世界背景 page calls the Tavern Helper functions getWorldbookNames() (synchronous string[])
+    // and getWorldbook(name) (Promise of entries). The native host never provided them, so the page always said
+    // 「当前助手缺少世界书读取接口」 — on TauriTavern as well as on SillyTavern. Names come from SillyTavern's own
+    // context (getWorldInfoNames, ST 1.19+), its world-info module (live list), then /api/settings/get; entries from getContext().loadWorldInfo, then the module,
+    // then /api/worldinfo/get. Nothing here writes, binds or unbinds a book.
+    loadWorldInfoModule() { return import('/scripts/world-info.js'); }
+    prefetchWorldbooks() {
+        if (this.wbLoading) return this.wbLoading;
+        this.wbLoading = (async () => {
+            try { this.wiModule = await this.loadWorldInfoModule(); } catch { this.wiModule = null; }
+            if (Array.isArray(this.wiModule?.world_names)) { this.wbNames = [...this.wiModule.world_names]; return; }
+            try {
+                const r = await fetch('/api/settings/get', { method: 'POST', headers: this.ctx().getRequestHeaders(), credentials: 'same-origin', cache: 'no-store', body: '{}' });
+                const j = r.ok ? await r.json() : null;
+                if (Array.isArray(j?.world_names)) this.wbNames = [...j.world_names];
+            } catch (e) { console.warn('[诸天桥接] 世界书列表读取失败', e); }
+            if (!this.wbNames) this.wbFailed = true;
+        })().finally(() => { this.wbLoading = null; });
+        return this.wbLoading;
+    }
+    getWorldbookNames() {
+        try { const viaCtx = this.ctx()?.getWorldInfoNames?.(); if (Array.isArray(viaCtx)) return viaCtx.filter(x => typeof x === 'string'); } catch { /* older context */ }
+        const live = this.wiModule?.world_names;
+        const list = Array.isArray(live) ? live : this.wbNames;
+        if (!Array.isArray(live)) this.prefetchWorldbooks();     // keep the fallback copy fresh for the next click
+        if (Array.isArray(list)) return list.filter(x => typeof x === 'string');
+        if (this.wbFailed) { this.wbFailed = false; throw Error('读取不到世界书列表（宿主没有提供世界书模块或设置接口）；仍可使用内置规则'); }
+        throw Error('世界书列表正在读取，请一秒后再点一次「读取书目」');
+    }
+    async getWorldbook(name) {
+        const n = String(name ?? '').trim(); if (!n) throw Error('请先选择背景书');
+        const c = this.ctx(); let data = null;
+        if (typeof c?.loadWorldInfo === 'function') data = await c.loadWorldInfo(n);
+        else {
+            if (!this.wiModule) await this.prefetchWorldbooks();
+            if (typeof this.wiModule?.loadWorldInfo === 'function') data = await this.wiModule.loadWorldInfo(n);
+            else {
+                const r = await fetch('/api/worldinfo/get', { method: 'POST', headers: c.getRequestHeaders(), credentials: 'same-origin', cache: 'no-store', body: JSON.stringify({ name: n }) });
+                data = r.ok ? await r.json() : null;
+            }
+        }
+        const missing = Error(`读取不到世界书「${n}」（可能已被删除或改名）`);
+        if (!data || typeof data.entries !== 'object' || data.entries === null) throw missing;
+        // SillyTavern answers a missing file with an empty dummy book ({entries: {}}): tell that apart from a real empty book.
+        if (!Object.keys(data.entries).length) { let names = null; try { names = this.getWorldbookNames(); } catch { /* list unknown */ } if (names && !names.includes(n)) throw missing; }
+        return toWorldbookEntries(data.entries);
+    }
 
     // ---------- events ----------
     get events() { return this.ctx()?.eventTypes || {}; }

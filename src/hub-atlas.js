@@ -4,7 +4,7 @@
 // empty ledgers give empty spaces with a hint.  The only write is 星图 → 记录穿越 (world.travel, locked commit + read-back).
 import { esc, fmtNum } from './hub.js';
 import { TIERS } from './ledger-ops.js';
-import { THEMES, classifyWorld } from './world.js';
+import { THEMES, classifyWorld, WORLD_TYPES } from './world.js';
 
 const num = (x, d = 0) => { const n = Number(x); return Number.isFinite(n) ? n : d; };
 const obj = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
@@ -84,8 +84,14 @@ export function buildStars(z) {
     const nodes = [], edges = [], cx = 300, cy = 220;
     list.forEach((x, i) => {
         const a = i * 2.399963 - 0.6, r = i === 0 ? 0 : 92 + 42 * Math.sqrt(i - 1);
-        const theme = x.主题 || classifyWorld({ type: x.类型, name: x.名称 });
-        nodes.push({ id: 'world:' + x.名称, type: 'world', label: cut(x.名称, 7), sub: (THEMES[theme]?.label || '') + (x.次数 > 1 ? ` · ${x.次数}次` : ''), theme, x: Math.round(cx + Math.cos(a) * r), y: Math.round(cy + Math.sin(a) * r * 0.78), current: x.名称 === cur, rec: x.synthetic ? { 名称: x.名称, 类型: x.类型 || '', 说明: '当前世界（尚无足迹记录）' } : x, src: x.synthetic ? '诸天系统.当前世界' : '诸天系统.万界足迹', name: x.名称, 次数: x.次数, floor: floorOf(x.首次楼层) });
+        // 0.9.3: the current world follows the live 世界类型 (same rule as the terminal theme / top badge); every world
+        // lets an explicit 类型 win over the 主题 frozen when the footprint was recorded (the node used to say 仙侠 while
+        // the top bar already showed 全息 for the same world).
+        const isCur = x.名称 === cur, wtype = isCur ? (str(z?.世界类型) || str(x.类型)) : str(x.类型);
+        const theme = isCur ? classifyWorld({ type: wtype, name: x.名称, currency: str(z?.当前货币) }) : wtype ? classifyWorld({ type: wtype, name: x.名称 }) : (x.主题 || classifyWorld({ name: x.名称 }));
+        const guess = !wtype;
+        // 0.9.3: an explicit 世界类型 is shown as written; a guess from the name is marked「?」so it reads as correctable.
+        nodes.push({ id: 'world:' + x.名称, type: 'world', label: cut(x.名称, 7), sub: (guess ? (THEMES[theme]?.label || '') + '?' : wtype) + (x.次数 > 1 ? ` · ${x.次数}次` : ''), guess, wtype, theme, x: Math.round(cx + Math.cos(a) * r), y: Math.round(cy + Math.sin(a) * r * 0.78), current: isCur, rec: x.synthetic ? { 名称: x.名称, 类型: x.类型 || '', 说明: '当前世界（尚无足迹记录）' } : x, src: x.synthetic ? '诸天系统.当前世界' : '诸天系统.万界足迹', name: x.名称, 次数: x.次数, floor: floorOf(x.首次楼层) });
         if (i > 0) edges.push({ from: 'world:' + list[i - 1].名称, to: 'world:' + x.名称, kind: 'path' });
     });
     const known = new Set(list.map(x => x.名称)), extra = new Map();
@@ -157,7 +163,9 @@ export class HubAtlas {
         const z = this.ledger();
         if (!z) { el.innerHTML = `<div class="zt-empty">当前聊天没有诸天账本。<br>在「设置 → 新聊天初始化」创建后，图谱会从账本自动生成。</div>`; return; }
         const g = this.graph(id, z); this.graphs[id] = g;
-        const keep = el.querySelector('.zt-atlas-canvas')?.scrollTop || 0;
+        const keep = el.querySelector('.zt-atlas-canvas')?.scrollTop || 0, fx = el.querySelector('.zt-atlas-fix');
+        // 0.9.3: a ledger write while the 更正 box is open repaints the page — keep what the user was typing.
+        const fixKeep = fx ? { node: this.sel[id], open: fx.open, name: fx.querySelector('[data-f=fix-name]')?.value, type: fx.querySelector('[data-f=fix-type]')?.value } : null;
         if (this.sel[id] && !g.nodes.some(n => n.id === this.sel[id])) this.sel[id] = null;
         const empty = (id === 'events' && !g.nodes.length) || (id === 'bonds' && g.count <= 1) || (id === 'stars' && !g.nodes.length);
         el.classList.add('zt-atlas-page');
@@ -167,6 +175,8 @@ export class HubAtlas {
 <aside class="zt-atlas-detail" aria-live="polite">${this.detail(id, g, z)}</aside></div>
 ${id === 'events' ? this.historyList() : ''}${id === 'stars' ? this.travelForm(z) : ''}</div>`;
         const canvas = el.querySelector('.zt-atlas-canvas'); if (canvas) canvas.scrollTop = keep;
+        const fx2 = el.querySelector('.zt-atlas-fix');
+        if (fx2 && fixKeep && fixKeep.node === this.sel[id]) { fx2.open = fixKeep.open; const i = fx2.querySelector('[data-f=fix-name]'), t = fx2.querySelector('[data-f=fix-type]'); if (i && fixKeep.name != null) i.value = fixKeep.name; if (t && fixKeep.type != null) t.value = fixKeep.type; }
         if (!el.__ztBound) { el.__ztBound = true; this.bind(el, id); }
     }
     caption(id, g, z) {
@@ -218,7 +228,15 @@ ${id === 'events' ? this.historyList() : ''}${id === 'stars' ? this.travelForm(z
 <div class="zt-kvs">${rows || '<p class="zt-sub">没有更多字段。</p>'}</div>
 ${links.length ? `<div class="zt-atlas-links"><small>因果 / 关联</small>${links.map(([d, e, o]) => `<button type="button" class="zt-chip" data-focus="${esc(o.id)}">${d} ${esc(e.label || TYPE_LABEL[o.type] || '')}：${esc(o.label)}</button>`).join('')}</div>` : ''}
 ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.tasks.slice(0, 6).map(t => `<button type="button" class="zt-chip" data-jump-task="${esc(t.id)}">${esc(cut(t.名称, 10))}</button>`).join('')}</div>` : ''}
-<div class="zt-actions">${acts}</div></div>`;
+<div class="zt-actions">${acts}</div>${n.type === 'world' ? this.fixForm(n) : ''}</div>`;
+    }
+    /** 0.9.3 星图 → 更正: the world name / type was detected wrong (AI wrote it, or the name guess picked a theme). */
+    fixForm(n) {
+        const how = n.guess ? `按名称自动猜测为「${THEMES[n.theme]?.label || '诸天'}」，可能不准` : `世界类型：${n.wtype}`;
+        return `<details class="zt-atlas-fix"${n.current && n.guess ? ' open' : ''}><summary>识别错了？更正这个世界</summary>
+<p class="zt-sub">${esc(how)}。更正只改账本里的名称 / 类型（加锁写入并读回），不算一次穿越，也不播放演出。</p>
+<div class="zt-g-row"><input type="text" data-f="fix-name" maxlength="30" value="${esc(n.name)}" aria-label="更正后的世界名"><select data-f="fix-type" aria-label="更正后的世界类型"><option value="">类型（自动判断）</option>${[...WORLD_TYPES, ...(n.wtype && !WORLD_TYPES.includes(n.wtype) ? [n.wtype] : [])].map(t => `<option${t === n.wtype ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+<div class="zt-actions"><button type="button" class="zt-btn small primary" data-fix="${esc(n.name)}">保存更正</button>${n.current ? '' : `<button type="button" class="zt-btn small danger" data-forget="${esc(n.name)}">从足迹删除</button>`}</div></details>`;
     }
     actions(id, n, z) {
         const b = (attr, label, primary = false) => `<button type="button" class="zt-btn small${primary ? ' primary' : ''}" ${attr}>${esc(label)}</button>`;
@@ -274,7 +292,14 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
             if (d.go) return this.hub.go(d.go);
             if (d.hist) { const x = this.app.fx?.history?.[Number(d.hist)]; if (x) this.app.fx.openRecord(x); return; }
             if (d.travel !== undefined && d.travel) return this.travel(d.travel, '');
-            if (t.hasAttribute('data-travel-form')) { const n = el.querySelector('[data-f=world]')?.value, ty = el.querySelector('[data-f=wtype]')?.value; return this.travel(n, ty); }
+            if (t.hasAttribute('data-travel-form')) {
+                const n = el.querySelector('[data-f=world]')?.value, ty = el.querySelector('[data-f=wtype]')?.value;
+                // 0.9.3: the current world's name again = a type correction, not a 穿越 (used to fail with 已经在这个世界了).
+                if (String(n || '').trim() && String(n).trim() === str(this.ledger()?.当前世界)) return this.fix(String(n).trim(), n, ty);
+                return this.travel(n, ty);
+            }
+            if (d.fix !== undefined) { const box = t.closest('.zt-atlas-fix'); return this.fix(d.fix, box?.querySelector('[data-f=fix-name]')?.value, box?.querySelector('[data-f=fix-type]')?.value); }
+            if (d.forget !== undefined) return this.forget(d.forget);
         });
         el.addEventListener('keydown', e => {
             const t = e.target.closest?.('.zt-node'); if (!t) return;
@@ -292,6 +317,20 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
             this.app.fx?.play({ kind: 'travel', from: r.from, to: r.to, type: r.type, ref: 'world:' + r.to });
             this.sel.stars = 'world:' + r.to; this.paint('stars', true);
         } catch (e) { this.hub.toast(e.message || String(e), 4000); }
+    }
+    async fix(from, name, type) {
+        const w = this.app.world; if (!w) return;
+        try {
+            const r = await w.correct(from, { name, type });
+            this.sel.stars = 'world:' + r.to; this.paint('stars', true);
+            this.hub.toast(`已更正：${r.from === r.to ? r.to : `${r.from} → ${r.to}`}（${r.type || '类型自动判断'}）${r.current ? '，界面主题已同步' : ''}`, 3000);
+        } catch (e) { this.hub.toast(e.message || String(e), 4000); }
+    }
+    async forget(name) {
+        const w = this.app.world; if (!w) return;
+        if (!globalThis.confirm?.(`从万界足迹里删除「${name}」？只删这条足迹记录，不影响聊天内容。`)) return;
+        try { await w.forget(name); this.sel.stars = null; this.paint('stars', true); this.hub.toast(`已从足迹删除「${name}」`, 2500); }
+        catch (e) { this.hub.toast(e.message || String(e), 4000); }
     }
     /** 任务页 in the engine: switch tab, then focus the original row for this task. */
     openTask(id) {

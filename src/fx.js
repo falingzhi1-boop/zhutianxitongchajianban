@@ -168,6 +168,8 @@ export class FX {
         for (const [k, d] of this.deferred) if (d.ev.kind === ev.kind) { clearTimeout(d.timer); this.deferred.delete(k); }
         this.enqueue({ ...ev, explicit: true, key: ev.key || ev.kind + ':' + Date.now() });
     }
+    /** 0.9.3: a write that is not a story moment (星图 → 更正 renames 当前世界) — forget the pending watcher event. */
+    drop(kind) { for (const [k, d] of this.deferred) if (d.ev.kind === kind) { clearTimeout(d.timer); this.deferred.delete(k); } }
     /** Settings → 预览演出: a sample that writes nothing; the card says so. */
     preview() {
         const kinds = ['task', 'travel', 'breakthrough', 'contract', 'draw', 'reward'], k = kinds[(this.pv = ((this.pv ?? -1) + 1) % kinds.length)];
