@@ -194,3 +194,55 @@ dialog[data-compact=true] .zt-g-head small{display:inline;margin-top:0}
 #page-api .zt-api-inline{max-width:640px}
 #page-api .zt-api-inline label{display:grid;gap:4px}
 #page-api .zt-api-inline label:has(> input[type=radio]),#page-api .zt-api-inline label:has(> input[type=checkbox]){display:flex}
+
+/* ---- 0.9.0 手机端适配 ----
+   src/mobile.js sets dialog[data-zt-mobile=port|land] on phones (setting 手机上的终端窗口). The original window manager
+   keeps writing its floating-window box inline; these rules win over it (!important) without touching vendor code.
+   --zt-vv* = the visible area (visualViewport), so the window shrinks above the on-screen keyboard. */
+dialog[data-zt-mobile]{left:var(--zt-vvl,0px)!important;top:var(--zt-vvt,0px)!important;right:auto!important;bottom:auto!important;width:var(--zt-vvw,100vw)!important;height:var(--zt-vvh,100dvh)!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;box-sizing:border-box!important;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)!important;overscroll-behavior:contain}
+dialog[data-zt-mobile][data-zt-kb]{padding-bottom:0!important}
+dialog[data-zt-mobile] .resize-edge,dialog[data-zt-mobile] .resize-bar,dialog[data-zt-mobile] #reset-window{display:none!important}
+dialog[data-zt-mobile] #drag-handle{cursor:default!important;min-height:0!important;padding-top:4px!important;padding-bottom:4px!important}
+dialog[data-zt-mobile] #title+*{display:none!important}
+dialog[data-zt-mobile] .drag-hint{display:none!important}
+dialog[data-zt-mobile=port] .version-pill{display:none!important}
+dialog[data-zt-mobile] .window-tools{gap:2px!important}
+dialog[data-zt-mobile] .window-tools button{width:42px!important;height:42px!important;padding:12px!important;border-radius:10px}
+dialog[data-zt-mobile] .page-scroll,dialog[data-zt-mobile] .sidebar,dialog[data-zt-mobile] nav.zt-hub-nav,dialog[data-zt-mobile] .zt-hub-top,dialog[data-zt-mobile] .zt-g-log,dialog[data-zt-mobile] .zt-g-scroll{overscroll-behavior:contain}
+dialog[data-zt-mobile] .zt-hub-nav .nav-button{min-height:46px!important;min-width:48px;font-size:11px!important}
+dialog[data-zt-mobile] .zt-hub-nav .nav-button svg{width:17px;height:17px}
+dialog[data-zt-mobile] .zt-hub-top{min-height:0;padding-top:6px!important;padding-bottom:6px!important}
+dialog[data-zt-mobile] .statusbar{min-height:0!important;padding:6px 14px!important}
+dialog[data-zt-mobile] .zt-engine-tools{padding:6px 10px!important}
+dialog[data-zt-mobile] .zt-btn.small{min-height:36px;padding-left:12px;padding-right:12px}
+dialog[data-zt-mobile] .zt-g-tabs button{min-height:40px}
+dialog[data-zt-mobile] .zt-g-send{padding-bottom:10px}
+dialog[data-zt-mobile] .zt-g-send .zt-btn{min-height:44px;min-width:56px}
+dialog[data-zt-mobile] .zt-g-auto{min-height:36px}
+dialog[data-zt-mobile] .zt-g-auto input{width:20px;height:20px}
+dialog[data-zt-mobile] .zt-toast{bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:calc(100% - 24px)}
+/* keyboard up: keep the field and what you type into; the ledger strip and the status line come back afterwards */
+dialog[data-zt-mobile][data-zt-kb] .zt-hub-top,dialog[data-zt-mobile][data-zt-kb] .statusbar{display:none!important}
+/* landscape phone: the navigation becomes a left rail, the header gets thinner */
+dialog[data-zt-mobile=land] .shell{display:grid!important;grid-template-columns:78px minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr)!important}
+dialog[data-zt-mobile=land] .sidebar{min-height:0!important;border-bottom:0!important;border-right:1px solid var(--zt-line)!important;overflow-x:hidden!important;overflow-y:auto!important}
+dialog[data-zt-mobile=land] .sidebar .portrait{display:none!important}
+dialog[data-zt-mobile=land] .sidebar nav.zt-hub-nav{display:flex!important;flex-direction:column;overflow:visible!important;padding:6px!important;white-space:normal;gap:4px}
+dialog[data-zt-mobile=land] .zt-nav-items{flex-direction:column;gap:4px}
+dialog[data-zt-mobile=land] .zt-hub-nav .nav-button{width:100%;flex-direction:column!important;justify-content:center!important;align-items:center;padding:5px 2px!important;gap:2px!important}
+dialog[data-zt-mobile=land] #drag-handle{padding-top:2px!important;padding-bottom:2px!important}
+dialog[data-zt-mobile=land][data-zt-kb] #drag-handle{display:none!important}
+dialog[data-zt-mobile=land] .main{min-height:0}
+/* 私聊 on a phone: a full-screen sheet over the terminal (same visible-area numbers on the shadow host); the drag grip
+   and resize edges go, the close-up band steps aside in landscape and while the keyboard is up */
+:host([data-zt-mobile]) #lc-panel:not([hidden]){left:var(--zt-vvl,0px)!important;top:var(--zt-vvt,0px)!important;right:auto!important;bottom:auto!important;width:var(--zt-vvw,100vw)!important;height:var(--zt-vvh,100dvh)!important;min-width:0!important;min-height:0!important;max-width:none!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)!important}
+:host([data-zt-mobile][data-zt-kb]) #lc-panel:not([hidden]){padding-bottom:0!important}
+:host([data-zt-mobile]) #lc-panel #lc-grip,:host([data-zt-mobile]) #lc-panel .lc-edge{display:none!important}
+:host([data-zt-mobile]) #lc-panel #lc-head{cursor:default!important}
+:host([data-zt-mobile]) #lc-panel .lc-tools button{min-width:42px;min-height:42px}
+:host([data-zt-mobile=land]) #lc-panel .zt-lc-cam,:host([data-zt-mobile][data-zt-kb]) #lc-panel .zt-lc-cam{display:none!important}
+/* touch screens (also in the floating window): 16 px fields — iOS zooms the whole page into smaller ones and stays zoomed */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),select,textarea{font-size:16px!important}
+  .zt-btn.small{min-height:36px}
+}

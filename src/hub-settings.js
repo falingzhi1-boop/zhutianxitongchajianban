@@ -3,6 +3,7 @@ import { VERSION } from './contracts.js';
 import { HOST_TESTED } from './compat.js';
 import { esc } from './hub.js';
 import { PALETTE_OPTIONS } from './palettes.js';
+import { MOBILE_LAYOUTS } from './mobile.js';
 
 const sw = (k, label, desc = '') => ({ type: 'switch', k, label, desc });
 const sel = (k, label, options, desc = '') => ({ type: 'select', k, label, options, desc });
@@ -24,6 +25,7 @@ export class HubSettings {
                 sw('hud', '输入框上方账本速览'),
                 sw('hotkeys', '快捷键 Alt+Z / Alt+X 开关终端 · Alt+S 总览'),
                 sel('hubOutsideClose', '点击终端外部时关闭', [['auto', '仅手机'], ['always', '总是'], ['never', '从不']]),
+                sel('mobileLayout', '手机上的终端与私聊窗口', MOBILE_LAYOUTS.map(o => [...o]), '全屏时窗口跟着输入法键盘变矮，输入框不会被挡住；横屏时导航移到左侧；私聊也全屏。选「浮动窗口」恢复 0.8.5 的样子。'),
                 sw('hubBackClose', '手机返回手势关闭终端'),
             ] },
             { title: '提示词与世界书', items: [

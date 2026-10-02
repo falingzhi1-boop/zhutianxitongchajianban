@@ -394,4 +394,6 @@ html[data-zt-hub][data-zt-world=cyber] .mvu-container{background-image:repeating
 html[data-zt-hub][data-zt-world=eerie],html[data-zt-hub][data-zt-world=eerie] body{background:#100e0e!important}
 html[data-zt-hub][data-zt-world=eerie] .mvu-sys{--bg:#100e0e;--bg2:#141111;--panel:#191515;--panel2:#201a1a;--input:#0b0909;--text:#e9e2dc;--muted:#a79d95;--faint:#857a72;--hair:#ffffff12;--border:#b0484826;--gold:#bba77c;--jade:#b9a58a;--violet:#b39a9a;--pink:#c07070;--v-task:#c27a6a;--accent-soft:#2a1a1a;--accent-line:#6d3a3a;--btn-hover-bg:#3a2222;--btn-hover-text:#ffe9e2;--c-hl:#c9776b}
 html[data-zt-hub] .zt-flash{outline:2px solid var(--gold);outline-offset:2px;transition:outline-color 1.4s}
+/* 0.9.0 touch screens: 16 px fields — iOS zooms the whole page into smaller ones and stays zoomed */
+@media (pointer:coarse){html[data-zt-hub] input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),html[data-zt-hub] select,html[data-zt-hub] textarea{font-size:16px!important}}
 `;

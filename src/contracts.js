@@ -1,7 +1,7 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.8.5';
+export const VERSION = '0.9.0';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -80,4 +80,5 @@ export const CAPABILITIES = [
     {name:'AI 接口设置（新手版排版）',state:'implemented',scope:'0.8.5：连接页改为一句话状态 + 三步（选择用哪个 AI → 填写接口 → 测试并保存）；“状态栏 / 莉莉丝助手”两行与“应用到…”收进高级设置；修复单选框被原版样式拉伸成半行宽。'},
     {name:'账本核验引导',state:'implemented',scope:'0.8.5：记忆页「立即核验最新正文」下方说明用途与前提；未开启时高亮「在当前聊天启用助手与记忆注入」「莉莉丝监管账本与奖励」「保存当前聊天设置」并给出白话提示，替换原版“请先启用当前聊天与账本核验；未写入。”。原版检查逻辑不变。'},
     {name:'生成状态自愈（手机状态栏不渲染修复）',state:'implemented',scope:'0.8.5：漏掉生成结束事件时（手机切后台、思考模型等），本次生成中出现过的酒馆停止按钮一旦隐藏，过期的“正在生成”自动清除（从未出现过则不解锁，发送锁不变），最后一层照常渲染；停止按钮消失时主动重扫；兼容诊断显示最新楼层是否已渲染并可一键重新渲染。'},
+    {name:'手机端适配',state:'implemented',scope:'0.9.0：手机上终端全屏（竖屏顶部导航、横屏左侧导航栏），窗口跟随输入法键盘变矮、输入框不被挡住，安全区留白；私聊同样全屏；点按目标放大、输入框 16px 防止 iOS 放大页面；浮动莉莉丝在终端打开时停在下角、点台词即收起；手机会话不再覆盖电脑上记住的窗口大小。设置 → 手机上的终端与私聊窗口（自动 / 总是全屏 / 浮动窗口）。仅 Playwright 触摸模拟验收，未在真机上测试'},
 ];

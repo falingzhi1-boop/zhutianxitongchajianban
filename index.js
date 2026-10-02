@@ -23,6 +23,7 @@ import {FX} from './src/fx.js';
 import {LilithStage} from './src/lilith-stage.js';
 import {SkillSync} from './src/skill-sync.js';
 import {LilithFloat} from './src/lilith-float.js';
+import {MobileLayout} from './src/mobile.js';
 import {unbindAll} from './src/wb-unbind.js';
 import {WORLD_NAME} from './src/features.js';
 
@@ -64,6 +65,8 @@ class App {
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
         try{await this.portrait.start();}catch(e){console.warn('[诸天] 立绘模式回退到原版分层动画：',e.message);}
         try{this.lilith=new LilithStage(this).start();this.parts.push(this.lilith);}catch(e){console.warn('[诸天] 莉莉丝界面角色未启动',e);}
+        // 0.9.0: phones get the terminal full screen (follows the keyboard; landscape = left rail). Before the float, which asks it.
+        if(this.hub)try{this.mobile=new MobileLayout(this).start();this.parts.push(this.mobile);}catch(e){console.warn('[诸天] 手机布局未启动',e);}
         // 0.8.2: phones never show the portrait inside the window — Lilith floats on the page instead (and speaks there).
         try{this.float=new LilithFloat(this).start();this.parts.push(this.float);}catch(e){console.warn('[诸天] 悬浮莉莉丝未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);

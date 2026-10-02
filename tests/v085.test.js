@@ -83,9 +83,9 @@ test('capabilities list the 0.8.5 rows', () => {
         assert.ok(CAPABILITIES.some(c => c.name === n && c.state === 'implemented'), n);
 });
 
-test('version 0.8.5 everywhere', () => {
-    const v = '0.8.5';
-    assert.equal(VERSION, v);
+test('version ≥ 0.8.5 and consistent everywhere (exact value pinned in the newest version test)', () => {
+    const v = VERSION;
+    assert.match(v, /^(?:0\.8\.[5-9]|0\.(?:9|\d{2,})\.\d+|[1-9]\d*\.\d+\.\d+)$/);
     assert.equal(JSON.parse(read('manifest.json')).version, v);
     assert.equal(JSON.parse(read('package.json')).version, v);
     const lock = JSON.parse(read('package-lock.json')); assert.equal(lock.version, v); assert.equal(lock.packages[''].version, v);

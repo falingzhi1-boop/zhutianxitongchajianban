@@ -33,6 +33,12 @@ export function settle({ x, y }, vw, vh, w = W, h = H) {
 export function keepOnScreen({ x, y }, vw, vh, w = W, h = H) {
     return { x: clamp(x, 4, Math.max(4, vw - w - 4)), y: clamp(y, 8, Math.max(8, vh - h - 8)), edge: '', tucked: false };
 }
+/** 0.9.0: where she waits while the terminal is full screen on a phone — tucked at her side's edge, bottom corner. */
+export function parkSpot(p, vw, vh, dims = { w: W, h: H }, side = '') {
+    // landscape: the navigation rail is on the left, so she always waits on the right
+    const right = side ? side === 'right' : !!p && (p.edge === 'right' || (!p.edge && p.x > vw / 2));
+    return settle({ x: right ? vw : -1, y: vh - dims.h - 64 }, vw, vh, dims.w, dims.h);
+}
 /** Should the floating portrait be used? auto = touch / narrow screens. */
 export function wantFloat(mode, { coarse = false, width = 1280 } = {}) { return mode === 'on' || (mode !== 'off' && (coarse || width <= 720)); }
 
@@ -68,6 +74,8 @@ export class LilithFloat {
     constructor(app) { this.app = app; this.disposers = []; this.mood = ''; this.hideT = 0; this.tempTuck = false; this.lineIdx = 0; this.pokeIdx = 0; this.lastTap = 0; }
     get settings() { return this.app.settings; }
     get active() { return !!this.el && !this.el.hidden; }
+    /** A line is showing right now (0.9.0: a scroll inside the full-screen terminal hides it). */
+    get speaking() { return !!this.bubble?.classList.contains('show'); }
     start() {
         const host = document.createElement('div'); host.id = 'zhutian-lilith-float'; document.body.append(host); this.host = host;
         const sh = host.attachShadow({ mode: 'open' });
@@ -75,6 +83,8 @@ export class LilithFloat {
         this.el = sh.querySelector('.fl'); this.fig = sh.querySelector('.fig'); this.bubble = sh.querySelector('.bubble'); this.text = this.bubble.querySelector('span');
         this.imgs = [...sh.querySelectorAll('img')]; this.setMood('neutral'); this.applySize();
         this.bindPointer();
+        // 0.9.0: tap the bubble to dismiss it (on a phone it can sit over the terminal's content)
+        this.bubble.addEventListener('click', e => { e.stopPropagation(); clearTimeout(this.hideT); this.quiet(); });
         const sync = () => this.sync();
         addEventListener('resize', sync); this.disposers.push(() => removeEventListener('resize', sync));
         const mq = matchMedia('(pointer: coarse)'); mq.addEventListener?.('change', sync); this.disposers.push(() => mq.removeEventListener?.('change', sync));
@@ -94,7 +104,7 @@ export class LilithFloat {
         const on = this.wanted();
         this.el.hidden = !on;
         this.hideOriginalEntry(on);
-        if (on) this.place(this.pos(), false);
+        if (on) { if (this.app.hub?.isOpen) { this.tempTuck = false; this.onHub(true); } else this.place(this.pos(), false); }
     }
     /** The original pill launcher stays for desktop; with the floating portrait it would be a second Lilith. */
     hideOriginalEntry(on) {
@@ -123,7 +133,10 @@ export class LilithFloat {
     onHub(open) {
         if (!this.active) return;
         const p = this.cur || this.pos();
-        if (open && !p.tucked) { this.tempTuck = true; this.place(settle({ x: p.x > innerWidth / 2 ? innerWidth : -1, y: p.y }, innerWidth, innerHeight, this.dims.w, this.dims.h), false); }
+        // 0.9.0: over the full-screen phone terminal she waits in the bottom corner (above the status line), not halfway
+        // up the content where her lines covered what you were reading
+        if (open && this.app.mobile?.full) { this.tempTuck = true; this.place(parkSpot(p, innerWidth, innerHeight, this.dims, this.app.mobile.mode === 'land' ? 'right' : ''), false); }
+        else if (open && !p.tucked) { this.tempTuck = true; this.place(settle({ x: p.x > innerWidth / 2 ? innerWidth : -1, y: p.y }, innerWidth, innerHeight, this.dims.w, this.dims.h), false); }
         else if (!open && this.tempTuck) { this.tempTuck = false; this.place(this.pos(), false); }
         // desktop with the portrait visible inside the window: one Lilith is enough
         this.el.style.opacity = open && this.app.lilith?.stageVisible?.() ? '0' : '';

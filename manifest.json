@@ -1,7 +1,7 @@
 {
   "display_name": "诸天 · 莉莉丝契约终端",
   "author": "诸天系统项目",
-  "version": "0.8.5",
+  "version": "0.9.0",
   "loading_order": 200,
   "js": "index.js",
   "css": "styles/host.css",
@@ -14,5 +14,5 @@
     "disable": "deactivate",
     "delete": "deactivate"
   },
-  "homepage": "https://github.com/falingzhi1-boop/zhutianxitongchajianban"
+  "homePage": "https://github.com/falingzhi1-boop/zhutianxitongchajianban"
 }

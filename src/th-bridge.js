@@ -51,7 +51,10 @@ export function endpointOf(url) {
 export class Bridge {
     constructor(adapter, settings) {
         this.adapter = adapter; this.settings = settings; this.listeners = new Set(); this.stops = new Set(); this.dead = false;
+        this.scriptFilters = new Set();
     }
+    /** fn(next, prev) → object: last look at a script-variable write before it is stored. Returns the remover. */
+    addScriptFilter(fn) { this.scriptFilters.add(fn); return () => this.scriptFilters.delete(fn); }
     ctx() { return this.adapter.context(); }
     onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
     emit(kind) { for (const fn of this.listeners) try { fn(kind); } catch (e) { console.warn('[诸天桥接]', e); } }
@@ -81,9 +84,11 @@ export class Bridge {
             c.extensionSettings.variables.global = next; c.saveSettingsDebounced(); this.emit('global'); return clone(next);
         }
         if (type === 'script') {
-            const draft = clone(this.settings.scriptVariables());
-            const next = (await updater(draft)) ?? draft;
+            const prev = this.settings.scriptVariables(), draft = clone(prev);
+            let next = (await updater(draft)) ?? draft;
             if (!plainObject(next)) throw Error('脚本变量必须是对象，未写入。');
+            // 0.9.0: e.g. the phone layout keeps the desktop window box out of a full-screen session's writes
+            for (const f of this.scriptFilters) { try { const v = f(next, prev); if (plainObject(v)) next = v; } catch (e) { console.warn('[诸天] 脚本变量过滤', e); } }
             this.settings.setScriptVariables(next); this.emit('script'); return clone(next);
         }
         throw Error('不支持写入的变量类型：' + type);
