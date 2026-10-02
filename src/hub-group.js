@@ -7,6 +7,7 @@ import { inert } from './contracts.js';
 import { esc, fmtNum } from './hub.js';
 import { readConfigs } from './api-center.js';
 import * as L from './ledger-ops.js';
+import { errorLine } from './errors.js';
 
 const KEY = '聊天群';
 const MAX_MSG = 150, MAX_PM = 30, MAX_MEMBERS = 30;
@@ -206,11 +207,11 @@ export class HubGroup {
     /** What reached the host through the group — injected into the story prompt so the AI keeps the real source. */
     booked(g, what, src, how) { g.入库记录.push({ t: Date.now(), what: clip(what, 40), src: clip(src, 40), how }); if (g.入库记录.length > 20) g.入库记录.splice(0, g.入库记录.length - 20); }
     toast(t, ms = 3200, a) { this.hub?.toast(t, ms, a); }
-    fail(e) { this.toast(e.message || String(e), 4500); globalThis.toastr?.warning?.(e.message || String(e), '诸天 · 聊天群'); }
+    fail(e) { const line = errorLine(e); this.toast(line, 5500); globalThis.toastr?.warning?.(line, '诸天 · 聊天群'); }
     async ask(system, user, maxTokens = 1200) {
         const cfg = readConfigs(this.bridge).status || {};
         const custom = cfg.url ? { apiurl: cfg.url, key: cfg.key, model: cfg.model, max_tokens: maxTokens, temperature: 0.85 } : undefined;
-        const text = await this.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: maxTokens });
+        const text = await this.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: maxTokens, route: 'group' });
         if (!String(text || '').trim()) throw Error('模型没有返回内容。');
         return String(text);
     }
@@ -227,7 +228,8 @@ export class HubGroup {
             }
             if (g?.降临) parts.push(`【诸天聊天群 · 群员降临】${g.降临.名称}（${g.降临.世界}·${this.tierName(g.降临.档)}·${g.降临.性格 || ''}）通过聊天群降临到宿主身边，接下来 ${g.降临.轮} 轮剧情中作为同伴登场，按其性格和原世界能力行动。`);
             const text = parts.join('\n');
-            if (text === this.lastPrompt) return; this.lastPrompt = text;
+            // 1.0: SillyTavern empties its extension prompts when a chat is (re)loaded — compare with what is really there
+            if (text === this.lastPrompt && (this.bridge.livePrompt?.('group') ?? text) === text) return; this.lastPrompt = text;
             this.bridge.injectPrompts([{ id: 'group', content: text, position: 'in_chat', depth: 2, role: 'system' }]);
         } catch (e) { console.warn('[诸天聊天群] 注入失败', e); }
     }

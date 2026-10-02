@@ -30,7 +30,7 @@ def shot(page, name): page.screenshot(path=str(SHOTS / f'{name}.png'))
 
 FORM_PROBE = """const f=sr.querySelector('#page-api .zt-api-inline form');if(!f)return null;
   const radios=[...f.querySelectorAll('input[name=mode]')].map(r=>{const rr=r.getBoundingClientRect(),t=r.closest('label').querySelector('b').getBoundingClientRect();return {w:Math.round(rr.width),gap:Math.round(t.left-rr.right),sameRow:Math.abs((t.top+t.bottom)/2-(rr.top+rr.bottom)/2)<14}});
-  const det=f.querySelector('details');const ls=[...f.querySelectorAll('input[name=mode]')].map(r=>r.closest('label').getBoundingClientRect());
+  const det=f.querySelector('details:not([data-routes])');   /* 1.0: the 分功能 API group is a details too */const ls=[...f.querySelectorAll('input[name=mode]')].map(r=>r.closest('label').getBoundingClientRect());
   return {radios,state:f.querySelector('[data-state]').innerText,steps:[...f.querySelectorAll('span[style*="border-radius:50%"]')].filter(s=>s.offsetParent).map(s=>s.textContent),
     advClosed:det&&!det.open,toStatusInAdv:!!det?.querySelector('input[name=toStatus]'),cardGap:Math.round(ls[1].top-ls[0].bottom),title:f.querySelector('b').textContent}"""
 

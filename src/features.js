@@ -10,6 +10,7 @@ import { tavernHelperMacrosActive } from './macro-like.js';
 import { latestRules, mergeWorldbook, WORLDBOOK_REV, moduleStates, applyModules, BALANCE_MODULES } from './worldbook.js';
 import { findBindings, unbindAll, restoreBindings, describe as describeBindings } from './wb-unbind.js';
 import { buildReport, copyText } from './diag-report.js';
+import { errorLine } from './errors.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
@@ -34,7 +35,7 @@ export class Features {
         c.callGenericPopup(el, c.POPUP_TYPE.TEXT, '', { wide, large: wide, allowVerticalScrolling: true, okButton: '关闭' });
         return el;
     }
-    toast(kind, text) { globalThis.toastr?.[kind]?.(text, '诸天'); }
+    toast(kind, text) { globalThis.toastr?.[kind]?.(kind === 'error' ? errorLine(text) : text, '诸天'); }
 
     // ---------- worldbook ----------
     async worldbookStatus() {
@@ -185,21 +186,21 @@ export class Features {
             if (act === 'export') { this.exportWorldbook(); return; }
             if (act === 'unbind') {
                 try { const r = await this.unbindWorldbook(); out.textContent = r.count ? `已解绑：${describeBindings(r)}。${r.errors.length ? '部分失败：' + r.errors.join('；') : ''}自动绑定已关闭。` : '没有找到需要解绑的地方。'; el.querySelector('.zt-wb-bound').textContent = '现在绑定在：没有任何地方。'; if (r.count) this.toast('success', `已解绑 ${r.count} 处`); }
-                catch (err) { out.textContent = '未完成：' + err.message; }
+                catch (err) { out.textContent = '未完成：' + errorLine(err); }
                 return;
             }
             if (act === 'restore') {
                 try { const r = await this.restoreWorldbook(); out.textContent = `已恢复 ${r.count} 处${r.skipped ? `，${r.skipped} 处跳过（角色卡已删除或换了别的世界书）` : ''}。`; e.target.closest('[data-wb]').remove(); }
-                catch (err) { out.textContent = '未完成：' + err.message; }
+                catch (err) { out.textContent = '未完成：' + errorLine(err); }
                 return;
             }
             if (act === 'update') {
                 try { const r = await this.updateWorldbook(); out.textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', '世界书已更新到插件最新版'); }
-                catch (err) { out.textContent = '未完成：' + err.message; }
+                catch (err) { out.textContent = '未完成：' + errorLine(err); }
                 return;
             }
             try { const r = await this.installWorldbook(act === 'chat' ? 'chat' : 'none'); out.textContent = `完成：世界书 ${r.count} 条；当前聊天${r.chatBound ? '已绑定' : '未绑定'}。`; this.toast('success', '世界书已就绪'); }
-            catch (err) { out.textContent = '未完成：' + err.message; }
+            catch (err) { out.textContent = '未完成：' + errorLine(err); }
         });
     }
 
@@ -223,7 +224,7 @@ export class Features {
     }
     openMigration() {
         const r = this.migrationReport();
-        const rows = r.backups.map(b => `<tr><td>${new Date(b.at).toLocaleString()}</td><td>楼 ${b.floor}</td><td>${esc(b.balance)}</td><td><div class="menu_button" data-restore="${b.at}">回滚到此</div></td></tr>`).reverse().join('') || '<tr><td colspan="4">暂无自动备份（账本首次被原生状态栏改动时自动生成，最多 5 份）。</td></tr>';
+        const rows = r.backups.map(b => `<tr><td>${new Date(b.at).toLocaleString()}${b.reason ? `<br><small>${esc(b.reason)}</small>` : ''}</td><td>楼 ${b.floor}</td><td>${esc(b.balance)}</td><td><div class="menu_button" data-restore="${b.at}">回滚到此</div></td></tr>`).reverse().join('') || '<tr><td colspan="4">暂无自动备份（账本首次被原生状态栏改动时自动生成，最多 5 份）。</td></tr>';
         const el = this.popup(`<h3>旧存档迁移与账本回滚</h3>
 <p>旧存档由酒馆助手写入的聊天变量（chat_metadata.variables）与本扩展使用<b>同一位置</b>，账本、记忆、私聊记录无需转换即可直接读取。</p>
 <ul><li>诸天账本：${r.ledger ? '已检测到' : '无（可用“新聊天初始化”创建）'}</li><li>原版记忆存档：${r.memory ? '已检测到' : '无'}</li><li>莉莉丝私聊记录：${r.companion ? '已检测到' : '无'}</li>
@@ -236,7 +237,7 @@ export class Features {
                 if (e.target.closest('[data-mig="import"]')) { this.app.settings.set('legacyImported', false); const d = this.app.assistant?.importLegacyConfig(); out.textContent = d ? '已导入：' + Object.keys(d).join('、') + '；刷新页面后莉莉丝窗口使用新配置。' : '没有找到旧配置。'; }
                 const at = e.target.closest('[data-restore]')?.dataset.restore;
                 if (at && confirm('把诸天账本回滚到这份备份？当前账本会被替换（回滚前的状态也会先自动备份）。')) { await this.app.bridge.restoreBackup(Number(at)); out.textContent = '已回滚并保存。'; this.app.statusbar?.rebuild(); }
-            } catch (err) { out.textContent = '未完成：' + err.message; }
+            } catch (err) { out.textContent = '未完成：' + errorLine(err); }
         });
     }
     /** 0.9.1: the two AI endpoint configs (for 复制诊断信息: only host + model are reported). */
@@ -329,14 +330,15 @@ export class Features {
                     case 'init': f.initChat().then(r => f.toast('success', r.created ? '已初始化诸天账本' : '账本已存在，已补齐缺失字段')).catch(e => f.toast('error', e.message)); return '';
                     case 'world': f.openWorldbook(); return '';
                     case 'backup': f.openMigration(); return '';
+                    case 'export': case 'import': app.dataIO?.open(); return '';
                     case 'diag': f.openDiagnostics(); return '';
                     case 'copydiag': f.copyDiagnostics(); return '';
                     case 'selftest': app.deviceCheck?.run(); return '';
                     case 'points': return String(ledgerSummary(app.adapter.variables())?.points ?? '');
                     case 'live2d': app.portrait?.setMode(rest[0] === 'off' ? 'rig' : 'live2d'); return '';
-                    default: return '用法：/zt open [页面]|status|shop|bag|init|world|backup|diag|copydiag|selftest|points|live2d [off]';
+                    default: return '用法：/zt open [页面]|status|shop|bag|init|world|backup|export|diag|copydiag|selftest|points|live2d [off]';
                 }
-            }, ['zhutian'], '<span class="monospace">/zt open [页面]|status|shop|bag|init|world|backup|diag|copydiag|selftest|points|live2d</span> – 诸天终端', true, true);
+            }, ['zhutian'], '<span class="monospace">/zt open [页面]|status|shop|bag|init|world|backup|export|diag|copydiag|selftest|points|live2d</span> – 诸天终端', true, true);
         }
         if (!globalThis.__zhutianMacros && (typeof c.macros?.register === 'function' || typeof c.registerMacro === 'function')) {
             globalThis.__zhutianMacros = true;

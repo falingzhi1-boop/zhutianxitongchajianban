@@ -13,6 +13,7 @@ import { VERSION } from './contracts.js';
 import { esc } from './hub.js';
 import { readConfigs, saveConfigs } from './api-center.js';
 import { MAIN_API_URL, isMainApi } from './th-bridge.js';
+import { errorLine } from './errors.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -114,7 +115,7 @@ ${this.note ? `<p class="zt-guide-note" role="status">${esc(this.note)}</p>` : '
             else if (act === 'wb-update') { const r = await f.updateWorldbook(); this.note = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版备份为“${r.backup}”。`; }
             else if (act === 'api-main') { await saveConfigs(app.bridge, this.ns(), { url: MAIN_API_URL }); app.adapter.notify?.(); this.note = '已设置为使用酒馆当前的主模型（不会把请求发到别处）。'; }
             else if (act === 'chat-enable') this.note = await this.enableChat();
-        } catch (e) { this.note = '未完成：' + (e?.message || String(e)); }
+        } catch (e) { this.note = '未完成：' + errorLine(e); }
         finally { this.busy = ''; }
         await this.paint();
     }

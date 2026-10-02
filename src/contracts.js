@@ -1,7 +1,9 @@
 export const ID = 'zhutian-covenant-terminal';
 export const STORAGE = 'zhutianCovenantTerminal';
+/** 1.0: structure version of the 诸天系统 ledger, kept in chatMetadata[STORAGE].ledgerSchema (see src/data-io.js). */
+export const LEDGER_SCHEMA = 1;
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '0.9.4';
+export const VERSION = '1.0.0';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -50,17 +52,17 @@ export const CAPABILITIES = [
     {name:'API 中心与酒馆主 API',state:'implemented',scope:'一处配置状态栏与莉莉丝助手（写入原版同一存储）；可选直接使用酒馆当前主 API；修复状态栏 max_tokens / temperature 被忽略'},
     {name:'一键接管 / 恢复旧版',state:'implemented',scope:'停用（不删除）旧正则与旧酒馆助手脚本并记录，可一键恢复；角色卡内项目经 writeExtensionField 保存'},
     {name:'外挂世界书安装与聊天绑定',state:'implemented',scope:'35 条内置规则；已存在同名世界书时只绑定不覆盖；不依赖角色卡 MVU'},
-    {name:'原版自动记忆整理、补读及独立 API',state:'pending',scope:'界面已迁移·待模型验收：原逻辑已运行，但没有凭据，未完成真实模型请求验收'},
-    {name:'原版工作台完整工具与建议接续',state:'pending',scope:'界面已迁移·待模型验收'},
+    {name:'原版自动记忆整理、补读及独立 API',state:'experimental',scope:'1.0 实验性（模拟模型验收）：界面已迁移；原逻辑已运行，但没有凭据，未完成真实模型请求验收'},
+    {name:'原版工作台完整工具与建议接续',state:'experimental',scope:'1.0 实验性（模拟模型验收）：界面已迁移，真实模型未验收'},
     {name:'原剧情结算、已有商城库存购买、单件使用与回收',state:'implemented',scope:'默认关闭；预览确认、原版规则、Web Locks、服务器存档凭据及正文系统记录；分支变化冻结交易'},
-    {name:'AI 商城进货、许愿、抽取、外挂与神通支付动作',state:'pending',scope:'界面已迁移·待模型验收：原版状态栏按钮已在原生桥接上运行，模型结果回写未验收'},
-    {name:'私聊 API 与真实模型生成',state:'pending',scope:'没有密钥，不进行收费请求；主聊天互动仅完成发送与保存验证'},
+    {name:'AI 商城进货、许愿、抽取、外挂与神通支付动作',state:'experimental',scope:'1.0 实验性（模拟模型验收）：原版状态栏按钮已在原生桥接上运行，模型结果回写未验收'},
+    {name:'私聊 API 与真实模型生成',state:'experimental',scope:'1.0 实验性（模拟模型验收）：没有密钥，不进行收费请求；主聊天互动仅完成发送与保存验证'},
     {name:'世界主题（仙侠 / 赛博 / 诡异）',state:'implemented',scope:'0.7.0：按 当前世界 / 世界类型 / 货币自动判断，可在设置固定；只换颜色与装饰，控件位置不变；减少动态效果时静止；万界足迹记录到访世界'},
     {name:'莉莉丝界面角色与镜头',state:'implemented',scope:'0.7.0：选中任务 / 物品 / 功法、结算成败时用原版部位反应（动作 + 表情）配账本台词；系统页半身、工作台全身、私聊面部特写、剧情提示胸像；不新增动作、不伪造 Live2D'},
     {name:'图谱：事件线、羁绊图、星图、能力树',state:'implemented',scope:'0.7.0：节点全部来自账本记录，详情显示原始字段与来源路径，可跳回任务页 / 聊天群 / 外挂 / 楼层；星图可加锁记录穿越'},
     {name:'演出：穿越、突破、契约、任务完成、抽取、奖励入库',state:'implemented',scope:'0.7.0：只在账本保存并读回后播放，播放前再次核对，回滚的标为未入账；≤2.1 秒可跳过，结果卡片可跳转记录；可只显示卡片或关闭'},
-    {name:'AI 自动写入 当前世界 / 世界类型',state:'pending',scope:'0.7.0：已注入提示并由原版 变量更新 写入；仅用模拟模型验收，真实模型遵循度未验证'},
-    {name:'旧存档迁移、账本备份与回滚',state:'pending',scope:'迁移报告、旧助手配置导入与回滚界面已提供；尚未完成浏览器点击验收'},
+    {name:'AI 自动写入 当前世界 / 世界类型',state:'experimental',scope:'1.0 实验性：0.7.0：已注入提示并由原版 变量更新 写入；仅用模拟模型验收，真实模型遵循度未验证'},
+    {name:'旧存档迁移、账本备份与回滚',state:'implemented',scope:'1.0：迁移报告、旧助手配置导入；账本回滚在弹窗里点击验收（tests/native_v100.py），回滚前的状态总会先备份并保留'},
     {name:'修行 · 熟练度（功法实效 / 实战积累 / 角色卡功法）',state:'implemented',scope:'0.8.0：每轮把各功法当前阶段的原版效果注入提示；正文用了功法而数据块漏记时按品阶补记少量熟练度（换页随旧回复撤销）；读取角色卡 / MVU / 其他脚本的功法变量并只升不降地导入功法库。真实模型是否按阶段效果演绎未验证'},
     {name:'莉莉丝气泡播报与剧情台词',state:'implemented',scope:'0.8.0：终端内不再显示状态栏底部的“莉莉丝：……”一行，数据块的系统播报由立绘气泡说出；点立绘空白处按账本说剧情台词；无立绘（手机）时用终端提示条'},
     {name:'管理员控制台入口',state:'implemented',scope:'0.8.0：从 设置 → 高级 · 管理员 打开原版管理员面板；终端内隐藏 ◆ 连点入口'},
@@ -88,4 +90,15 @@ export const CAPABILITIES = [
     {name:'星图更正当前世界',state:'implemented',scope:'0.9.3：星图里选中世界 →「识别错了？更正这个世界」：改世界名 / 世界类型（加锁写入并读回，不算穿越、不播放演出），同名足迹自动合并；非当前世界可从足迹删除。按名称猜的类型在节点上标「?」；当前世界的节点类型与顶栏主题一致（以前可能一个仙侠一个全息）。在记录穿越里填当前世界名也会变成更正类型。'},
     {name:'新手引导',state:'implemented',scope:'0.9.3：首次打开终端且还有步骤没完成时自动打开一次（终端 → 引导，或 设置 → 上手 → 新手引导）：① 导入或更新世界书 ② 设置 AI 接口（一键用酒馆当前主模型，或去连接页填写）③ 在当前聊天启用（按原版规则建账本 + 打开莉莉丝记忆）。每步按真实状态打勾，可跳过；跳过 / 完成会记住。'},
     {name:'招募令输入框跟随模式',state:'implemented',scope:'0.9.4：聊天群 → 群员 → 发布招募令：选「随机世界」时在输入框里打字，会自动改为「指定世界」（之后仍可改成指定角色），不再出现“填了名字却还是随机”；切回随机会清空输入框；输入框提示随模式变化；指定世界 / 指定角色没填名字时直接提示，不扣 100 点。'},
+    {name:'悬浮莉莉丝抠图立绘',state:'implemented',scope:'1.0：手机悬浮莉莉丝改为从原版分层抠出的人物（无卡片），翅膀分层扇动、表情补丁、眨眼与说话口型；素材与校验见 assets/lilith/float/PROVENANCE.md；只在手机模拟里验收'},
+    {name:'导出 / 导入存档',state:'implemented',scope:'1.0：设置 → 账本与存档 → 导出 / 导入存档（或 /zt export）：.json 文件含插件设置和当前聊天的账本（可选记忆、私聊记录），不含 API Key；导入先预览、先备份、写入后读回，不会清空本机密钥'},
+    {name:'账本结构版本',state:'implemented',scope:'1.0：结构版本记在 chatMetadata.zhutianCovenantTerminal.ledgerSchema（AI 看不到）；打开旧聊天时先备份再升级，更新版本插件写过的账本只读'},
+    {name:'设置分层与搜索',state:'implemented',scope:'1.0：设置页分 常用 / 进阶设置 / 诊断与维护，搜索框按标题与说明过滤并自动展开'},
+    {name:'统一错误提示',state:'implemented',scope:'1.0：失败提示统一为「发生了什么。账本：有没有改动。下一步：…」，账本状态只在能确定时才写'},
+    {name:'手机横屏导航精简',state:'implemented',scope:'1.0：横屏左侧导航只放 总览 / 任务 / 商城 / 背包 / 聊天群 / 设置 + 「更多」，当前页总会显示；只在手机模拟里验收'},
+    {name:'动态效果自动降级',state:'implemented',scope:'1.0：设置 → 进阶设置 → 动态效果：自动（系统减少动态效果或触屏设备帧率 < 40 时精简）/ 完整 / 精简；精简时悬浮莉莉丝不摆动、装饰动画停止、演出只显示结果；真实低端机未测'},
+    {name:'品阶鉴定（剧情功法 / 物品）',state:'implemented',scope:'1.0 玩家反馈：剧情 / 角色卡 / 旧存档来的功法和物品（非系统来源）可手动修正品阶，只升不降、最高神品；物品回收价保持原值；写入读回并同步楼层快照；「收录:功法名[更高品阶]」可更正（跟随楼层）。浏览器点击验收（1.19）'},
+    {name:'品阶鉴定 · AI 判断',state:'experimental',scope:'1.0 实验性（模拟模型验收）：按诸天统一标准给出「品阶|理由」，走分功能 API「品阶鉴定」；真实模型的判断质量未验证'},
+    {name:'分功能 API 与接口预设',state:'implemented',scope:'1.0 玩家反馈：11 处模型调用各自跟随默认 / 酒馆主 API / 预设 / 单独配置；预设必须输入名称才能保存；存在全局变量 诸天系统_API路由，不进聊天和导出。以模拟模型请求日志验收地址、密钥、模型的改写；真实服务商未验收'},
+    {name:'一键关闭插件与关闭悬浮莉莉丝',state:'implemented',scope:'1.0 玩家反馈：设置 → 插件开关 调用酒馆 disableExtension（先确认）；悬浮莉莉丝拖到底部或右键关闭，确认框提示从酒馆「扩展」面板重新进入控制台，扩展面板可让她回来。1.19 浏览器验收'},
 ];

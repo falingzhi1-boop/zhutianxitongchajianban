@@ -7,13 +7,13 @@ import { VERSION, CAPABILITIES } from '../src/contracts.js';
 
 const read = f => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
-test('size presets: default 75 % of the 0.8.2 portrait, xl = old size, touch target never below 24 px', () => {
+test('size presets: default 75 %, touch target never below 24 px (1.0: the cut-out figure is 150×165 at xl)', () => {
     assert.deepEqual(Object.keys(FLOAT_SIZES), ['xs', 's', 'm', 'l', 'xl']);
     assert.deepEqual(floatDims(undefined), floatDims('m'));
-    assert.deepEqual(floatDims('m'), { w: 59, h: 78, peek: 24, k: 0.75 });
-    assert.deepEqual(floatDims('xl'), { w: 78, h: 104, peek: 30, k: 1 });
-    assert.equal(floatDims('bogus').w, 59);
-    for (const k of Object.keys(FLOAT_SIZES)) { const d = floatDims(k); assert.ok(d.peek >= 24, k); assert.ok(Math.abs(d.h / d.w - 104 / 78) < 0.05, 'same proportions ' + k); }
+    assert.deepEqual(floatDims('m'), { w: 113, h: 124, peek: 41, k: 0.75 });
+    assert.deepEqual(floatDims('xl'), { w: 150, h: 165, peek: 54, k: 1 });
+    assert.equal(floatDims('bogus').w, 113);
+    for (const k of Object.keys(FLOAT_SIZES)) { const d = floatDims(k); assert.ok(d.peek >= 24, k); assert.ok(Math.abs(d.h / d.w - 700 / 636) < 0.02, 'art proportions ' + k); }
 });
 
 test('edge tucking uses the actual size (small portrait near the right edge tucks right)', () => {

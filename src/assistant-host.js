@@ -6,7 +6,8 @@
 //   fetch      -> the real fetch, falling back to the user's own SillyTavern server when CORS blocks the API
 import mountOriginalAssistant from '../vendor/original/assistant-runtime.js';
 import { streamedCompletion, reportApiError } from './api-stream.js';
-import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL } from './th-bridge.js';
+import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL, MAIN_API_URL, endpointOf } from './th-bridge.js';
+import { classifyAssistant, readRoutes, resolveRoute, routeLabel } from './api-routes.js';
 
 const LEGACY_DOM_ID = 'zt-memory-assistant-v1';
 
@@ -28,6 +29,23 @@ export function proxiedFetch(bridge) {
     const real = globalThis.fetch.bind(globalThis);
     const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
     return async function fetch(url, init = {}) {
+        // 1.0 分功能 API: 私聊 / 记忆 / 工作台 can each use a preset, an own config or 酒馆主 API. The original assistant
+        // still sends the request to the default connection; it is pointed at the routed one here. No route → unchanged.
+        if (String(init.method || 'GET').toUpperCase() === 'POST' && /\/chat\/completions$/.test(String(url).replace(/[?#].*$/, ''))) {
+            let body = null; try { body = JSON.parse(init.body || '{}'); } catch { body = null; }
+            const id = body ? classifyAssistant(body.messages) : '', over = id ? resolveRoute(readRoutes(bridge), id) : null;
+            if (over) {
+                bridge.lastRoute = { id, via: over.via, at: Date.now() };
+                if (over.main) url = MAIN_API_URL + '/chat/completions';
+                else {
+                    try { url = endpointOf(over.url).chat; } catch (e) { return json({ error: { message: `${routeLabel(id)}（${over.via}）：${e?.message || e}` } }, 400); }
+                    const headers = { ...(init.headers || {}) }; delete headers.authorization; delete headers.Authorization;
+                    if (over.key) headers.Authorization = 'Bearer ' + over.key;
+                    body.model = over.model || body.model; if (over.maxTokens) body.max_tokens = over.maxTokens;
+                    init = { ...init, headers, body: JSON.stringify(body) };
+                }
+            }
+        }
         // API center "酒馆当前主API": answered locally through SillyTavern generateRaw, never sent to the network.
         if (isMainApi(url)) {
             const u = new URL(String(url)), method = String(init.method || 'GET').toUpperCase();

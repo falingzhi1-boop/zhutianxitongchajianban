@@ -5,7 +5,8 @@
 //   script -> extension_settings[ID].scriptVariables (this extension; one-click import from the old TH helper script)
 // Every chat write is serialized under the same Web Lock as the guarded ledger service and refuses to run
 // while a previous ledger write is uncertain.
-import { ID, STORAGE, LEGACY_SCRIPT_ID, identity } from './contracts.js';
+import { ID, STORAGE, LEGACY_SCRIPT_ID, LEDGER_SCHEMA, identity } from './contracts.js';
+import { classifyStatus, readRoutes, resolveRoute, routeLabel } from './api-routes.js';
 import { streamedCompletion, errorText } from './api-stream.js';
 
 const clone = value => value === undefined ? undefined : structuredClone(value);
@@ -116,6 +117,9 @@ export class Bridge {
         return navigator.locks.request('zhutian-ledger:' + expected, { signal: AbortSignal.timeout(20000) }, async () => {
             const c = this.ctx();
             if (this.dead || identity(c) !== expected) throw Error('聊天已经切换，取消写入。');
+            // 1.0: a ledger written by a newer plugin (higher structure version) is read-only here
+            const schema = Number(c.chatMetadata?.[STORAGE]?.ledgerSchema) || 0;
+            if (schema > LEDGER_SCHEMA) throw Error(`这个聊天的账本由更新版本的插件写过（结构版本 ${schema}，本插件 ${LEDGER_SCHEMA}），为避免写坏已改为只读。请更新插件。`);
             const before = plainObject(c.chatMetadata.variables) ? c.chatMetadata.variables : {};
             const serialized = JSON.stringify(before), draft = clone(before);
             const next = (await updater(draft)) ?? draft;
@@ -142,12 +146,26 @@ export class Bridge {
         } catch (e) { console.warn('[诸天桥接] 备份失败（不影响写入）', e); }
     }
     backups() { return clone(this.ctx()?.chatMetadata?.[STORAGE]?.ledgerBackups || []); }
+    /** 1.0: a forced backup of the current ledger (import / rollback / structure upgrade), not merged into a recent one. */
+    async snapshot(reason = '') {
+        const c = this.ctx(), z = c?.chatMetadata?.variables?.诸天系统;
+        if (!c?.chatMetadata || z === undefined) return null;
+        const meta = c.chatMetadata[STORAGE] = { schema: 1, ...(c.chatMetadata[STORAGE] || {}) };
+        const list = Array.isArray(meta.ledgerBackups) ? meta.ledgerBackups : [];
+        const at = Math.max(Date.now(), (list.at(-1)?.at || 0) + 1);
+        const item = { at, balance: z?.系统点 ?? null, floor: (c.chat?.length || 0) - 1, ledger: clone(z), ...(reason ? { reason } : {}) };
+        list.push(item); meta.ledgerBackups = list.slice(-5);
+        await c.saveMetadata?.();
+        return item;
+    }
     async restoreBackup(at) {
         const item = this.backups().find(x => x.at === at);
         if (!item) throw Error('备份不存在。');
+        // 1.0: the state before the rollback is always backed up (it used to be skipped within 90 s of another write)
+        const pre = await this.snapshot('回滚前');
         await this.updateVariablesWith(v => { v.诸天系统 = clone(item.ledger); return v; });
         const c = this.ctx(); const meta = c.chatMetadata[STORAGE];
-        meta.ledgerBackups = (meta.ledgerBackups || []).filter(x => x.at < at);
+        meta.ledgerBackups = (meta.ledgerBackups || []).filter(x => x.at < at || (pre && x.at === pre.at));
         await c.saveMetadata();
     }
 
@@ -168,6 +186,8 @@ export class Bridge {
             c.setExtensionPrompt(`${ID}/${p.id}`, String(p.content ?? ''), POSITION[p.position] ?? 1, Number(p.depth) || 0, !!p.should_scan, ROLE[p.role] ?? 0, typeof p.filter === 'function' ? p.filter : null);
         }
     }
+    /** 1.0: what SillyTavern really holds for one of our prompts (it empties them all when a chat is (re)loaded). */
+    livePrompt(id) { try { return String(this.ctx()?.extensionPrompts?.[`${ID}/${id}`]?.value ?? ''); } catch { return ''; } }
     uninjectPrompts(ids) { const c = this.ctx(); for (const id of ids || []) c?.setExtensionPrompt?.(`${ID}/${id}`, '', 1, 0, false, 0); }
 
     // ---------- worldbooks (read-only; 0.9.3) ----------
@@ -312,10 +332,29 @@ export class Bridge {
     }
     /** Subset of Tavern Helper generateRaw used by the 3.1 status bar (AI 进货 / 抽卡 / 许愿 / 天眼 …).
      *  The status bar passes its limits inside custom_api (max_tokens, temperature 0.7) — both are honoured. */
-    async generateRaw({ user_input = '', ordered_prompts, custom_api, max_tokens } = {}) {
+    async generateRaw({ user_input = '', ordered_prompts, custom_api, max_tokens, route = '' } = {}) {
         const prompts = Array.isArray(ordered_prompts) ? ordered_prompts : [{ role: 'system', content: '' }, 'user_input'];
         const messages = prompts.map(p => p === 'user_input' ? { role: 'user', content: String(user_input) } : (p && typeof p === 'object' && typeof p.content === 'string' ? { role: p.role || 'system', content: p.content } : null)).filter(m => m && m.content);
-        const limit = Number(custom_api?.max_tokens) || Number(max_tokens) || 4096;
+        let limit = Number(custom_api?.max_tokens) || Number(max_tokens) || 4096;
+        // 1.0 分功能 API: the status bar still builds custom_api from the default connection; a feature with its own
+        // route (preset / own config / 酒馆主 API) is pointed there on the way out. No route → unchanged.
+        const id = route || classifyStatus(messages.find(m => m.role === 'system')?.content);
+        const over = id ? resolveRoute(readRoutes(this), id) : null;
+        if (over) {
+            this.lastRoute = { id, via: over.via, at: Date.now() };
+            const tag = e => Object.assign(Error(`${e?.message || e}（${routeLabel(id)} 用的是${over.via}）`), { status: e?.status });
+            try {
+                if (over.main) return await this.mainChat(messages, { maxTokens: limit });
+                if (over.maxTokens) limit = over.maxTokens;
+                custom_api = { ...(custom_api || {}), apiurl: over.url, key: over.key, model: over.model };
+            } catch (e) { throw tag(e); }
+            if (custom_api.apiurl && !isMainApi(custom_api.apiurl)) {
+                const control = new AbortController(), timer = setTimeout(() => control.abort(), 90000);
+                const temperature = Number.isFinite(Number(custom_api.temperature)) ? Number(custom_api.temperature) : undefined;
+                try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
+                catch (e) { throw tag(e); } finally { clearTimeout(timer); }
+            }
+        }
         if (custom_api?.apiurl && !isMainApi(custom_api.apiurl)) {
             const control = new AbortController(), timer = setTimeout(() => control.abort(), 90000);
             const temperature = Number.isFinite(Number(custom_api.temperature)) ? Number(custom_api.temperature) : undefined;

@@ -22,13 +22,17 @@ import {HubAtlas} from './src/hub-atlas.js';
 import {FX} from './src/fx.js';
 import {LilithStage} from './src/lilith-stage.js';
 import {SkillSync} from './src/skill-sync.js';
+import { Appraise } from './src/appraise.js';
 import {LilithFloat} from './src/lilith-float.js';
 import {MobileLayout} from './src/mobile.js';
 import {ErrorLog} from './src/diag-report.js';
 import {DeviceCheck} from './src/device-check.js';
 import {Onboarding} from './src/onboarding.js';
+import {DataIO} from './src/data-io.js';
+import {Perf} from './src/perf.js';
 import {unbindAll} from './src/wb-unbind.js';
 import {WORLD_NAME} from './src/features.js';
+import {errorLine} from './src/errors.js';
 
 // manifest.generate_interceptor is looked up on globalThis at generation time: define it as soon as the module loads.
 installInterceptor();
@@ -65,6 +69,8 @@ class App {
         try{this.atlas=new HubAtlas(this).start();this.parts.push(this.atlas);}catch(e){console.warn('[诸天] 图谱未启动',e);}
         try{this.fx=new FX(this).start();this.parts.push(this.fx);}catch(e){console.warn('[诸天] 演出未启动',e);}
         try{this.skills=new SkillSync(this).start();this.parts.push(this.skills);}catch(e){console.warn('[诸天] 修行熟练度未启动',e);}
+        // 1.0: 品阶鉴定 — 剧情里得到的功法 / 物品不再被锁死在凡品（AI 鉴定或手动修正，只升不降）
+        try{this.appraise=new Appraise(this).start();this.parts.push(this.appraise);}catch(e){console.warn('[诸天] 品阶鉴定未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);
@@ -75,6 +81,10 @@ class App {
         // 0.8.2: phones never show the portrait inside the window — Lilith floats on the page instead (and speaks there).
         try{this.float=new LilithFloat(this).start();this.parts.push(this.float);}catch(e){console.warn('[诸天] 悬浮莉莉丝未启动',e);}
         this.features=new Features(this);this.features.start();this.parts.push(this.features);
+        // 1.0: 动态效果自动降级（低端机 / 系统减少动态效果）
+        try{this.perf=new Perf(this).start();this.parts.push(this.perf);}catch(e){console.warn('[诸天] 动态效果检测未启动',e);}
+        // 1.0: 导出 / 导入存档 + 账本结构版本（打开聊天时检查，旧结构先备份再升级，新结构只读）
+        try{this.dataIO=new DataIO(this).start();this.parts.push(this.dataIO);}catch(e){console.warn('[诸天] 存档导出导入未启动',e);}
         // 0.9.1: 手机真机自检 (runs only when the user starts it)
         this.deviceCheck=new DeviceCheck(this);this.parts.push(this.deviceCheck);
         // 0.8.4: one API setting — the terminal's 连接 page shows the API 中心 form (the original v1.1 form wrote only Lilith's copy).
@@ -83,7 +93,7 @@ class App {
         if(this.hub?.page==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}
         // 0.9.3: 新手引导 (after the 连接 page hook, so its 「回到引导」 strip lands on top of the mounted form)
         if(this.hub)try{this.guide=new Onboarding(this).start();this.parts.push(this.guide);}catch(e){console.warn('[诸天] 新手引导未启动',e);}
-        this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy()});
+        this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy(),float:()=>this.float?.show()});
         globalThis.__zhutianApp=this;
     }
     openTerminal(page){if(this.hub)this.hub.open(page);else this.assistant?.open();}
@@ -98,14 +108,14 @@ class App {
         try{const r=await this.takeover.run();this.statusbar?.rebuild();
             if(r.reload){t?.success('旧版已停用。页面将在 2 秒后刷新，让酒馆助手卸载旧脚本。','诸天 · 接管');setTimeout(()=>location.reload(),2000);}
             else t?.success(`已停用 ${r.items.length} 个旧正则，现由插件原生接管。`,'诸天 · 接管');
-            return r;}catch(e){t?.error(e.message,'诸天 · 接管');throw e;}
+            return r;}catch(e){t?.error(errorLine(e),'诸天 · 接管');throw e;}
     }
     async restoreLegacy(){
         const t=globalThis.toastr;
         try{const r=await this.takeover.restore();
             if(!r.items.length){t?.info('没有可恢复的记录（角色卡里的项目需要先打开对应角色）。','诸天 · 恢复');return r;}
             t?.warning('旧版已重新启用。为避免两个莉莉丝和重复状态栏，请在扩展列表里停用本插件后刷新。','诸天 · 恢复',{timeOut:12000});
-            this.statusbar?.rebuild();return r;}catch(e){t?.error(e.message,'诸天 · 恢复');throw e;}
+            this.statusbar?.rebuild();return r;}catch(e){t?.error(errorLine(e),'诸天 · 恢复');throw e;}
     }
     dispose(){if(globalThis.__zhutianApp===this)globalThis.__zhutianApp=null;for(const p of this.parts.splice(0).reverse()){try{p.dispose();}catch(e){console.warn('[诸天] 卸载',e);}}this.settings?.dispose();}
 }

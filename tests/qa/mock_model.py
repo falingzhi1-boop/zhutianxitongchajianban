@@ -83,6 +83,7 @@ def route(allt):
     if '你是诸天系统外挂世界书的事实记录员' in allt: return recorder_reply(allt)
     if '只返回JSON {"answer"' in allt or '只返回JSON{"answer"' in allt:
         return json.dumps({'answer': '根据记录：宿主正在完成“引气入体”。', 'checks': []}, ensure_ascii=False)
+    if '你是诸天系统的品阶鉴定官' in allt: return '仙品|大陆级剑意，远超凡俗武学'                 # 1.0 品阶鉴定
     if '严格执行格式要求，只输出一行' in allt: return '5|剧情推进稳定，按中档结算'              # 神通 · AI 评估实力档
     if '严格只输出一行' in allt: return '九转凝元丹|消耗品|服用后灵力恢复三成（每日限用一次）'     # 外挂 · 万物熔炉
     if '你是背包整理助手' in allt:                                                            # 背包 · AI 整理

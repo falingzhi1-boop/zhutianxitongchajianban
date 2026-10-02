@@ -10,10 +10,17 @@ def configure(base_url, mock, shots):
     args.base_url=base_url; args.mock=mock
     global SHOTS; SHOTS=Path(shots); SHOTS.mkdir(parents=True, exist_ok=True)
 BOOTLOG = []
+def reboot(page):
+    """Reload SillyTavern once (1.0). The old `page.reload(); boot(page)` navigated twice in a row; the second
+    navigation started while the first was still loading and the auto-opened chat was saving, and sometimes hung."""
+    page.wait_for_timeout(1500)
+    boot(page)
+
 def boot(page):
     t0 = time.time()
     page.on('console', lambda m: BOOTLOG.append(f'{time.time()-t0:6.1f} {m.type}: {m.text[:240]}'))
     page.on('pageerror', lambda e: BOOTLOG.append(f'{time.time()-t0:6.1f} PAGEERR {str(e)[:300]}'))
+    BOOTLOG.clear()
     try: _boot(page)
     except Exception:
         state = page.evaluate("()=>({ready:(()=>{try{return SillyTavern.getContext().eventSource.autoFireLastArgs.has(SillyTavern.getContext().eventTypes.APP_READY)}catch{return 'n/a'}})(),popups:[...document.querySelectorAll('dialog[open]')].map(d=>d.innerText.slice(0,120)),app:!!globalThis.__zhutianApp})")
@@ -23,7 +30,8 @@ def boot(page):
         page.screenshot(path=str(SHOTS / 'r040-boot-failed.png')); raise
 
 def _boot(page):
-    page.goto(args.base_url.rstrip('/') + '/')
+    # 1.0: 90 s — a long session on a 2 GB sandbox can take > 30 s to load SillyTavern again.
+    page.goto(args.base_url.rstrip('/') + '/', timeout=90000)
     ready = "(()=>{try{return typeof SillyTavern!=='undefined' && SillyTavern.getContext().eventSource.autoFireLastArgs?.has?.(SillyTavern.getContext().eventTypes.APP_READY)}catch{return false}})()"
     # A fresh data dir shows the first-run welcome/persona dialog (button "Save"/OK) at an unpredictable moment; keep dismissing it.
     for _ in range(120):

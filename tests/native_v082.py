@@ -113,7 +113,7 @@ def disable_hook_suite(page):
     ok('disable hook: record kept in extension settings (auto, not yet noticed)', rec.get('auto') is True and rec.get('noticed') is False and rec.get('count', 0) >= 4, json.dumps({k: rec.get(k) for k in ('auto', 'noticed', 'count')}))
     page.evaluate("(async(ext)=>{const m=await import('/scripts/extensions.js');await m.enableExtension(ext,false);await SillyTavern.getContext().saveSettings?.();})(%s)" % json.dumps(EXT))
     page.wait_for_timeout(1500)
-    page.reload(); Z.boot(page); Z.open_chat(page); page.wait_for_timeout(3500)
+    Z.reboot(page); Z.open_chat(page); page.wait_for_timeout(3500)
     n = page.evaluate("__zhutianApp.settings.get('wbUnbound')")
     toast = page.evaluate("[...document.querySelectorAll('#toast-container .toast')].map(t=>t.textContent).join(' | ')")
     ok('after re-enabling: told once what was unbound (toast), record marked noticed', (n or {}).get('noticed') is True and '关闭插件时' in toast, toast[:160])
@@ -125,8 +125,8 @@ def float_suite(browser):
     page = ctx.new_page(); errs = []; page.on('pageerror', lambda e: errs.append(str(e)[:300])); page.on('dialog', lambda d: d.accept())
     Z.boot(page); Z.open_chat(page)
     page.evaluate("__zhutianApp.settings.set('floatPos',null);__zhutianApp.settings.set('floatLilith','auto');__zhutianApp.float.sync()"); page.wait_for_timeout(600)
-    st = fl(page, "const e=__zhutianApp.assistant?.shadow?.getElementById('entry');return {vis:!el.hidden,rect:el.getBoundingClientRect().toJSON(),entry:e?getComputedStyle(e).display:'none',src:sh.querySelector('img.on')?.src||''}")
-    ok('phone: floating Lilith shown (expression still), the old launcher pill hidden', st['vis'] and st['entry'] == 'none' and 'variants/neutral.webp' in st['src'], json.dumps(st)[:200])
+    st = fl(page, "const e=__zhutianApp.assistant?.shadow?.getElementById('entry');return {vis:!el.hidden,rect:el.getBoundingClientRect().toJSON(),entry:e?getComputedStyle(e).display:'none',src:sh.querySelector('img.body')?.src||''}")
+    ok('phone: floating Lilith shown (1.0: the cut-out figure), the old launcher pill hidden', st['vis'] and st['entry'] == 'none' and 'float/body.webp' in st['src'], json.dumps(st)[:200])
     shot(page, '10-phone-float-default')
     # tap the peek (default: tucked at the left edge) → she comes out
     fl(page, "f.tap();return 1"); page.wait_for_timeout(700)
@@ -170,7 +170,7 @@ def float_suite(browser):
     page.wait_for_timeout(500)
     ok('quick swipe without a long press does not move her', (page.evaluate("__zhutianApp.settings.get('floatPos')") or {}).get('edge') == 'right')
     # reload: position kept
-    page.reload(); Z.boot(page); Z.open_chat(page); page.wait_for_timeout(1200)
+    Z.reboot(page); Z.open_chat(page); page.wait_for_timeout(1200)
     try: page.wait_for_function("document.getElementById('zhutian-lilith-float').shadowRoot.querySelector('.fl').dataset.tucked==='true'", timeout=12000)
     except Exception: pass
     t = fl(page, "return {edge:el.dataset.edge,tucked:el.dataset.tucked}")

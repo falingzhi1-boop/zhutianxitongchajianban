@@ -227,7 +227,9 @@ export class SkillSync {
         try {
             const z = this.app.adapter.currentIdentity() ? this.ledger() : null;
             const text = z && this.cfg.prompt ? masteryPrompt(z) : '';
-            if (text === this.lastPrompt) return; this.lastPrompt = text;
+            // 1.0: SillyTavern empties its extension prompts when a chat is (re)loaded — compare with what is really there
+            const live = this.app.bridge.livePrompt?.('mastery') ?? text;
+            if (text === this.lastPrompt && live === text) return; this.lastPrompt = text;
             if (text) this.app.bridge.injectPrompts([{ id: 'mastery', content: text, position: 'in_chat', depth: 4, role: 'system' }]);
             else this.app.bridge.uninjectPrompts(['mastery']);
         } catch (e) { console.warn('[诸天修行] 注入失败', e); }
@@ -342,6 +344,7 @@ export class SkillSync {
         tools.dataset.owner = 'skills'; this.tools = tools; this.refreshStrip();
         tools.onclick = e => {
             if (e.target.closest('[data-sk-more]')) return this.app.hub.go('skills');
+            if (e.target.closest('[data-sk-appraise]')) return this.app.hub.go('appraise');
             if (e.target.closest('[data-sk-import]')) this.importCard().catch(err => this.app.hub.toast(err.message, 4000));
         };
     }
@@ -350,7 +353,7 @@ export class SkillSync {
         const z = this.ledger() || {}, lib = (z.功法库 || []).map(fixSkill), main = lib.find(s => normName(s.名称) === normName(z.功法?.名称));
         let card = { items: [], changes: [] }; try { card = this.cardPlan(z); } catch { /* ignore */ }
         const nx = main ? nextTarget(main) : null, last = practiceLog(z).at(-1);
-        tools.innerHTML = `<div class="zt-plug-strip"><span class="zt-plug-title">修行</span>${main ? `<span class="zt-chip" title="${esc(effectsOf(main).join('；'))}">${esc(main.名称)} · ${stageOf(main)}${nx ? ` · 距下一阶段 ${fmtNum(nx - main.熟练度)}` : ''}</span>` : '<span class="zt-note">尚无主修功法</span>'}${last ? `<span class="zt-chip">实战 ${esc(last.名称)} +${last.增加}</span>` : ''}${card.items.length ? `<span class="zt-chip">角色卡功法 ${card.items.length} 部${card.changes.length ? ` · ${card.changes.length} 处可同步` : ' · 已同步'}</span>${card.changes.length ? '<button type="button" class="zt-btn small primary" data-sk-import>导入 / 同步</button>' : ''}` : ''}<button type="button" class="zt-btn small" data-sk-more style="margin-left:auto">阶段效果与来源 ›</button></div>`;
+        tools.innerHTML = `<div class="zt-plug-strip"><span class="zt-plug-title">修行</span>${main ? `<span class="zt-chip" title="${esc(effectsOf(main).join('；'))}">${esc(main.名称)} · ${stageOf(main)}${nx ? ` · 距下一阶段 ${fmtNum(nx - main.熟练度)}` : ''}</span>` : '<span class="zt-note">尚无主修功法</span>'}${last ? `<span class="zt-chip">实战 ${esc(last.名称)} +${last.增加}</span>` : ''}${card.items.length ? `<span class="zt-chip">角色卡功法 ${card.items.length} 部${card.changes.length ? ` · ${card.changes.length} 处可同步` : ' · 已同步'}</span>${card.changes.length ? '<button type="button" class="zt-btn small primary" data-sk-import>导入 / 同步</button>' : ''}` : ''}<button type="button" class="zt-btn small" data-sk-appraise title="剧情里得到、被记成凡品的功法可以重新鉴定" style="margin-left:auto">品阶鉴定 ›</button><button type="button" class="zt-btn small" data-sk-more>阶段效果与来源 ›</button></div>`;
     }
     render(el) {
         const z = this.ledger(), lib = (z?.功法库 || []).map(fixSkill), main = normName(z?.功法?.名称);
@@ -361,7 +364,7 @@ export class SkillSync {
         const src = card.sources.map(s => `<div class="zt-row"><span><b style="font-weight:500">${esc(s.label)}</b><span class="zt-desc">${s.items.map(i => `${esc(i.名称)}${i.品阶 ? '〔' + esc(i.品阶) + '〕' : ''}${i.熟练度 != null ? ' ' + fmtNum(i.熟练度) : ''} <code>${esc(i.path)}</code>`).join('；')}</span></span></div>`).join('');
         const sync = z?.角色卡功法同步;
         el.innerHTML = `<div class="zt-eyebrow">CULTIVATION</div><h2 class="zt-h">修行 · 熟练度</h2><p class="zt-sub">阶段效果会告诉 AI 并在剧情里生效；熟练度由数据块「功法修炼」和实战积累增长。</p>
-<div class="zt-actions" style="margin-bottom:10px"><button class="zt-btn" type="button" data-sk-back>‹ 回到修行页</button></div>
+<div class="zt-actions" style="margin-bottom:10px"><button class="zt-btn" type="button" data-sk-back>‹ 回到修行页</button><button class="zt-btn" type="button" data-sk-appraise>品阶鉴定 ›</button></div>
 <section class="zt-card"><h3>功法库 <small>${lib.length} 部</small></h3>${rows || '<div class="zt-note">功法库还是空的。AI 在数据块写「功法修炼：收录:功法名〔品阶〕」后会出现在这里，也可以从角色卡导入。</div>'}</section>
 <section class="zt-card"><h3>阶段与效果 <small>原版规则</small></h3>${STAGES.map(st => `<div class="zt-row"><span>${st}<span class="zt-desc">${esc(STAGE_EFFECT[st])}</span></span><span class="zt-chip">${STAGE_AT[st] ? '≥ ' + fmtNum(STAGE_AT[st]) : st === '入道' ? 'AI 写「入道:」' : '< 100'}</span></div>`).join('')}<div class="zt-note">品阶上限：凡品 100 · 灵品 500 · 仙品 2,000 · 神品 / 禁忌 10,000。到上限后需升品（岁月沉淀 / 商城）才能继续。</div></section>
 <section class="zt-card"><h3>实战积累 <small>最近 10 次</small></h3>${practice || '<div class="zt-note">还没有补记过。正文里用了功法、数据块却漏记时会出现在这里。</div>'}</section>
@@ -370,6 +373,7 @@ ${card.changes.length ? `<div class="zt-note">可同步 ${card.changes.length} �
 ${sync ? `<div class="zt-note">上次同步：${new Date(sync.时间).toLocaleString('zh-CN')} · 来源 ${esc((sync.来源 || []).join('、'))} · ${sync.变化} 处变化${sync.自动 ? '（自动）' : ''}</div>` : ''}</section>`;
         el.onclick = e => {
             if (e.target.closest('[data-sk-back]')) return this.app.hub.go('cult');
+            if (e.target.closest('[data-sk-appraise]')) return this.app.hub.go('appraise');
             if (e.target.closest('[data-sk-import]')) this.importCard().catch(err => this.app.hub.toast(err.message, 4000));
         };
     }

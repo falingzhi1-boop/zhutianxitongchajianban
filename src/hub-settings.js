@@ -4,11 +4,28 @@ import { HOST_TESTED } from './compat.js';
 import { esc } from './hub.js';
 import { PALETTE_OPTIONS } from './palettes.js';
 import { MOBILE_LAYOUTS } from './mobile.js';
+import { MOTION_OPTIONS } from './perf.js';
+import { errorLine } from './errors.js';
+import { disablePlugin } from './plugin-switch.js';
 
 const sw = (k, label, desc = '') => ({ type: 'switch', k, label, desc });
 const sel = (k, label, options, desc = '') => ({ type: 'select', k, label, options, desc });
 const num = (k, label, min, max, desc = '') => ({ type: 'number', k, label, min, max, desc });
 const act = (id, label, desc = '', cls = '') => ({ type: 'action', id, label, desc, cls });
+/** 1.0: 进阶 — shown in the collapsed「进阶设置」group (and found by search). */
+const adv = it => ({ ...it, tier: 'adv' });
+/** 1.0: the three groups of the settings page. Sections default to 常用 unless they say otherwise. */
+export const SETTING_GROUPS = Object.freeze([['common', '常用'], ['adv', '进阶设置'], ['diag', '诊断与维护']]);
+/** Items of one group, section by section (pure, for tests): an item's own tier wins, then its section's, then 常用. */
+export function groupSections(sections, tier) {
+    return sections.map(sec => ({ ...sec, items: sec.items.filter(it => (it.tier || sec.tier || 'common') === tier) })).filter(sec => sec.items.length);
+}
+/** Does a settings row match the search words? Every word must appear in its label / description (pure). */
+export function matchSetting(text, q) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const t = String(text || '').toLowerCase();
+    return words.every(w => t.includes(w));
+}
 
 export class HubSettings {
     constructor(app) { this.app = app; this.extra = []; }
@@ -26,53 +43,59 @@ export class HubSettings {
                 sw('floorTag', '楼层小标签“系统已记录”', '点击标签直接打开终端。'),
                 sw('voiceBox', '莉莉丝专属语音框（语音美化）'),
                 sw('hud', '输入框上方账本速览'),
-                sw('hotkeys', '快捷键 Alt+Z / Alt+X 开关终端 · Alt+S 总览'),
-                sel('hubOutsideClose', '点击终端外部时关闭', [['auto', '仅手机'], ['always', '总是'], ['never', '从不']]),
+                adv(sw('hotkeys', '快捷键 Alt+Z / Alt+X 开关终端 · Alt+S 总览')),
+                adv(sel('hubOutsideClose', '点击终端外部时关闭', [['auto', '仅手机'], ['always', '总是'], ['never', '从不']])),
                 sel('mobileLayout', '手机上的终端与私聊窗口', MOBILE_LAYOUTS.map(o => [...o]), '全屏时窗口跟着输入法键盘变矮，输入框不会被挡住；横屏时导航移到左侧；私聊也全屏。选「浮动窗口」恢复 0.8.5 的样子。'),
-                sw('hubBackClose', '手机返回手势关闭终端'),
+                adv(sw('hubBackClose', '手机返回手势关闭终端')),
             ] },
             { title: '提示词与世界书', items: [
-                sw('promptStripPanels', '旧楼层数据块不发给 AI（省 token）'),
-                num('promptPanelKeepDepth', '保留最新几层的数据块', 0, 6, 'AI 每轮都会从世界书“实时数据”读到最新账本，所以可以设为 0（数据块全部不回传，最省 token）；保留 1–2 层能让 AI 照抄格式更稳。'),
-                sw('macroLike', '世界书变量宏 {{get_chat_variable::…}}', '酒馆助手宏开启时自动让位。'),
-                sw('worldbookAuto', '诸天存档自动安装并绑定世界书', '不覆盖你改过的条目。'),
+                adv(sw('promptStripPanels', '旧楼层数据块不发给 AI（省 token）')),
+                adv(num('promptPanelKeepDepth', '保留最新几层的数据块', 0, 6, 'AI 每轮都会从世界书“实时数据”读到最新账本，所以可以设为 0（数据块全部不回传，最省 token）；保留 1–2 层能让 AI 照抄格式更稳。')),
+                adv(sw('macroLike', '世界书变量宏 {{get_chat_variable::…}}', '酒馆助手宏开启时自动让位。')),
+                adv(sw('worldbookAuto', '诸天存档自动安装并绑定世界书', '不覆盖你改过的条目。')),
                 act('worldbook', '世界书安装 / 绑定 / 解绑…'),
                 act('wb-unbind', '一键解绑世界书', '把“诸天万界最强系统”从所有角色卡、全局和当前聊天上取下（不删除），可在世界书窗口里恢复。'),
-                sw('wbUnbindOnDisable', '关闭插件时自动解绑世界书', '在扩展列表里停用本插件时自动执行上面的解绑（SillyTavern 1.17+；1.16 没有关闭钩子，请手动点一键解绑）。'),
+                adv(sw('wbUnbindOnDisable', '关闭插件时自动解绑世界书', '在扩展列表里停用本插件时自动执行上面的解绑（SillyTavern 1.17+；1.16 没有关闭钩子，请手动点一键解绑）。')),
             ] },
             { title: '账本与存档', items: [
                 act('init', '新聊天初始化', '按原版规则创建账本；已存在时只补齐缺失字段。'),
                 act('migrate', '旧存档迁移 / 账本回滚…', '最近 5 份自动备份，可一键回滚。'),
+                act('appraise', '品阶鉴定…', '剧情里得到、角色卡或旧存档带来的功法 / 物品被记成凡品时：让 AI 按诸天标准重新鉴定，或手动修正（只升不降，最高神品）。'),
+                act('data-io', '导出 / 导入存档…', '把设置、账本、记忆存档打包成一个文件（不含 API Key）；导入前会先自动备份当前账本。'),
             ] },
             { title: '连接', items: [
-                act('api', 'AI 接口设置（连接页）', '填一次即可：状态栏的 AI 功能和莉莉丝私聊共用；也可以直接用酒馆正在用的模型。'),
-                sel('apiTimeout', '独立 API 超时（私聊 / 记忆 / 工作台）', [['60', '60 秒（原版）'], ['120', '120 秒'], ['180', '180 秒（默认）'], ['300', '300 秒'], ['600', '600 秒（思考模型）']], '请求一律以流式传输（中途不断流），不会再被反向代理 / Cloudflare 以 502 掐断；超时只在模型一直不出完时生效。'),
+                act('api', 'AI 接口设置（连接页）', '填一次即可：状态栏的 AI 功能和莉莉丝私聊共用；也可以直接用酒馆正在用的模型。常用的接口可以存成预设一键切换；抽卡、聊天群、莉莉丝等也能在「分功能 API」里各用各的。'),
+                adv(sel('apiTimeout', '独立 API 超时（私聊 / 记忆 / 工作台）', [['60', '60 秒（原版）'], ['120', '120 秒'], ['180', '180 秒（默认）'], ['300', '300 秒'], ['600', '600 秒（思考模型）']], '请求一律以流式传输（中途不断流），不会再被反向代理 / Cloudflare 以 502 掐断；超时只在模型一直不出完时生效。')),
             ] },
             { title: '莉莉丝', items: [
-                sel('floatLilith', '悬浮莉莉丝（代替左下角唤醒按钮）', [['auto', '自动：手机 / 触屏开启'], ['on', '总是开启'], ['off', '关闭（用原版唤醒按钮）']], '点一下打开终端；终端开着时点她只会说话，不会关终端；双击戳她；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住）。立绘看不到时，她的台词气泡在这里弹出。'),
+                sel('floatLilith', '悬浮莉莉丝（代替左下角唤醒按钮）', [['auto', '自动：手机 / 触屏开启'], ['on', '总是开启'], ['off', '关闭（用原版唤醒按钮）']], '点一下打开终端；终端开着时点她只会说话，不会关终端；双击戳她；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住），拖到底部「关闭悬浮窗」可以关掉她（电脑上也可以右键）。关闭后从酒馆「扩展」→ 诸天终端 进入控制台。立绘看不到时，她的台词气泡在这里弹出。'),
                 sel('floatSize', '悬浮莉莉丝大小', [['xs', '特小（55%）'], ['s', '小（65%）'], ['m', '标准（75%，默认）'], ['l', '大（90%）'], ['xl', '特大（100%，0.8.2 的大小）']], '改完立即生效，位置保持。'),
-                sw('touchGestures', '真实触摸互动（抚摸 / 长按 / 视线跟随）'),
+                adv(sw('touchGestures', '真实触摸互动（抚摸 / 长按 / 视线跟随）')),
                 sw('haptics', '触摸震动反馈（手机）'),
                 sel('portrait.mode', '立绘模式', [['rig', '原版分层动画（伪 Live2D）'], ['variants', '原版 + 表情差分（随语气切换）'], ['live2d', '真 Live2D（需自备 Cubism 模型）']]),
-                act('live2d', '立绘 / Live2D 设置…'),
-                sw('lilith.react', '界面角色：对选中任务 / 物品 / 功法和结算成败作出反应', '只用原版表情与分层动作；台词来自账本数据。'),
-                sw('lilith.pageLines', '进入系统页时说一句（每页每次会话一次）'),
-                sw('lilith.camera', '镜头：系统页半身 · 工作台全身 · 私聊面部特写'),
-                sw('lilith.story', '气泡播报：数据块里的「系统播报」由立绘气泡说出；点立绘空白处说剧情台词', '原来在状态栏底部的“莉莉丝：……”一行已移到这里。'),
+                adv(act('live2d', '立绘 / Live2D 设置…')),
+                adv(sw('lilith.react', '界面角色：对选中任务 / 物品 / 功法和结算成败作出反应', '只用原版表情与分层动作；台词来自账本数据。')),
+                adv(sw('lilith.pageLines', '进入系统页时说一句（每页每次会话一次）')),
+                adv(sw('lilith.camera', '镜头：系统页半身 · 工作台全身 · 私聊面部特写')),
+                adv(sw('lilith.story', '气泡播报：数据块里的「系统播报」由立绘气泡说出；点立绘空白处说剧情台词', '原来在状态栏底部的“莉莉丝：……”一行已移到这里。')),
             ] },
             { title: '世界与演出', sub: '主题只换颜色和装饰，按钮位置不变。', items: [
                 sel('world.theme', '界面主题', [['auto', '跟随当前世界（自动判断）'], ['default', '诸天（默认）'], ['xianxia', '仙侠 · 玉简 / 星图 / 阵纹'], ['cyber', '赛博 · 全息终端'], ['eerie', '诡异 · 异常与侵蚀']], this.worldDesc()),
                 sel('palette', '配色方案', PALETTE_OPTIONS, '固定配色会覆盖世界主题的颜色（世界装饰保留）；仙侠主题 0.8.4 起改为墨玉金。'),
-                sw('world.prompt', '提示 AI 记录穿越（当前世界 / 世界类型）', '穿越时 AI 在数据块「变量更新」里写一行；星图也可以手动记录。'),
+                adv(sw('world.prompt', '提示 AI 记录穿越（当前世界 / 世界类型）', '穿越时 AI 在数据块「变量更新」里写一行；星图也可以手动记录。')),
                 sel('fx.mode', '演出', [['full', '完整演出（≤2 秒，可跳过）'], ['brief', '只显示结果卡片'], ['off', '关闭']], '只在账本写入并读回后播放；失败则显示失败。系统开启“减少动态效果”时自动只显示卡片。'),
-                sw('fx.outside', '终端关闭时在聊天角落显示剧情提示卡片'),
-                act('fx-preview', '预览演出', '播放一段示例（不写账本，卡片会标明“预览”）。'),
+                adv(sel('motion', '动态效果', MOTION_OPTIONS.map(o => [...o]), `精简模式下悬浮莉莉丝不再呼吸摆动、世界装饰和终端动画停止、演出只显示结果卡片，功能不变。当前：${this.app.perf ? (this.app.perf.lite ? '精简' : '完整') + '（' + this.app.perf.reason + '）' : '—'}`)),
+                adv(sw('fx.outside', '终端关闭时在聊天角落显示剧情提示卡片')),
+                adv(act('fx-preview', '预览演出', '播放一段示例（不写账本，卡片会标明“预览”）。')),
             ] },
-            ...this.extra.map(x => (typeof x === 'function' ? x(app) : x)),
-            { title: '高级 · 管理员', sub: '直接改账本，慎用。', items: [
+            { title: '插件开关', items: [
+                act('plugin-off', '一键关闭插件', '和酒馆「扩展 → 管理扩展」里关掉开关一样：插件停用，页面刷新。账本和设置都保留；重新开启也在「管理扩展」里。', 'danger'),
+            ] },
+            ...this.extra.map(x => (typeof x === 'function' ? x(app) : x)).map(x => ({ tier: 'adv', ...x })),
+            { title: '高级 · 管理员', sub: '直接改账本，慎用。', tier: 'adv', items: [
                 act('admin', '管理员控制台…', '原版管理员面板：直接改系统点、专属资源、好感 / 黑化 / 悔意、主修功法、货币、实力档。保存即真实写入账本（原 ◆ 连点五次的入口已从终端里移除）。'),
             ] },
-            { title: '兼容与维护', items: [
+            { title: '兼容与维护', tier: 'diag', items: [
                 act('diagnose', '兼容诊断…'),
                 act('copy-diag', '复制诊断信息', '版本、设备、设置和最近的报错，反馈问题时直接粘贴。不含 API Key 和聊天内容。'),
                 act('selftest', '手机真机自检…', '在手机上一步步检查全屏、各页面、键盘、私聊、横屏和返回键，大约 2 分钟；结果可以一键复制。'),
@@ -95,8 +118,20 @@ export class HubSettings {
             if (it.type === 'number') return `<input type="number" data-k="${it.k}" min="${it.min}" max="${it.max}" value="${esc(v)}" aria-label="${esc(it.label)}">`;
             return `<button type="button" class="zt-btn ${it.cls || ''}" data-act="${it.id}">${esc(it.label.replace(/…$/, ''))}${it.label.endsWith('…') ? ' ›' : ''}</button>`;
         };
-        el.innerHTML = `<div class="zt-eyebrow">TERMINAL SETTINGS</div><h2 class="zt-h">设置</h2><p class="zt-sub">诸天终端 ${VERSION} · 已验收 SillyTavern ${HOST_TESTED.join(' / ')} · 无需酒馆助手</p>
-<div class="zt-grid2">${this.sections().map(sec => `<section class="zt-card"><h3>${esc(sec.title)}${sec.sub ? ` <small>${esc(sec.sub)}</small>` : ''}</h3>${sec.items.map(it => `<div class="zt-row"><span>${it.type === 'action' ? `<b style="font-weight:500">${esc(it.label.replace(/…$/, ''))}</b>` : esc(it.label)}${it.desc ? `<span class="zt-desc">${esc(it.desc)}</span>` : ''}</span>${control(it)}</div>`).join('')}</section>`).join('')}</div>`;
+        const row = it => `<div class="zt-row" data-search="${esc((it.label + ' ' + (it.desc || '')).toLowerCase())}"><span>${it.type === 'action' ? `<b style="font-weight:500">${esc(it.label.replace(/…$/, ''))}</b>` : esc(it.label)}${it.desc ? `<span class="zt-desc">${esc(it.desc)}</span>` : ''}</span>${control(it)}</div>`;
+        const grid = secs => `<div class="zt-grid2">${secs.map(sec => `<section class="zt-card"><h3>${esc(sec.title)}${sec.sub ? ` <small>${esc(sec.sub)}</small>` : ''}</h3>${sec.items.map(row).join('')}</section>`).join('')}</div>`;
+        const all = this.sections();
+        const groups = SETTING_GROUPS.map(([tier, title]) => {
+            const secs = groupSections(all, tier), n = secs.reduce((a, x) => a + x.items.length, 0);
+            if (!n) return '';
+            return tier === 'common' ? `<div class="zt-set-group" data-tier="common">${grid(secs)}</div>`
+                : `<details class="zt-set-group" data-tier="${tier}"><summary>${esc(title)} <small>${n} 项</small></summary>${grid(secs)}</details>`;
+        }).join('');
+        el.innerHTML = `<div class="zt-eyebrow">TERMINAL SETTINGS</div><h2 class="zt-h">设置</h2><p class="zt-sub">诸天终端 ${VERSION} · 已验收 SillyTavern ${HOST_TESTED.join(' / ')} · 无需酒馆助手<br><small>AI 功能（商城进货 / 许愿 / 抽取、工作台、自动记忆、私聊、聊天群）为<b>实验性</b>：只用模拟模型验收过，第一次用真实模型前请先导出存档。</small></p>
+<div class="zt-set-search"><input type="search" data-f="sset" placeholder="搜索设置，例如：悬浮、世界书、超时" aria-label="搜索设置" enterkeyhint="search"></div>
+${groups}<p class="zt-set-none" hidden>没有找到匹配的设置。</p>`;
+        const search = el.querySelector('[data-f=sset]');
+        search.oninput = () => this.filter(el, search.value);
         el.onchange = e => {
             const input = e.target.closest('[data-k]'); if (!input) return;
             const v = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Math.max(Number(input.min) || 0, Math.min(Number(input.max) || 6, Math.floor(Number(input.value)) || 0)) : input.value;
@@ -104,6 +139,19 @@ export class HubSettings {
             this.app.hub?.toast('已保存');
         };
         el.onclick = e => { const b = e.target.closest('[data-act]'); if (b) this.run(b.dataset.act); };
+    }
+    /** 1.0: search — hide rows that do not match, open the collapsed groups that do. */
+    filter(el, q) {
+        const on = !!String(q || '').trim(); let hits = 0;
+        for (const r of el.querySelectorAll('.zt-row[data-search]')) { const m = !on || matchSetting(r.dataset.search, q); r.hidden = !m; if (m) hits++; }
+        for (const sec of el.querySelectorAll('.zt-set-group .zt-card')) sec.hidden = on && !sec.querySelector('.zt-row:not([hidden])');
+        for (const g of el.querySelectorAll('.zt-set-group')) {
+            const any = !!g.querySelector('.zt-row:not([hidden])');
+            g.hidden = on && !any;
+            if (g.tagName === 'DETAILS') { if (on && any) { if (!g.open) { g.dataset.auto = '1'; g.open = true; } } else if (!on && g.dataset.auto) { g.open = false; delete g.dataset.auto; } }
+        }
+        const none = el.querySelector('.zt-set-none'); if (none) none.hidden = !on || hits > 0;
+        return hits;
     }
     run(id) {
         const app = this.app, t = globalThis.toastr;
@@ -116,9 +164,12 @@ export class HubSettings {
             'copy-diag': () => app.features.copyDiagnostics(),
             selftest: () => app.deviceCheck?.run(),
             guide: () => app.guide?.open(),
+            'data-io': () => app.dataIO?.open(),
+            appraise: () => app.hub.go('appraise'),
+            'plugin-off': () => disablePlugin(app),
             admin: () => app.hub.openAdmin(),
-            init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(e.message, '诸天')),
+            init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(errorLine(e), '诸天')),
         };
-        try { const r = map[id]?.(); r?.catch?.(e => t?.error(e.message, '诸天')); } catch (e) { t?.error(e.message, '诸天'); }
+        try { const r = map[id]?.(); r?.catch?.(e => t?.error(errorLine(e), '诸天')); } catch (e) { t?.error(errorLine(e), '诸天'); }
     }
 }

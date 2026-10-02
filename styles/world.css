@@ -136,3 +136,7 @@ dialog[data-compact=true] .zt-top-world b{max-width:9em}
 /* 莉莉丝气泡 (0.8.0): the line that used to sit as a row inside the status bar now speaks from the portrait */
 .zt-say[data-zt-story=true]{border-color:color-mix(in srgb,var(--zt-deco2) 55%,transparent)!important}
 :host([data-zt-world]:not([data-zt-world=default])) .zt-say .zt-bubble{background:color-mix(in srgb,var(--zt-win) 92%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);color:var(--ink)}
+/* 1.0 动态效果「精简」：与系统“减少动态效果”相同的处理 */
+:host([data-zt-lite]) .zt-world-deco>*{animation:none!important}
+:host([data-zt-lite][data-zt-world=eerie]) #zt-top-world{animation:none}
+:host([data-zt-lite]) .sidebar .portrait,:host([data-zt-lite]) .zt-lc-cam i{transition:none}

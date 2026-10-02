@@ -72,10 +72,11 @@ test('disable hook is wired: deactivate returns the unbind promise, default on, 
 });
 
 test('floating Lilith: dropping near an edge tucks her there, elsewhere she stays (clamped)', () => {
-    assert.deepEqual(settle({ x: 5, y: 300 }, 390, 844), { x: 0, y: 300, edge: 'left', tucked: true });
-    assert.deepEqual(settle({ x: 330, y: 300 }, 390, 844), { x: 312, y: 300, edge: 'right', tucked: true });
-    assert.deepEqual(settle({ x: 150, y: 2000 }, 390, 844), { x: 150, y: 844 - 104 - 8, edge: '', tucked: false });
-    assert.equal(settle({ x: 150, y: -50 }, 390, 844).y, 8);
+    // the 0.8.2 portrait size (78×104) passed explicitly — 1.0 changed the default size, not the rule
+    assert.deepEqual(settle({ x: 5, y: 300 }, 390, 844, 78, 104), { x: 0, y: 300, edge: 'left', tucked: true });
+    assert.deepEqual(settle({ x: 330, y: 300 }, 390, 844, 78, 104), { x: 312, y: 300, edge: 'right', tucked: true });
+    assert.deepEqual(settle({ x: 150, y: 2000 }, 390, 844, 78, 104), { x: 150, y: 844 - 104 - 8, edge: '', tucked: false });
+    assert.equal(settle({ x: 150, y: -50 }, 390, 844, 78, 104).y, 8);
 });
 
 test('floating Lilith: auto = touch or narrow; on / off are forced', () => {

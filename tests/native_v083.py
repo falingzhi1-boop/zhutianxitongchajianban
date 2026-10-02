@@ -44,13 +44,13 @@ with sync_playwright() as p:
 
     # ---- size ----
     r = rect(page)
-    ok('default size is 75 % of 0.8.2 (59×78 instead of 78×104)', (r['w'], r['h']) == (59, 78), json.dumps(r))
+    ok('default size is 75 % (1.0 cut-out figure: 113×124 of 150×165)', (r['w'], r['h']) == (113, 124), json.dumps(r))
     shot(page, '01-default-size')
     sizes = {}
     for k in ['xs', 's', 'l', 'xl']:
         page.evaluate(f"__zhutianApp.settings.set('floatSize','{k}')"); settle_wait(page, 300)
         sizes[k] = (rect(page)['w'], rect(page)['h'])
-    ok('size setting resizes her live: xs 43×57, s 51×68, l 70×94, xl 78×104', sizes == {'xs': (43, 57), 's': (51, 68), 'l': (70, 94), 'xl': (78, 104)}, json.dumps(sizes))
+    ok('size setting resizes her live (1.0): xs 83×91, s 98×107, l 135×149, xl 150×165', sizes == {'xs': (83, 91), 's': (98, 107), 'l': (135, 149), 'xl': (150, 165)}, json.dumps(sizes))
     page.evaluate("__zhutianApp.settings.set('floatSize','xs')"); settle_wait(page, 500); shot(page, '02-size-xs')
     pos = page.evaluate("__zhutianApp.settings.get('floatPos')")
     ok('changing the size keeps her position', pos and pos.get('x') == 8 and pos.get('y') == 420 and not pos.get('tucked'), json.dumps(pos))

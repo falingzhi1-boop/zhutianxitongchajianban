@@ -25,6 +25,7 @@ const DEFAULTS = Object.freeze({
     guide: null,                 // 0.9.3: 新手引导 answer {state: 'done'|'skipped', at, version}; null = opens once by itself
     deviceCheck: null,           // 0.9.1: last 手机真机自检 result {at, version, text} (no chat data; shown in 复制诊断信息)
     mobileLayout: 'auto',        // 0.9.0: terminal on phones — auto (full screen on phones) | full (always) | window (0.8.5 floating window)
+    motion: 'auto',              // 1.0: 动态效果 auto (reduced motion / low fps on phones → lite) | full | lite
     floatSize: 'm',              // 0.8.3: floating Lilith size xs 55 % | s 65 % | m 75 % (default) | l 90 % | xl 100 % (= 0.8.2)
     apiTimeout: 180,             // 0.8.4: seconds for the original's independent-API requests (私聊 / 记忆 / 工作台); original fixed 60
     palette: 'auto',             // 0.8.4: 配色方案 — auto (world colours) | lilith | inkgold | celadon | sakura | frost | crimson | slate
@@ -39,6 +40,7 @@ const DEFAULTS = Object.freeze({
     fx: { mode: 'full', outside: true },                   // 0.7.0 演出: full | brief (result card only) | off; outside = 剧情提示 card when the terminal is closed
     world: { enabled: true, theme: 'auto', prompt: true },  // 0.7.0 世界主题: auto | default | xianxia | cyber | eerie; prompt = ask the model to record 当前世界/世界类型
     lilith: { react: true, pageLines: true, camera: true, story: true }, // 0.7.0 莉莉丝界面角色; 0.8.0 story = 气泡播报 + 点空白处的剧情台词
+    appraise: { prompt: true, raise: true },                  // 1.0 品阶鉴定: 收录写明品阶的提示 · 「收录:X[更高品阶]」更正剧情功法
     skills: { prompt: true, practice: true, cardAuto: false },   // 0.8.0 修行: 功法实效提示 · 实战积累 · 角色卡功法自动同步
     live2d: { accepted: false, coreUrl: LIVE2D_CORE_URL, model: '', scale: 1, x: 0, y: 0, follow: true, lipsync: true, idle: true, moodMap: {} },
     scriptVariables: {},
@@ -94,6 +96,7 @@ export class Settings {
   <div class="inline-drawer-content">
     <div class="zt-set-actions">
       <div class="menu_button" data-act="open">打开诸天终端</div>
+      <div class="menu_button" data-act="float" title="关掉的悬浮莉莉丝回到页面上">显示悬浮莉莉丝</div>
       <div class="menu_button" data-act="restore" title="重新启用被“一键接管”停用的旧版正则与酒馆助手脚本">紧急恢复旧版</div>
     </div>
     <small class="zt-set-note">所有功能与设置都在终端里（莉莉丝头像 → 设置）。已验收宿主：SillyTavern ${HOST_TESTED.join(' / ')}；无需酒馆助手、无需导入正则。</small>

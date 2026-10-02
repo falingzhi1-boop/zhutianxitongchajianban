@@ -179,7 +179,7 @@ def run(page):
     lv = hub(page, "return [sr.getElementById('zt-top-shop').textContent, el.querySelector('.zt-g-head small').textContent, app.bridge.getVariables({type:'chat'}).诸天系统.商城等级]")
     ok('shop level agrees: terminal top bar = group header = ledger 商城等级', lv[0] == f'Lv.{lv[2]}' and f'商城 Lv{lv[2]}' in lv[1], str(lv))
     # --- persistence ---
-    page.reload(); Z.boot(page); Z.open_chat(page)
+    Z.reboot(page); Z.open_chat(page)
     n = page.evaluate("(__zhutianApp.bridge.getVariables({type:'chat'}).诸天系统?.聊天群?.成员||[]).length")
     ok('group survives a reload (chat variables)', n == 2, str(n))
 

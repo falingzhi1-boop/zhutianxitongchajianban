@@ -56,6 +56,8 @@ export function keyboardState({ kb = 0, innerH = 0, fullH = 0, typing = false } 
     return '';
 }
 const TEXT_INPUT = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]):not([type=file]):not([type=color]),textarea,select,[contenteditable=true]';
+/** 1.0: landscape rail — these six stay in the rail, the rest sit behind 「更多」 (the current page always shows). */
+export const LAND_PINNED = Object.freeze(['ov', 'task', 'shop', 'bag', 'group', 'set']);
 export const MOBILE_LAYOUTS = Object.freeze([['auto', '自动：手机上全屏（推荐）'], ['full', '总是全屏'], ['window', '浮动窗口（0.8.5 及以前的样子）']]);
 
 export class MobileLayout {
@@ -75,7 +77,7 @@ export class MobileLayout {
         const hub = this.app.hub;
         if (hub) {
             hub.hook('onOpen', () => { this.apply(); this.showNav(); }); hub.hook('onClose', () => this.apply());
-            hub.hook('onPage', () => this.showNav());
+            hub.hook('onPage', () => { this.app.hub?.shell?.nav?.classList.remove('zt-more-open'); this.landNav(); this.showNav(); });
         }
         const sh = hub?.shadow;
         // keyboard: once it is up, bring the focused field into view inside its own scroll box
@@ -98,7 +100,7 @@ export class MobileLayout {
             this.mode = ''; return;
         }
         this.mode = mode;
-        if (d.dataset.ztMobile !== mode) d.dataset.ztMobile = mode;
+        if (d.dataset.ztMobile !== mode) { d.dataset.ztMobile = mode; this.landNav(); }
         if (host && host.getAttribute('data-zt-mobile') !== mode) host.setAttribute('data-zt-mobile', mode);
         // tallest layout height seen at this width (a rotation or a resized window starts over)
         if (this.fullW !== innerWidth) { this.fullW = innerWidth; this.fullH = innerHeight; } else this.fullH = Math.max(this.fullH || 0, innerHeight);
@@ -112,6 +114,21 @@ export class MobileLayout {
             const set = (k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
             set('--zt-vvh', box.h + 'px'); set('--zt-vvw', box.w + 'px'); set('--zt-vvt', box.top + 'px'); set('--zt-vvl', box.left + 'px');
         }
+    }
+    /** 1.0: the landscape rail had ~20 entries and had to be scrolled — six common ones + 「更多」 now. */
+    landNav() {
+        const nav = this.app.hub?.shell?.nav; if (!nav) return;
+        const btns = [...nav.querySelectorAll('.nav-button[data-page]')];
+        for (const b of btns) b.toggleAttribute('data-pin', LAND_PINNED.includes(b.dataset.page));
+        let more = nav.querySelector('.zt-nav-more');
+        if (!more) {
+            more = document.createElement('button'); more.type = 'button'; more.className = 'nav-button zt-nav-more'; more.setAttribute('aria-expanded', 'false');
+            more.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></svg><span>更多</span>';
+            more.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const open = nav.classList.toggle('zt-more-open'); more.setAttribute('aria-expanded', String(open)); more.querySelector('span').textContent = open ? '收起' : '更多'; if (open) this.showNav(); });
+            nav.append(more);
+        } else if (more !== nav.lastElementChild) nav.append(more);
+        if (!nav.classList.contains('zt-more-open')) { more.setAttribute('aria-expanded', 'false'); more.querySelector('span').textContent = '更多'; }
+        more.title = `其余 ${btns.filter(b => !b.hasAttribute('data-pin')).length} 个页面`;
     }
     /** The navigation strip / rail scrolls: keep the current page's button in sight (links jump to pages far down it). */
     showNav() {

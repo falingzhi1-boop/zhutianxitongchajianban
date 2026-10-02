@@ -1,0 +1,51 @@
+诸天 · 莉莉丝契约终端 源码可见许可（保留所有权利）1.0
+SPDX-License-Identifier: LicenseRef-Zhutian-SourceAvailable-1.0
+
+Copyright © 2026 falingzhi1-boop（诸天系统项目）。保留所有权利。
+
+本仓库公开源码只是为了方便安装、审阅和自用修改，**不是开源软件**。除本许可明确授予的权利外，其余权利全部保留。
+
+一、你可以
+  1. 为个人、非商业用途，在你自己控制的 SillyTavern 上安装和使用本插件（包括通过 SillyTavern 的“安装扩展”从本仓库安装）。
+  2. 为个人自用而阅读、修改本插件；修改后的版本只能自己使用。
+  3. 为报告问题或提交修改建议，在本仓库的 issue / pull request 中引用必要的代码片段。
+     提交 pull request 即表示你同意权利人以本许可或其他条款使用你提交的内容。
+
+二、未经权利人书面许可，你不可以
+  1. 再分发：以任何形式公开或向他人提供本插件或其修改版的全部或部分（包括上传到其他仓库、网盘、群文件、
+     扩展市场、整合包、镜像站点），也不得去掉本许可后再发布。复刻（fork）只允许用于向本仓库提交修改。
+  2. 商业使用：出售、出租、收费分发、作为付费服务或付费产品的一部分、用于商业运营的酒馆 / 角色平台 / 机器人。
+  3. 人工智能用途：把本仓库的任何内容（源码、文档、提示词、世界书文本、图像、测试数据）
+     用于训练、微调、蒸馏、评测或改进任何机器学习 / 人工智能模型，
+     收录进任何数据集、语料库、向量库或检索增强（RAG）知识库，
+     或通过自动抓取（爬虫、批量下载）为上述目的收集本仓库内容。
+     这一条同样适用于使用本仓库内容生成“改写版”“同功能版”代码再发布的行为。
+  4. 冒名：把本插件或其修改版以你自己的作品名义发布，或删除、修改其中的版权与来源说明。
+
+三、第三方内容（不由本许可授予，各归其权利人）
+  - `vendor/original/` 中的“诸天万界最强系统”v1.1 原版代码与提示词，以及由它提取、生成的运行文件；
+  - 莉莉丝原版立绘与分层素材（`assets/original/`、`assets/lilith/`，含 1.0 抠图素材与 AI 差分立绘）——
+    这些图像随插件显示，不得单独提取、再分发或用于上述人工智能用途；
+  - Live2D Cubism Core：插件不附带，用户按 Live2D 的许可自行加载；
+  - SillyTavern（AGPL-3.0）及其接口：本插件只是在其上运行的扩展，不包含 SillyTavern 代码。
+
+四、免责声明
+  本插件按“现状”提供，不作任何明示或默示担保。因使用或无法使用本插件造成的任何损失（包括聊天存档、
+  账本数据、API 费用），权利人不承担责任。请自行备份；插件提供 设置 → 导出 / 导入存档。
+
+五、终止
+  违反本许可的，授予你的权利自动终止，你应删除持有的本插件全部副本。
+
+六、说明（不改变以上条款）
+  许可证只能在法律上约束使用方式，**无法在技术上阻止抓取或复制**。公开仓库里的任何内容都可能被他人违规获取；
+  发现违规使用时，权利人可依据本许可和著作权法主张权利（例如向托管平台发出删除通知）。
+  如需上述“不可以”范围内的授权（转载、整合包、商用等），请在本仓库 issue 中联系权利人。
+
+—— English summary (the Chinese text above prevails) ——
+Source-available, all rights reserved. You may install, use and privately modify this extension for personal,
+non-commercial use. Without written permission you may NOT redistribute it (modified or not), use it commercially,
+or use any part of this repository to train, fine-tune, distill or evaluate machine-learning / AI models, include it in
+datasets, corpora, vector stores or RAG indexes, or scrape it for those purposes. Third-party content (the original
+v1.1 code and prompts in vendor/original/, the Lilith artwork, Live2D Cubism Core, SillyTavern) belongs to its
+respective owners. Provided "as is", without warranty. A license cannot technically prevent scraping; it gives the
+owner legal grounds to act against violations.

@@ -66,10 +66,12 @@
 @keyframes fx-card{from{opacity:0;transform:translateX(16px)}}
 
 /* 剧情提示 (terminal closed): a small card in the corner of the chat, with a short sweep */
-.zt-fx-out{position:fixed;right:16px;bottom:120px;z-index:2147482990;width:min(340px,calc(100vw - 24px));font:13px/1.55 system-ui,"PingFang SC","Microsoft YaHei",sans-serif;color-scheme:dark}
+/* 1.0: anchored with top + translate, not bottom: SillyTavern's phone layout gives <html> a transform and height 0,
+   so a fixed element's bottom would sit above the top of the screen */
+.zt-fx-out{position:fixed;right:16px;top:calc(100vh - 120px);top:calc(100dvh - 120px - env(safe-area-inset-bottom,0px));translate:0 -100%;z-index:2147482990;width:min(340px,calc(100vw - 24px));font:13px/1.55 system-ui,"PingFang SC","Microsoft YaHei",sans-serif;color-scheme:dark}
 .zt-fx-out .zt-fx-cards{position:static;width:100%}
 .zt-fx-out .zt-fx-card{position:relative;overflow:hidden}
 .zt-fx-out .zt-fx-card::before{content:'';position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,color-mix(in srgb,var(--fx-a) 22%,transparent),transparent 70%);transform:translateX(-100%);animation:fx-sweep 1.2s .1s ease-out forwards;pointer-events:none}
 @keyframes fx-sweep{to{transform:translateX(100%)}}
-@media (max-width:720px){.zt-fx-out{right:8px;left:8px;width:auto;bottom:84px}.zt-fx-title{font-size:22px}.zt-fx-cards{bottom:12px}}
+@media (max-width:720px){.zt-fx-out{right:8px;left:8px;width:auto;top:calc(100vh - 84px);top:calc(100dvh - 84px - env(safe-area-inset-bottom,0px))}.zt-fx-title{font-size:22px}.zt-fx-cards{bottom:12px}}
 @media (prefers-reduced-motion:reduce){.zt-fx,.zt-fx *,.zt-fx-card,.zt-fx-out .zt-fx-card::before{animation:none!important}.zt-fx-out .zt-fx-card::before{display:none}}

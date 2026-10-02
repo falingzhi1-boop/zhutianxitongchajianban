@@ -5,6 +5,7 @@
 // character names. Everything passes redact() once more before it leaves (belt and braces for error messages).
 import { VERSION } from './contracts.js';
 import { phoneLayout, viewportBox } from './mobile.js';
+import { ROUTES, readRoutes, routeText, routeLabel } from './api-routes.js';
 
 /** Masks anything that looks like a secret (pure, for tests). */
 export function redact(text) {
@@ -101,7 +102,9 @@ export function buildReport(app, { errors = app?.errorLog?.items || [] } = {}) {
     safe('接口', () => ['', '— 宿主接口 —', ...(app.adapter?.capabilities || []).map(c => `${c.ok ? '✅' : '❌'} ${c.label}`)]);
     safe('状态栏', () => { const sb = app.statusbar?.state || {}, d = app.statusbar?.diagnoseLast?.(); return ['', '— 运行状态 —', line('状态栏', `${sb.mode || '?'} — ${sb.reason || ''}`), d ? line('最新楼层', `${d.ok === true ? '✅' : d.ok === false ? '⚠' : 'ℹ'} ${d.text}`) : line('最新楼层', '无'),
         line('终端', app.hub ? (app.hub.isOpen ? `打开（${app.hub.page || ''}）` : '已启动') : `未启动 ${app.hubError || ''}`), line('莉莉丝助手', app.assistant ? '运行中' : `未启用 ${app.assistantError || ''}`), line('悬浮莉莉丝', app.float?.active ? '开启' : '关闭')]; });
+    safe('动态效果', () => line('动态效果', app.perf ? `${app.perf.lite ? '精简' : '完整'}（${app.perf.reason}）` : '未启动'));
     safe('API', () => { const c = app.features?.apiConfigs?.() || {}; return [line('AI 接口 · 状态栏', endpointText(c.status)), line('AI 接口 · 莉莉丝', endpointText(c.assistant))]; });
+    safe('分功能 API', () => { if (!app.bridge) return ''; const r = readRoutes(app.bridge), on = ROUTES.filter(x => r.routes[x.id]); const last = app.bridge.lastRoute; return [line('接口预设', `${r.presets.length} 个`), line('分功能 API', on.length ? on.map(x => `${x.label} → ${routeText(r, x.id)}`).join('；') : '全部跟随默认'), ...(last ? [line('最近一次分功能请求', `${routeLabel(last.id)} · ${last.via}`)] : [])]; });
     safe('设置', () => ['', '— 插件设置 —', JSON.stringify(settingsSnapshot(app.settings?.all))]);
     safe('自检', () => { const d = app.settings?.get('deviceCheck'); return d?.text ? ['', `— 上次真机自检（${d.at || ''}）—`, d.text] : ['', '— 真机自检 —', '没有运行过（设置 → 兼容与维护 → 手机真机自检）']; });
     out.push('', `— 最近的插件报错（${errors.length} 条）—`, ...(errors.length ? errors.map(e => `[${e.t}] ${e.kind}: ${e.text}`) : ['无']));

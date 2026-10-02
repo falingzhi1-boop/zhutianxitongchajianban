@@ -59,7 +59,8 @@ def phase_single(page):
     ok('one window: Lilith window is the terminal, no second terminal', q['dialogs'] == 1 and not q['oldTerm'] and q['title'] == '诸天终端', str(q)[:200])
     need = ['ov', 'task', 'bond', 'cult', 'shop', 'bag', 'plug', 'art', 'work', 'memory', 'rules', 'api', 'env', 'set']
     ok('navigation holds system + Lilith + settings pages in fixed order', [p for p in q['nav'] if p in need] == need, str(q['nav']))
-    ok('Extensions drawer keeps only entry + emergency restore', q['drawer'] == ['open', 'restore'] and q['drawerInputs'] == 0, str(q['drawer']))
+    # 1.0: + 「显示悬浮莉莉丝」 (brings a closed floating Lilith back; no settings inputs in the drawer)
+    ok('Extensions drawer keeps only entry + show floating Lilith + emergency restore', q['drawer'] == ['open', 'float', 'restore'] and q['drawerInputs'] == 0, str(q['drawer']))
     hub(page, "document.querySelector('#zhutian-covenant-terminal-settings [data-act=open]').click()"); page.wait_for_timeout(800)
     ok('drawer button opens the terminal', hub(page, 'return h.isOpen'))
     hub(page, 'h.close()'); page.wait_for_timeout(400)

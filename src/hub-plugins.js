@@ -93,7 +93,8 @@ ${r.list.map(m => `<div class="zt-row"><span>${esc(m.name)}${m.strong ? ' <span 
             const zt = !!this.app.adapter.ledger?.() && !!this.app.adapter.currentIdentity();
             const st = zt ? this.chatState() : { off: [] };
             const text = zt ? pluginPrompt(this.enabled().filter(p => p.inject), [...new Set([...st.off, ...this.modOff])]) : '';
-            if (text === this.lastPrompt) return; this.lastPrompt = text;
+            // 1.0: SillyTavern empties its extension prompts when a chat is (re)loaded — compare with what is really there
+            if (text === this.lastPrompt && (this.app.bridge.livePrompt?.('plugins') ?? text) === text) return; this.lastPrompt = text;
             this.app.bridge.injectPrompts([{ id: 'plugins', content: text, position: 'in_chat', depth: 4, role: 'system' }]);
         } catch (e) { console.warn('[诸天外挂] 注入失败', e); }
     }

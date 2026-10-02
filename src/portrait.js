@@ -5,6 +5,7 @@
 // In every mode the original logic still decides the mood: we mirror `.zt-stage[data-expression]`, which the original
 // motion module sets from part taps, story tone and chat events. Bubbles, zones and the static backdrop stay original.
 import { LIVE2D_CORE_URL } from './settings.js';
+import { errorLine } from './errors.js';
 
 export const MOODS = ['neutral', 'smile', 'shy', 'pout', 'surprised', 'wink', 'smug', 'sad'];
 export const VARIANTS = [
@@ -263,7 +264,7 @@ export class Portrait {
             try {
                 if (act === 'apply') { this.settings.patch('portrait', { mode: 'live2d' }); await this.applying; this.renderMoodMap(el); out.textContent = this.l2d ? `已加载：表情 ${this.l2d.expressions.length} 个（${this.l2d.expressions.join('、') || '无'}）；动作组 ${this.l2d.groups.join('、') || '无'}；点触区域 ${this.l2d.hitNames.join('、') || '无'}。` : '未加载：' + this.error; }
                 if (act === 'psd') { const { exportLayeredPsd } = await import('./psd-export.js'); const n = await exportLayeredPsd(this.app.original, this.app.base); out.textContent = `已导出 ${n} 个图层的 PSD。用 Cubism Editor 打开后即可切 ArtMesh、绑定参数，导出 .model3.json 再填回上面。`; }
-            } catch (err) { out.textContent = '未完成：' + err.message; }
+            } catch (err) { out.textContent = '未完成：' + errorLine(err); }
         });
     }
     /** Mood → expression table for models whose expression names are opaque (f00…f07) or in another language. */

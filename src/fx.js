@@ -131,7 +131,7 @@ export const MOOD_FOR = Object.freeze({ travel: 'surprised', breakthrough: 'smug
 export class FX {
     constructor(app) { this.app = app; this.queue = []; this.playing = null; this.deferred = new Map(); this.history = []; this.prev = undefined; this.idn = null; this.disposers = []; this.cards = null; }
     get settings() { return this.app.settings; }
-    mode() { const m = this.settings.get('fx')?.mode || 'full'; if (m === 'full' && globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return 'brief'; return m; }
+    mode() { const m = this.settings.get('fx')?.mode || 'full'; if (m === 'full' && (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches || this.app.perf?.lite)) return 'brief'; return m; }
     ledger() { try { const z = this.app.bridge.getVariables({ type: 'chat' })?.诸天系统; return z && typeof z === 'object' ? structuredClone(z) : null; } catch { return null; } }
     start() {
         this.rebase();

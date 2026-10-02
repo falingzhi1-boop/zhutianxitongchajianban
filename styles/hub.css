@@ -113,7 +113,7 @@ dialog[data-compact=true] .zt-top-res{gap:9px}
 dialog[data-compact=true] .zt-top-world{max-width:40%}
 
 /* ---- fallback shell (only when the Lilith window could not start) ---- */
-.zt-fb-entry{position:fixed;right:18px;bottom:96px;z-index:3000;width:52px;height:52px;border-radius:50%;border:1px solid color-mix(in srgb,var(--zt-sel) 47%,transparent);padding:0;overflow:hidden;background:#1b1325;cursor:pointer}
+.zt-fb-entry{position:fixed;right:18px;top:calc(100vh - 148px);top:calc(100dvh - 148px - env(safe-area-inset-bottom,0px));z-index:3000;width:52px;height:52px;border-radius:50%;border:1px solid color-mix(in srgb,var(--zt-sel) 47%,transparent);padding:0;overflow:hidden;background:#1b1325;cursor:pointer}
 .zt-fb-entry img{width:100%;height:100%;object-fit:cover}
 dialog.zt-fb{position:fixed;inset:4vh 4vw;width:auto;height:auto;margin:0;padding:0;border:1px solid color-mix(in srgb,var(--zt-sel) 27%,transparent);border-radius:16px;background:#150f1d;color:var(--zt-ink);z-index:3001;display:none;flex-direction:column;font:14px/1.5 system-ui,"PingFang SC","Microsoft YaHei",sans-serif}
 dialog.zt-fb[open]{display:flex}
@@ -257,3 +257,21 @@ dialog[data-zt-mobile=land] .main{min-height:0}
 .zt-guide-note{margin:4px 0 10px;padding:8px 12px;border-radius:10px;background:#ffffff08;border:1px solid var(--zt-line);font-size:12.5px;color:var(--zt-ink2)}
 .zt-guide-foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .zt-guide-back{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;margin:0 0 10px;padding:8px 12px;border-radius:10px;border:1px solid var(--zt-line);background:#ffffff08;font-size:12.5px}
+/* 1.0 设置页：常用 / 进阶 / 诊断 + 搜索 */
+.zt-set-search{margin:4px 0 12px}
+.zt-set-search input{width:100%;box-sizing:border-box;padding:9px 12px;border-radius:10px;border:1px solid var(--zt-line,#ffffff1f);background:#0000002e;color:var(--zt-text,#eee);font-size:14px}
+.zt-set-group+.zt-set-group{margin-top:12px}
+details.zt-set-group>summary{cursor:pointer;list-style:none;padding:10px 14px;border-radius:12px;border:1px solid var(--zt-line,#ffffff1f);background:#ffffff08;color:var(--zt-text,#eee);font-size:14px;font-weight:600}
+details.zt-set-group>summary::-webkit-details-marker{display:none}
+details.zt-set-group>summary::before{content:"›";display:inline-block;margin-right:8px;transition:transform .2s}
+details.zt-set-group[open]>summary::before{transform:rotate(90deg)}
+details.zt-set-group>summary small{font-weight:400;color:var(--zt-text2,#aaa);margin-left:6px}
+details.zt-set-group[open]>.zt-grid2{margin-top:12px}
+.zt-set-none{color:var(--zt-text2,#aaa);text-align:center;padding:18px 0}
+.zt-row[hidden],.zt-card[hidden],.zt-set-group[hidden]{display:none!important}
+/* 1.0 横屏导航：常用 6 个 + 「更多」 */
+.zt-hub-nav .zt-nav-more{display:none!important}
+dialog[data-zt-mobile=land] .zt-hub-nav .zt-nav-more{display:flex!important}
+dialog[data-zt-mobile=land] nav.zt-hub-nav:not(.zt-more-open) .nav-button[data-page]:not([data-pin]):not([aria-selected=true]){display:none!important}
+dialog[data-zt-mobile=land] nav.zt-hub-nav.zt-more-open .zt-nav-more{background:#ffffff10}
+:host([data-zt-lite]) dialog[open],:host([data-zt-lite]) dialog.zt-closing{animation:none}
