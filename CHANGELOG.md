@@ -2,6 +2,14 @@
 
 每个版本的完整说明在 `docs/CHANGES-<版本>.md`，验收记录在 `docs/ACCEPTANCE-<版本>.md`。本文件按版本倒序汇总，1.0.0 以前的内容是从旧 README 原样移来的。
 
+## 1.1.0
+
+**修订1.1.0-patch3**：聊天群异步回复固定目标聊天；鉴定保留物品来源批次及回收价格；服务器核验/异步更新器后重查页面账本，冲突拒写不重扣；保存前安全上下文与Web Locks预检，连接协议单列、宿主延迟保存失败记入诊断。330单测和10套301项浏览器回归通过，未真实模型/实体手机验收。[本轮台账](docs/PATCH-1.1.0-3.md)。
+
+触屏浮窗/圆形入口、独立剧情收纳、多目标羁绊、商品定制与去重、API预算与截断诊断、精简操作记录、世界书无强制削弱及备份冲突处理、记忆别名规范化；账本schema2与服务器读回冻结保护。基于main ce29f61增量修改，原始vendor未改。
+
+见 [CHANGES-1.1.0](docs/CHANGES-1.1.0.md)、[ACCEPTANCE-1.1.0](docs/ACCEPTANCE-1.1.0.md)、[替换清单](docs/REPLACE-1.1.0.md)。
+
 ## 1.0.0
 
 见 [docs/CHANGES-1.0.0.md](docs/CHANGES-1.0.0.md)、[docs/ACCEPTANCE-1.0.0.md](docs/ACCEPTANCE-1.0.0.md)。

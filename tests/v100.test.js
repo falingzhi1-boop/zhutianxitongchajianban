@@ -89,13 +89,13 @@ test('parseBackup: readable errors; refuses newer file formats and newer ledger 
     const ok = buildBackup({ variables: { 诸天系统: LEDGER } });
     assert.deepEqual(parseBackup(JSON.stringify(ok)).chat.variables.诸天系统, LEDGER);
 });
-test('migrateLedger 0 → 1 repairs types on a copy; a newer structure throws', () => {
+test('migrateLedger 0 → current repairs types on a copy; a newer structure throws', () => {
     assert.equal(IO_SCHEMA, LEDGER_SCHEMA);
     const bad = { 系统点: 'abc', 背包: 'x', 任务库: [], 万界足迹: {} };
     const r = migrateLedger(bad, 0);
-    assert.deepEqual(r.ledger, { 系统点: 0, 背包: [], 任务库: {}, 万界足迹: [] }); assert.deepEqual(r.steps, [1]);
+    assert.deepEqual(r.ledger, { 系统点: 0, 背包: [], 任务库: {}, 万界足迹: [], 羁绊库: [] }); assert.deepEqual(r.steps, [1, 2]);
     assert.equal(bad.背包, 'x', 'input not mutated');
-    assert.deepEqual(migrateLedger(LEDGER, 0).ledger, LEDGER, 'a healthy ledger passes unchanged');
+    assert.deepEqual(migrateLedger(LEDGER, 0).ledger, { ...LEDGER, 羁绊库: [] }, 'healthy old fields preserved; multi-person catalog added');
     assert.deepEqual(migrateLedger(LEDGER, LEDGER_SCHEMA).steps, []);
     assert.throws(() => migrateLedger(LEDGER, LEDGER_SCHEMA + 1), /更新插件/);
 });
@@ -117,7 +117,7 @@ test('mergeKeepingSecrets: an imported key-less config never wipes a stored key'
 });
 test('import / schema wiring: forced backup first, read-back compare, schema in chat metadata, not in the ledger', () => {
     const s = src('src/data-io.js');
-    assert.ok(s.indexOf("snapshot?.('导入前')") < s.indexOf('updateVariablesWith(v => { for'), 'backup before the write');
+    assert.ok(s.indexOf("snapshot?.('导入前')") < s.indexOf('updateVariablesWith(v =>'), 'backup before the write');
     assert.match(s, /读回不一致/); assert.match(s, /meta\.ledgerSchema = v/);
     assert.match(src('index.js'), /new DataIO\(this\)\.start\(\)/);
     assert.match(src('src/features.js'), /case 'export': case 'import': app\.dataIO\?\.open\(\)/);
@@ -125,7 +125,7 @@ test('import / schema wiring: forced backup first, read-back compare, schema in 
 test('th-bridge: a newer ledger structure makes the chat read-only; rollback always backs up first and keeps that backup', () => {
     const s = src('src/th-bridge.js');
     assert.match(s, /schema > LEDGER_SCHEMA\) throw Error/);
-    const r = s.slice(s.indexOf('async restoreBackup'), s.indexOf('async restoreBackup') + 700);
+    const r = s.slice(s.indexOf('async restoreBackup'), s.indexOf('// ---------- messages ----------'));
     assert.ok(r.indexOf("snapshot('回滚前')") > 0 && r.indexOf("snapshot('回滚前')") < r.indexOf('updateVariablesWith'));
     assert.match(r, /x\.at < at \|\| \(pre && x\.at === pre\.at\)/);
     assert.match(s, /async snapshot\(reason = ''\)/);

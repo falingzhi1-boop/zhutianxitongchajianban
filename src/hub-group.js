@@ -1,3 +1,4 @@
+import { capture, assertCapture, checkedCommit } from './action-support.js';
 // 诸天万界聊天群 (0.6.0) — a QQ-style cross-world group chat inside the terminal.
 // Data lives in the chat variables at 诸天系统.聊天群 (follows saves and branches). One user message = one model call,
 // answered by 1–6 members. Rules are loose but have a floor: anything a member hands over is clamped to the shop level,
@@ -196,12 +197,14 @@ export class HubGroup {
     group() { return normGroup(this.ledger()?.[KEY]); }
     member(id) { return this.group().成员.find(m => m.id === id); }
     /** One locked write of the group (and anything else in the ledger), then read back. */
-    async write(fn) {
+    async write(fn, token) {
+        if (token) assertCapture(this.app, token);
         return L.commit(this.bridge, (v, z) => {
+            if (token) assertCapture(this.app, token);
             const g = normGroup(z[KEY]); const r = fn(g, z); g.rev = num(g.rev) + 1;
             const keep = new Set(g.消息.map(m => m.ref).filter(Boolean)); for (const id of Object.keys(g.红包)) if (!keep.has(id)) delete g.红包[id];
             z[KEY] = g; return r;
-        }, z => [z[KEY]?.rev, z.系统点, (z.背包 || []).length, Object.keys(z.任务库 || {}).length]);
+        }, z => [z[KEY]?.rev, z.系统点, (z.背包 || []).length, Object.keys(z.任务库 || {}).length], { expectedIdentity: token?.id });
     }
     say(g, from, text, extra = {}) { g.消息.push({ id: rid('g'), t: Date.now(), from, text: clip(text, 400), ...extra }); if (g.消息.length > MAX_MSG) g.消息.splice(0, g.消息.length - MAX_MSG); }
     /** What reached the host through the group — injected into the story prompt so the AI keeps the real source. */
@@ -235,19 +238,21 @@ export class HubGroup {
     }
     async onStoryReply(id) {
         const c = this.ctx, m = c.chat?.[Number(id)]; if (!m || m.is_user || m.is_system) return;
+        let token; try { token = capture(this.app); } catch { return; }
         const g = this.group();
         if (g.降临) {
-            try { await this.write(gg => { if (!gg.降临) return; gg.降临.轮 = num(gg.降临.轮) - 1; if (gg.降临.轮 <= 0) { this.say(gg, 'sys', `${gg.降临.名称} 的降临结束，回到了${gg.降临.世界}。`, { kind: 'sys' }); gg.降临 = null; } }); this.syncPrompt(); } catch (e) { console.warn(e); }
+            try { await this.write(gg => { if (!gg.降临) return; gg.降临.轮 = num(gg.降临.轮) - 1; if (gg.降临.轮 <= 0) { this.say(gg, 'sys', `${gg.降临.名称} 的降临结束，回到了${gg.降临.世界}。`, { kind: 'sys' }); gg.降临 = null; } }, token); this.syncPrompt(); } catch (e) { console.warn(e); }
         }
         if (!g.设置.自动闲聊 || !g.成员.length || this.busy) return;
         // 0.8.2: every N-th story reply only (setting 闲聊间隔, default 3) — not one extra model call per message.
         const every = g.设置.闲聊间隔 || 3, due = num(g.节奏.闲聊) + 1 >= every;
-        try { await this.write(gg => { gg.节奏.闲聊 = due ? 0 : num(gg.节奏.闲聊) + 1; }); } catch (e) { console.warn(e); return; }
-        if (due) this.round(null, String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '').slice(-400)).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
+        try { await this.write(gg => { gg.节奏.闲聊 = due ? 0 : num(gg.节奏.闲聊) + 1; }, token); } catch (e) { console.warn(e); return; }
+        if (due) this.round(null, String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '').slice(-400), token).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
     }
 
     // ---------- chat round: one request, 1–6 members ----------
-    async round(userText, story = '') {
+    async round(userText, story = '', token = capture(this.app)) {
+        assertCapture(this.app, token);
         const z0 = this.ledger(); if (!z0) throw Error('当前聊天没有诸天账本。');
         const g0 = normGroup(z0[KEY]); const speakers = g0.成员.filter(m => num(m.禁言轮) <= 0);
         if (!speakers.length) throw Error(g0.成员.length ? '群员都被禁言了。' : '群里还没有群员，先去「群员」页招募。');
@@ -298,15 +303,16 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
                 for (const m of g.成员) if (num(m.禁言轮) > 0) m.禁言轮 = num(m.禁言轮) - 1;
                 if (got) g.节奏 = { 距上次: 0, 间隔: Math.random() < 0.5 ? 3 : 4 }; else g.节奏.距上次 = Math.min(99, num(g.节奏.距上次) + 1);
                 return parsed.length;
-            });
+            }, token);
             if (!res) this.toast('群员这次没有按格式回复（模型输出无法解析），可以再发一次。', 4200);
             else if (got) this.toast(dropped ? '有红包/赠礼到达，部分超出今日上限或节奏。' : '群里有红包或赠礼，点开领取。', 3200);
         } finally { this.busy = ''; this.syncPrompt(); this.paint(); }
     }
     async send(text) {
         text = clip(text, 300); if (!text) return;
-        await this.write(g => { this.say(g, 'me', text); });
-        this.paint(); await this.round(text);
+        const token = capture(this.app);
+        await this.write(g => { this.say(g, 'me', text); }, token);
+        assertCapture(this.app, token); this.paint(); await this.round(text, '', token);
     }
 
     // ---------- red packets & gifts ----------
@@ -373,28 +379,32 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
 
     // ---------- members ----------
     async recruit(rawMode, rawHint) {
-        const { mode, hint } = recruitMode(rawMode, rawHint);      // refuses an empty 指定 before the fee is spent
-        const z = this.ledger(); if (!z) throw Error('当前聊天没有诸天账本。');
-        const g = normGroup(z[KEY]); if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量} 人），先扩建。`);
-        await this.write((gg, zz) => { L.spend(zz, RECRUIT_FEE); if (gg.候选) gg.候选历史 = [...gg.候选历史, gg.候选.名称].slice(-12); gg.候选 = null; });
-        this.busy = '正在向诸天万界发布招募令…'; this.paint();
+        if (this.busy) throw Error('已有聊天群操作正在进行。');
+        const token = capture(this.app), { mode, hint } = recruitMode(rawMode, rawHint);
+        const z = this.ledger(), g = normGroup(z[KEY]);
+        if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量}人）。`);
+        if (num(z.系统点) < RECRUIT_FEE) throw Error('系统点不足，未发送招募。');
+        const history = [...g.候选历史, ...(g.候选 ? [g.候选.名称] : [])].slice(-12);
+        const g1 = { ...g, 候选历史: history }, budget = num(z.系统点) - RECRUIT_FEE, maxTier = affordableTier(budget);
+        const prompt = recruitPrompt(g1, { mode, hint, budget, maxTier });
+        const avoid = new Set([...g.成员.map(m => m.名称), ...(mode === 'char' ? [] : history)]);
+        this.busy = '招募生成中（未扣系统点）…'; this.paint();
+        let committing = false;
         try {
-            const g1 = this.group(), budget = num(this.ledger()?.系统点), maxTier = affordableTier(budget);
-            const prompt = recruitPrompt(g1, { mode, hint, budget, maxTier });
-            const avoid = new Set([...g1.成员.map(m => m.名称), ...(mode === 'char' ? [] : g1.候选历史)]);   // 指定角色: asking again for the same person is fine
-            let card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text, 300));
-            // Real randomness has a floor: never hand back someone already in the group or just shown (one retry).
-            if (card && (avoid.has(card.名称) || (prompt.target && card.档 > maxTier))) {
-                const why = avoid.has(card.名称) ? `「${card.名称}」刚刚出现过或已在群里，必须换一个完全不同的人` : `「${card.名称}」实力档 ${card.档} 超出了要求的 ${prompt.target} 档`;
-                card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text + `\n上一次的回答不合格：${why}。`, 300)) || card;
+            let card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text, 4096));
+            if (!card || avoid.has(card.名称) || (prompt.target && card.档 > maxTier)) {
+                card = parseRecruit(await this.ask('你是诸天万界聊天群的招募系统。', prompt.text + '\n上次回答格式错误、人物重复或超过实力档，请重新输出符合条件的一行。', 4096));
             }
-            if (!card) throw Error('招募令没有得到有效回应（模型输出无法解析）。');
-            if (avoid.has(card.名称)) throw Error(`模型两次都给了重复的人（${card.名称}）。`);
-            await this.write(gg => { gg.候选 = { ...card, t: Date.now(), 超预算: card.档 > maxTier }; });
-        } catch (e) {
-            await this.write((gg, zz) => { L.earn(zz, RECRUIT_FEE); }).catch(() => {});
-            throw Error(e.message + `（${RECRUIT_FEE} 点招募令已退回）`);
-        } finally { this.busy = ''; this.paint(); }
+            assertCapture(this.app, token);
+            if (!card || avoid.has(card.名称) || (prompt.target && card.档 > maxTier)) throw Error('未得到有效且不重复、符合要求的招募候选。');
+            committing = true;
+            await checkedCommit(this.app, token, zz => {
+                const gg = normGroup(zz[KEY]);
+                if (gg.rev !== g.rev || gg.成员.length >= gg.容量 || gg.成员.some(m => m.名称 === card.名称)) throw Error('聊天群状态已变化，未扣费，请重新招募。');
+                L.spend(zz, RECRUIT_FEE); gg.候选历史 = history; gg.候选 = { ...card, t: Date.now(), 超预算: card.档 > affordableTier(num(zz.系统点)) }; gg.rev = num(gg.rev) + 1; zz[KEY] = gg;
+            });
+        } catch (e) { throw Error(e.message + (committing ? '' : '（未扣招募系统点，API调用可能计费）')); }
+        finally { this.busy = ''; this.paint(); }
     }
     joinPrice(c) { return JOIN_PRICE[Math.max(1, Math.min(8, c.档 | 0))] || JOIN_PRICE[1]; }
     async invite() {
@@ -435,12 +445,13 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         this.syncPrompt(); this.toast(`${out.m.名称} 已降临（${fmtNum(out.cost)} 点），会在接下来 3 轮剧情里登场。`, 4200); this.paint();
     }
     async privateSay(id, text) {
+        const token = capture(this.app);
         text = clip(text, 300); if (!text) return; const m = this.member(id); if (!m) throw Error('群员不存在。');
         const log = (this.group().私聊[id] || []).slice(-10).map(x => `${x.me ? '宿主' : m.名称}: ${x.text}`).join('\n');
         this.busy = `${m.名称} 正在输入…`; this.paint();
         try {
             const reply = await this.ask(`你是诸天万界聊天群的群员私聊：你扮演 ${m.名称}（${m.世界}·${this.tierName(m.档)}·${m.性格}），正在和群主私聊。只输出 ${m.名称} 的一段回复，不要旁白，不超过 120 字。`, `对宿主的好感：${num(m.好感, 20)}/100\n${log ? '最近私聊：\n' + log + '\n' : ''}宿主：${text}`, 400);
-            await this.write(g => { const arr = g.私聊[id] = Array.isArray(g.私聊[id]) ? g.私聊[id] : []; arr.push({ me: true, text, t: Date.now() }, { me: false, text: clip(reply.replace(/^.{0,24}[:：]\s*/, ''), 300), t: Date.now() }); if (arr.length > MAX_PM) arr.splice(0, arr.length - MAX_PM); });
+            await this.write(g => { const arr = g.私聊[id] = Array.isArray(g.私聊[id]) ? g.私聊[id] : []; arr.push({ me: true, text, t: Date.now() }, { me: false, text: clip(reply.replace(/^.{0,24}[:：]\s*/, ''), 300), t: Date.now() }); if (arr.length > MAX_PM) arr.splice(0, arr.length - MAX_PM); }, token);
         } finally { this.busy = ''; this.paint(); }
     }
 
@@ -495,13 +506,14 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         this.paint();
     }
     async help(text, memberId) {
+        const token = capture(this.app);
         text = clip(text, 200); if (!text) throw Error('先写下要求助的事。');
         const g0 = this.group(), m = g0.成员.find(x => x.id === memberId) || g0.成员[Math.floor(Math.random() * g0.成员.length)];
         if (!m) throw Error('群里还没有群员。');
         this.busy = `${m.名称} 正在想办法…`; this.paint();
         try {
             const reply = await this.ask('你是诸天万界聊天群的任务发布系统。', `宿主在群里求助：「${text}」。回应者：${m.名称}（${m.世界}·${this.tierName(m.档)}）。
-把这次求助变成一个宿主可以去完成的任务。只输出一行，用竖线分隔：任务名称（12字内）|任务内容（60字内，写清楚去哪、做什么）|奖励（例如 3000 系统点，或某件物品）`, 300);
+把这次求助变成一个宿主可以去完成的任务。只输出一行，用竖线分隔：任务名称（12字内）|任务内容（60字内，写清楚去哪、做什么）|奖励（例如 3000 系统点，或某件物品）`, 4096);
             const [名称, 内容, 奖励] = (String(reply).split('\n').find(s => s.includes('|')) || '').split('|').map(s => clip(s, 80));
             if (!名称) throw Error('没有生成有效的任务（模型输出无法解析）。');
             const task = await this.write((g, z) => {
@@ -510,11 +522,12 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
                 z.任务库[ID] = { ID, 名称: 名称.slice(0, 24), 内容: 内容 || text, 奖励: 奖励 || '未记录奖励', 完成度: 0, 类型: '短期', 状态: '待接取', 来源: `聊天群求助 · ${m.名称}@${m.世界}` };
                 this.say(g, 'me', `求助：${text}`); this.say(g, m.id, `这事我有办法。任务「${名称}」发你了：${内容}`, { kind: 'task', task: ID });
                 return z.任务库[ID];
-            });
+            }, token);
             this.toast(`任务「${task.名称}」已进入任务库（待接取）。`, 3600, { label: '去任务页', run: () => this.hub.go('task') });
         } finally { this.busy = ''; this.paint(); }
     }
     async live(memberId) {
+        const token = capture(this.app);
         const g0 = this.group(), m = g0.成员.find(x => x.id === memberId) || g0.成员[Math.floor(Math.random() * g0.成员.length)];
         if (!m) throw Error('群里还没有群员。');
         this.busy = `${m.名称} 正在开播…`; this.paint();
@@ -522,7 +535,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const reply = await this.ask('你是诸天万界聊天群的群直播。', `${m.名称}（${m.世界}·${this.tierName(m.档)}·${m.性格}）在群里开了一场直播，给宿主看自己世界此刻正在发生的事。用第三人称写 3–5 行直播画面，每行不超过 50 字，只输出画面描述。`, 500);
             const lines = String(reply).split('\n').map(s => clip(s, 80)).filter(Boolean).slice(0, 5);
             if (!lines.length) throw Error('直播信号中断了（模型没有返回内容）。');
-            await this.write(g => { this.say(g, m.id, lines.join('\n'), { kind: 'live' }); });
+            await this.write(g => { this.say(g, m.id, lines.join('\n'), { kind: 'live' }); }, token);
         } finally { this.busy = ''; this.paint(); }
     }
     async saveMeta(patch) {

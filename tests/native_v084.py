@@ -73,7 +73,7 @@ def api_suite(page):
     js(page, "sr.querySelector('#page-api [data-act=save]').click();await new Promise(r=>setTimeout(r,1500));")
     r = js(page, """const p=sr.getElementById('page-api');return {msg:p.querySelector('[data-out]')?.textContent||'',warn:/不一致/.test(p.textContent),
       st:app.settings.get('api')||null,lines:[...p.querySelectorAll('.zt-api-inline form > div:nth-of-type(3) > div')].map(d=>d.textContent)}""")
-    ok('保存 writes both copies: no 两处配置不一致 warning afterwards', '已保存' in r['msg'] and not r['warn'], json.dumps(r, ensure_ascii=False)[:300])
+    ok('保存 writes both copies: no 两处配置不一致 warning afterwards', '已提交给酒馆保存' in r['msg'] and not r['warn'], json.dumps(r, ensure_ascii=False)[:300])
     shot(page, '02-api-saved')
     # the shim the original Lilith code uses: streaming + readable errors
     n0 = len(log_lines(args.nocors_log))

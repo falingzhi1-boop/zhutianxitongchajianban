@@ -1,3 +1,4 @@
+import { migrateBonds } from './bonds-data.js';
 // 1.0 导出 / 导入存档 + 账本结构版本号.
 //
 // 导出：一个 JSON 文件 = 插件设置 + 当前聊天的诸天账本（含聊天群、星图足迹等，都在账本里）+ 可选的记忆存档 / 莉莉丝私聊记录。
@@ -25,6 +26,7 @@ export const LEDGER_MIGRATIONS = Object.freeze([
         if (z.系统点 !== undefined && !Number.isFinite(Number(z.系统点))) z.系统点 = 0;
         return z;
     } },
+    { to: 2, note: '1.1 多人羁绊与来源记录（保留旧目标）', up: migrateBonds },
 ]);
 const HOST_ONLY = new Set(['takeoverLog', 'wbUnbound', 'legacyImported', 'migrated070', 'ledgerReceipts']);
 const SECRET_KEY = /^(api[_-]?key|key|apikey|token|access[_-]?token|secret|password|passwd|authorization|auth)$/i;
@@ -39,9 +41,10 @@ export function stripSecrets(v, depth = 0) {
     if (plain(v)) {
         const out = {};
         for (const [k, x] of Object.entries(v)) {
-            if (SECRET_KEY.test(k)) continue;
+            const memoryKey = k === 'key' && ['事件','承诺','关系','线索','地点','规则','任务','其他'].includes(v.kind) && ['active','resolved'].includes(v.status) && typeof v.text === 'string' && typeof v.evidence === 'string';
+            if (SECRET_KEY.test(k) && !memoryKey) continue;
             const y = stripSecrets(x, depth + 1);
-            if (y !== undefined) out[k] = y;
+            if (y !== undefined) Object.defineProperty(out, k, { value: y, enumerable: true, configurable: true, writable: true });
         }
         return out;
     }
@@ -147,18 +150,26 @@ export class DataIO {
         return { file, text };
     }
     /** Import after preview: forced backup → write ledger (+ memory) → settings → read back. */
-    async import(file, { ledger = true, settings = true } = {}) {
+    async import(file, options = {}) {
+        if (this.importing) throw Error('存档正在导入，请勿重复提交。');
+        this.importing = true;
+        try { return await this.importOnce(file, options); } finally { this.importing = false; }
+    }
+    async importOnce(file, { ledger = true, settings = true } = {}) {
         file = parseBackup(file);
+        const expected = this.app.adapter.currentIdentity(), before = JSON.stringify(this.bridge.getVariables({ type: 'chat' }));
         const vars = file.chat?.variables || {}, out = { ledger: false, settings: 0, extra: [] };
         if (ledger && Object.keys(vars).length) {
             if (!this.ctx()?.chatMetadata) throw Error('请先打开要导入到的聊天。');
             await this.bridge.snapshot?.('导入前');
+            if (!expected || this.app.adapter.currentIdentity() !== expected) throw Error('导入期间聊天已切换，未写入。');
             const mig = vars.诸天系统 ? migrateLedger(vars.诸天系统, Number(file.chat?.ledgerSchema) || 0) : null;
             const want = { ...vars, ...(mig ? { 诸天系统: mig.ledger } : {}) };
-            await this.bridge.updateVariablesWith(v => { for (const [k, x] of Object.entries(want)) v[k] = clone(x); return v; }, { type: 'chat' });
+            await this.bridge.updateVariablesWith(v => { if (JSON.stringify(v) !== before) throw Error('备份后账本已变化，请重新预览导入。'); for (const [k, x] of Object.entries(want)) v[k] = clone(x); return v; }, { type: 'chat', verify: true, expectedIdentity: expected, replaceLedger: true });
+            if (this.app.adapter.currentIdentity() !== expected) throw Error('导入后聊天已切换，请核对原聊天。');
             const back = this.bridge.getVariables({ type: 'chat' }) || {};
             for (const [k, x] of Object.entries(want)) if (JSON.stringify(back[k]) !== JSON.stringify(x)) throw Error(`导入后读回不一致（${k}）。当前账本已在导入前备份，可以在「账本回滚」里恢复。`);
-            await this.setSchema(LEDGER_SCHEMA);
+            await this.setSchema(LEDGER_SCHEMA, expected);
             out.ledger = !!vars.诸天系统; out.extra = Object.keys(vars).filter(k => k !== '诸天系统');
         }
         if (settings && plain(file.settings)) {
@@ -173,15 +184,22 @@ export class DataIO {
         this.app.adapter.notify?.();
         return out;
     }
-    async setSchema(v) {
+    async setSchema(v, expected = this.app.adapter.currentIdentity()) {
+        if (!expected || this.app.adapter.currentIdentity() !== expected) throw Error('聊天已切换，未标记结构版本。');
         const c = this.ctx(); if (!c?.chatMetadata) return;
         const meta = c.chatMetadata[STORAGE] = { schema: 1, ...(c.chatMetadata[STORAGE] || {}) };
         if (meta.ledgerSchema === v) return;
-        meta.ledgerSchema = v; await c.saveMetadata?.();
+        const target = { avatar_url: c.characters?.[c.characterId]?.avatar, file_name: c.getCurrentChatId() };
+        meta.ledgerSchema = v;
+        try {
+            await c.saveMetadata?.();
+            const r = await fetch('/api/chats/get', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: c.getRequestHeaders(), body: JSON.stringify(target), signal: AbortSignal.timeout(15000) });
+            if (!r.ok || Number((await r.json())?.[0]?.chat_metadata?.[STORAGE]?.ledgerSchema) !== v || this.app.adapter.currentIdentity() !== expected) throw Error('结构版本读回不一致或聊天已切换');
+        } catch (e) { this.app.adapter.transactions?.uncertain?.add(expected); throw Error('结构版本保存未确认，已冻结写入，请重载核对。' + e.message); }
     }
     /** On chat open: upgrade an old ledger (backup first); a newer one makes the chat read-only (th-bridge checks). */
     async checkSchema() {
-        const c = this.ctx(), z = this.bridge.getVariables({ type: 'chat' })?.诸天系统;
+        const c = this.ctx(), expected = this.app.adapter.currentIdentity(), z = this.bridge.getVariables({ type: 'chat' })?.诸天系统;
         if (!c?.chatMetadata || !plain(z)) return { state: 'none' };
         const from = Number(this.meta().ledgerSchema) || 0;
         if (from > LEDGER_SCHEMA) return { state: 'newer', from };
@@ -189,9 +207,10 @@ export class DataIO {
         const mig = migrateLedger(z, from);
         if (JSON.stringify(mig.ledger) !== JSON.stringify(z)) {
             await this.bridge.snapshot?.(`结构升级 ${from}→${LEDGER_SCHEMA} 前`);
-            await this.bridge.updateVariablesWith(v => { v.诸天系统 = mig.ledger; return v; }, { type: 'chat' });
+            await this.bridge.updateVariablesWith(v => { v.诸天系统 = migrateLedger(v.诸天系统, from).ledger; return v; }, { type: 'chat', verify: true, expectedIdentity: expected, replaceLedger: true });
         }
-        await this.setSchema(LEDGER_SCHEMA);
+        if (this.app.adapter.currentIdentity() !== expected) throw Error('迁移期间聊天已切换，未标记结构版本。');
+        await this.setSchema(LEDGER_SCHEMA, expected);
         return { state: 'upgraded', from, to: LEDGER_SCHEMA, steps: mig.steps };
     }
     popup(html) { return this.app.features.popup(html, true); }
@@ -209,11 +228,11 @@ export class DataIO {
 <textarea class="text_pole" data-io="text" placeholder="把存档文本粘贴到这里" style="display:none;width:100%;height:120px;font:12px/1.4 monospace"></textarea>
 <div data-io="preview"></div><p class="zt-out"></p>`);
         const $ = s => el.querySelector(`[data-io="${s}"]`), out = el.querySelector('.zt-out');
-        let pending = null;
+        let pending = null, pendingIdentity = '';
         const include = () => ({ memory: $('memory').checked, companion: $('companion').checked });
         const show = text => {
             try {
-                pending = parseBackup(text);
+                pending = parseBackup(text); pendingIdentity = this.app.adapter.currentIdentity();
                 const p = backupPreview(this.current(), pending);
                 $('preview').innerHTML = `<h4>将要导入</h4><p>来自插件 ${esc(p.from.plugin)} · ${esc(new Date(p.from.at).toLocaleString())}${p.from.chat ? ' · 聊天「' + esc(p.from.chat) + '」' : ''}</p>
 <table class="zt-table"><tr><th></th><th>现在</th><th>导入后</th></tr>${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('')}</table>
@@ -235,6 +254,7 @@ export class DataIO {
                 else if (act === 'pick') $('file').click();
                 else if (act === 'paste') { $('text').style.display = ''; $('text').value = ''; $('text').focus(); }
                 else if (act === 'apply' && pending) {
+                    if (this.app.adapter.currentIdentity() !== pendingIdentity) throw Error('聊天已切换，请重新预览存档后再导入。');
                     if (!globalThis.confirm('用这个存档覆盖当前聊天的账本和设置？当前账本会先自动备份。')) return;
                     const r = await this.import(pending, { ledger: $('ledger')?.checked !== false, settings: $('settings')?.checked !== false });
                     out.textContent = `已导入：${r.ledger ? '账本已写入并读回一致' : '没有写入账本'}${r.extra.length ? '，' + r.extra.join('、') : ''}；设置 ${r.settings} 项。`;

@@ -176,7 +176,7 @@ export class Hub {
     // ---------- navigation ----------
     go(id, { silent = false } = {}) {
         if (ORIGINAL_PAGES.includes(id)) { const b = this.shadow.querySelector(`.zt-nav-orig[data-page="${id}"]`); if (b) { b.click(); return; } id = 'ov'; }
-        const engine = id in ENGINE_TABS, def = this.pages.get(engine ? 'zt-engine' : id);
+        const engine = id in ENGINE_TABS && !this.pages.has(id), def = this.pages.get(engine ? 'zt-engine' : id);
         if (!def) id = 'ov';
         this.page = id;
         const target = engine || !def ? this.pages.get('zt-engine').el : def.el;
@@ -189,7 +189,8 @@ export class Hub {
     }
     afterGo(silent) {
         if (ORIGINAL_PAGES.includes(this.page)) this.shell.scroll?.classList.remove('zt-fill');
-        if (!silent) this.settings.set('hubPage', this.page);
+        // Navigation/diagnostics must remain usable even when persisting the last page is unavailable.
+        if (!silent) try { this.settings.set('hubPage', this.page); } catch { /* save failure already logged by Settings */ }
         this.shadow.host?.setAttribute?.('data-zt-page', this.page);
         this.onPage?.(this.page);
     }

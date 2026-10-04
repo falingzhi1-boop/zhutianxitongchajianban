@@ -1,3 +1,4 @@
+import { compactLegacyOperation } from './operation-records.js';
 // "诸天状态栏 · 旧楼层不发给AI" as a native generation interceptor (manifest.generate_interceptor).
 // Original regex: /<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/gm → '' , promptOnly, minDepth 2 (depth 0 = newest floor).
 // SillyTavern calls the interceptor with its prompt copy of the chat (coreChat) before the prompt is built; the
@@ -28,6 +29,7 @@ export function installInterceptor() {
         const app = globalThis.__zhutianApp;
         if (!app?.settings || app.settings.get('promptStripPanels') === false) return;
         try {
+            if (Array.isArray(chat)) for (let i = 0; i < chat.length; i++) { const m = chat[i]; if (typeof m?.mes === 'string') { const text = compactLegacyOperation(m.mes); if (text !== m.mes) chat[i] = { ...m, mes: text }; } }
             const n = stripOldPanels(chat, app.settings.get('promptPanelKeepDepth'));
             promptFilterStats.runs++; promptFilterStats.floors += n; promptFilterStats.last = Date.now();
         } catch (e) { console.warn('[诸天] 旧楼层面板过滤失败（提示词保持原样）', e); }

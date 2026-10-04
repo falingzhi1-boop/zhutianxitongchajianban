@@ -1,3 +1,4 @@
+import { capture, assertCapture } from './action-support.js';
 // 1.0 · 品阶鉴定 — player feedback: "不是通过系统获得的功法或物品在系统自身的判定里会变成凡品，判定完之后就改不了了，
 // 只能用系统自带的商城去升".
 //
@@ -23,20 +24,21 @@ import { readConfigs } from './api-center.js';
 export const APPRAISE_GRADES = Object.freeze(['凡品', '灵品', '仙品', '神品']);
 /** Where the system itself made / graded the thing (original 来源 values + the terminal's own modules). */
 export const SYSTEM_SOURCE = /^(商城|万界商城|盲盒|万物熔炉|随身洞天|分身探宝|无限口袋|图鉴复刻|修炼|任务奖励|聊天群|自拟外挂|管理员|系统)/;
+export const appraiseItemKey = it => JSON.stringify(['lot', ...['名称', '品级', '来源', '来源世界', '原世界品阶', '收纳凭据', '价格', '分类', '效果'].map(k => it?.[k] ?? null)]);
 export const isOutside = e => !SYSTEM_SOURCE.test(String(e?.来源 ?? '').trim());
 const gi = g => APPRAISE_GRADES.indexOf(g);
 const num = (x, d = 0) => { const n = Number(x); return Number.isFinite(n) ? n : d; };
 
-/** Entries that may be appraised (pure). Skills by name, items by name + grade (the stacking key). */
+/** Entries that may be appraised (pure). Skills by name; items by immutable source-lot fields (not only name + grade). */
 export function candidates(z) {
-    const skills = (Array.isArray(z?.功法库) ? z.功法库 : []).filter(isOutside).map(s => { const f = fixSkill(s); return { kind: 'skill', key: normName(f.名称), name: f.名称, grade: f.品阶, src: String(s.来源 || ''), desc: String(s.描述 || s.效果 || ''), stamp: s.鉴定 || null, extra: `${f.熟练度}/${f.上限}` }; });
-    const items = (Array.isArray(z?.背包) ? z.背包 : []).filter(isOutside).map(it => ({ kind: 'item', key: `${it.名称 || ''}|${it.品级 || ''}`, name: String(it.名称 || '未知物品'), grade: APPRAISE_GRADES.includes(it.品级) ? it.品级 : (it.品级 === '禁忌' ? '禁忌' : '凡品'), src: String(it.来源 || ''), desc: String(it.效果 || ''), cat: String(it.分类 || '其他'), stamp: it.鉴定 || null, extra: `×${num(it.数量, 1)}` }));
+    const skills = (Array.isArray(z?.功法库) ? z.功法库 : []).filter(isOutside).map(s => { const f = fixSkill(s); return { kind: 'skill', key: normName(f.名称), name: f.名称, grade: f.品阶, src: String(s.来源 || ''), desc: String(s.描述 || s.效果 || ''), world: String(s.来源世界 || ''), originalGrade: String(s.原世界品阶 || ''), stamp: s.鉴定 || null, extra: `${f.熟练度}/${f.上限}` }; });
+    const items = (Array.isArray(z?.背包) ? z.背包 : []).filter(isOutside).map(it => ({ kind: 'item', key: appraiseItemKey(it), name: String(it.名称 || '未知物品'), grade: APPRAISE_GRADES.includes(it.品级) ? it.品级 : (it.品级 === '禁忌' ? '禁忌' : '凡品'), src: String(it.来源 || ''), desc: String(it.效果 || ''), cat: String(it.分类 || '其他'), world: String(it.来源世界 || ''), originalGrade: String(it.原世界品阶 || ''), stamp: it.鉴定 || null, extra: `×${num(it.数量, 1)}` }));
     return { skills, items };
 }
 /** Messages for one appraisal (pure). The scale is the system's own (神通实力档 → 品阶). */
 export function appraisePrompt(entry, z) {
-    const kind = entry.kind === 'skill' ? '功法' : '物品';
-    const system = '你是诸天系统的品阶鉴定官。只按它本身的威力、规格和稀有度判断品阶，不迎合宿主，不因为来源是剧情就压低或抬高。严格只输出一行：品阶|一句话理由（30字内）。品阶只能是 凡品 / 灵品 / 仙品 / 神品 之一。';
+    const kind = entry.kind === 'skill' ? '功法' : '物品', world = entry.world || z?.当前世界 || '';
+    const system = '你是诸天系统的品阶鉴定官。只按它本身的威力、规格和稀有度判断品阶，不迎合宿主，不因为来源是剧情就压低或抬高。严格只输出一行：品阶|一句话理由（30字内）。品阶只能是 凡品 / 灵品 / 仙品 / 神品 之一；证据不足输出 待鉴定|理由。';
     const user = [
         '品阶标准（诸天系统统一标准）：',
         '凡品：凡人世界之物、凡俗武学（对应实力：凡人顶尖）',
@@ -46,15 +48,20 @@ export function appraisePrompt(entry, z) {
         '',
         `鉴定对象（${kind}）：${entry.name}`,
         entry.cat ? `分类：${entry.cat}` : '',
-        entry.desc ? `效果 / 描述：${String(entry.desc).slice(0, 200)}` : '效果 / 描述：没有记录（按名称和常识判断；判断不了就给凡品）',
+        entry.desc ? `效果 / 描述：${String(entry.desc).slice(0, 200)}` : '效果 / 描述：没有记录（证据不足必须返回 待鉴定|缺少效果证据，不能按名称猜测凡品）',
         `来源：${entry.src || '剧情 / 未记录'}`,
         z?.当前世界 ? `宿主当前所在世界：${String(z.当前世界).slice(0, 30)}` : '',
         `账本现在记为：${entry.grade}`,
+        `物品来源世界：${entry.world || '未记录，不得把当前世界当作已证实来源'}` ,
+        `原世界品阶：${entry.originalGrade || '未记录'}`,
+        `用户确认的参考世界映射（${world}）：${JSON.stringify(z?.世界品阶映射?.[world] || {})}`,
+        '保留原世界品阶，不按名称推断，未知就待鉴定。',
     ].filter(x => x !== '').join('\n');
     return { system, user };
 }
 /** The model's answer → { grade, reason } (pure). Throws a readable error for anything else. */
 export function parseAppraisal(text) {
+    if (/待鉴定/.test(String(text))) throw Error('品阶待鉴定：缺少可靠设定/效果证据。账本未改动，请补充原世界映射或手动确认。');
     const line = String(text || '').replace(/```[\s\S]*?```/g, ' ').split(/\r?\n/).map(s => s.trim()).find(s => /凡品|灵品|仙品|神品|禁忌/.test(s));
     if (!line) throw Error('模型没有给出品阶（应为：品阶|理由）。账本：没有改动。');
     const [head, ...rest] = line.replace(/^[*#>\-\s]+/, '').split(/[|｜]/);
@@ -66,7 +73,7 @@ export function parseAppraisal(text) {
 /**
  * Raise one entry inside a ledger object (pure, mutates `z`). Returns { changed, from, to, name }.
  * Only outside entries, only upward, at most 神品. Skills: 上限 follows the new grade. Items: the recycle value is frozen
- * at the old one, and an existing stack of the same name + new grade absorbs it.
+ * at the old one. Source lots stay separate, even when name and grade match a shop stack.
  */
 export function regrade(z, entry, grade, { how = 'AI', reason = '', at = Date.now() } = {}) {
     if (!APPRAISE_GRADES.includes(grade)) throw Error('品阶只能是 凡品 / 灵品 / 仙品 / 神品。');
@@ -82,15 +89,15 @@ export function regrade(z, entry, grade, { how = 'AI', reason = '', at = Date.no
         return { changed: true, from, to: grade, name: f.名称 };
     }
     const bag = Array.isArray(z.背包) ? z.背包 : [];
-    const i = bag.findIndex(x => `${x?.名称 || ''}|${x?.品级 || ''}` === entry.key); if (i < 0) throw Error(`背包里没有「${entry.name}」了。`);
+    const matches = bag.map((x, i) => ({ x, i })).filter(({ x }) => appraiseItemKey(x) === entry.key || `${x?.名称 || ''}|${x?.品级 || ''}` === entry.key);
+    if (matches.length > 1) throw Error('同名物品来源不唯一，请重新选择具体批次；未写入。');
+    const i = matches[0]?.i ?? -1; if (i < 0) throw Error(`背包里没有「${entry.name}」了。`);
     const it = bag[i]; if (!isOutside(it)) throw Error(`「${entry.name}」是系统给的，品阶由系统判定，不能鉴定。`);
     const from = APPRAISE_GRADES.includes(it.品级) ? it.品级 : (it.品级 === '禁忌' ? '禁忌' : '凡品');
     if (from === '禁忌' || gi(grade) <= gi(from)) return { changed: false, from, to: grade, name: it.名称 };
     if (!num(it.价格)) it.价格 = L.TIER_PRICE[from] || 100;            // recycle value stays what it was
     const stamp = { 品阶: grade, 原品阶: from, 方式: how, 时间: at, ...(reason ? { 理由: reason } : {}) };
-    const twin = bag.find((x, j) => j !== i && x?.名称 === it.名称 && x?.品级 === grade);
-    if (twin) { twin.数量 = num(twin.数量, 1) + num(it.数量, 1); twin.鉴定 = stamp; bag.splice(i, 1); }
-    else { it.品级 = grade; it.鉴定 = stamp; }
+    it.品级 = grade; it.鉴定 = stamp;
     return { changed: true, from, to: grade, name: it.名称 };
 }
 /** 「收录:功法名[品阶]」 lines that name an existing outside skill with a HIGHER grade (pure). */
@@ -172,11 +179,13 @@ export class Appraise {
     }
     // ---------- writes ----------
     /** One commit for a list of { entry, grade }. Floor snapshots get the same change. Returns the changed ones. */
-    async write(list, { how = 'AI', reason = '', mark = '', floor = null } = {}) {
+    async write(list, { how = 'AI', reason = '', mark = '', floor = null, token = capture(this.app) } = {}) {
         this.busy = true;
         try {
             const derive = (() => { try { const f = this.hub?.engineFrame?.contentWindow?.ztDerive; return typeof f === 'function' ? f : null; } catch { return null; } })();
+            assertCapture(this.app, token);
             return await L.commit(this.app.bridge, (v, z) => {
+                assertCapture(this.app, token);
                 if (mark && (z.功法记录 || []).some(r => r?.凭据 === mark)) return [];
                 const at = Date.now(), done = [];
                 for (const { entry, grade, why } of list) {
@@ -198,14 +207,16 @@ export class Appraise {
     }
     /** Ask the model (分功能 API 品阶鉴定 → default connection → 酒馆主 API). */
     async appraise(entry) {
+        const token = capture(this.app);
         const z = this.ledger(); if (!z) throw Error('当前聊天没有诸天账本，先在「设置 → 新聊天初始化」创建。');
         if (this.app.adapter.isGenerating()) throw Error('主聊天正在生成，请等它结束再鉴定。');
         const { system, user } = appraisePrompt(entry, z);
         let cfg = {}; try { cfg = readConfigs(this.app.bridge).status || {}; } catch { cfg = {}; }
-        const custom = cfg.url ? { apiurl: cfg.url, key: cfg.key, model: cfg.model, max_tokens: 200, temperature: 0.3 } : undefined;
-        const text = await this.app.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: 200, route: 'appraise' });
+        const custom = cfg.url ? { apiurl: cfg.url, key: cfg.key, model: cfg.model, max_tokens: 2048, temperature: 0.3 } : undefined;
+        const text = await this.app.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: 2048, route: 'appraise' });
+        assertCapture(this.app, token);
         const res = parseAppraisal(text);
-        const done = await this.write([{ entry, grade: res.grade, why: res.reason }], { how: 'AI 鉴定' });
+        const done = await this.write([{ entry, grade: res.grade, why: res.reason }], { how: 'AI 鉴定', token });
         return { ...res, from: entry.grade, changed: done.length > 0 };
     }
     // ---------- page ----------

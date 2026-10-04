@@ -64,7 +64,7 @@ def phone_context(browser, w=390, h=844):
 
 def report_suite(browser):
     ctx, page, errs = phone_context(browser)
-    Z.boot(page); Z.setup_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.setup_chat(page)
     js(page, "app.settings.set('mobileLayout','auto');app.settings.set('deviceCheck',null);")
     before = js(page, "const m=await import(app.base+'src/api-center.js');const ns=app.original.ZhuTianMemoryCore?.NS;window.__ztApiBefore=m.readConfigs(app.bridge,ns);await m.saveConfigs(app.bridge,ns,{url:'https://api.example.com/v1',key:arg,model:'m-test-1'});return true", FAKE_KEY)
     js(page, "console.warn('[诸天] 测试报错，带着密钥 '+arg+' 和 https://u:pw@relay.example/v1?key=zzz');", FAKE_KEY)
@@ -89,7 +89,7 @@ def report_suite(browser):
 
 def selftest_suite(browser):
     ctx, page, errs = phone_context(browser)
-    Z.boot(page); Z.open_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.open_chat(page)
     js(page, "app.settings.set('mobileLayout','auto');app.settings.set('hubBackClose',true);app.settings.set('deviceCheck',null);if(h.isOpen){h.close();await wait(800);}")
     js(page, "app.deviceCheck.run();")
     try:
@@ -161,7 +161,7 @@ def selftest_suite(browser):
 def desktop_suite(browser):
     page = browser.new_page(viewport={'width': 1400, 'height': 900}); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:300]))
-    Z.boot(page); Z.open_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.open_chat(page)
     js(page, "await app.features.openDiagnostics();await wait(900);")
     btns = page.evaluate("[...document.querySelectorAll('.popup [data-diag]')].map(b=>b.textContent)")
     ok('desktop: 兼容诊断 shows 复制诊断信息 and 手机真机自检', '复制诊断信息' in btns and '手机真机自检' in btns, btns)

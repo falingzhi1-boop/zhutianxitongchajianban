@@ -1,3 +1,4 @@
+import { memoryCore } from './model-response.js';
 // Runs the ORIGINAL v1.1 Lilith assistant (window, memory auto-organize + 补读, independent API + model discovery,
 // workbench + suggestions, continuity, private chat, story voice, ledger supervision) on SillyTavern natively.
 // vendor/original/assistant-runtime.js is the byte-for-byte original; this file only supplies its private scope:
@@ -34,6 +35,11 @@ export function proxiedFetch(bridge) {
         if (String(init.method || 'GET').toUpperCase() === 'POST' && /\/chat\/completions$/.test(String(url).replace(/[?#].*$/, ''))) {
             let body = null; try { body = JSON.parse(init.body || '{}'); } catch { body = null; }
             const id = body ? classifyAssistant(body.messages) : '', over = id ? resolveRoute(readRoutes(bridge), id) : null;
+            const defaultCap = Number(bridge.getVariables?.({ type: 'global' })?.诸天系统_API?.maxTokens);
+            const cap = Number(over?.maxTokens) || defaultCap;
+            if (body && Number.isInteger(cap) && cap >= 64 && cap <= 65536) body.max_tokens = cap;
+            else if (body?.messages?.length === 1 && /^(只回复|回复两个字)：成功$/.test(body.messages[0]?.content || '')) body.max_tokens = Math.max(4096, Number(body.max_tokens) || 0);
+            if (body) init = { ...init, body: JSON.stringify(body) };
             if (over) {
                 bridge.lastRoute = { id, via: over.via, at: Date.now() };
                 if (over.main) url = MAIN_API_URL + '/chat/completions';
@@ -121,7 +127,8 @@ export class AssistantHost {
         if (this.legacyRunning()) throw Error('旧版酒馆助手记忆脚本仍在运行：请先在酒馆助手里停用它，原生莉莉丝才会接管（避免双重注入与重复计费）。');
         this.importLegacyConfig();
         const b = this.bridge, a = this.adapter;
-        const G = Object.create(this.original);          // original modules stay shared and untouched
+        const G = Object.create(this.original);
+        if (this.original.ZhuTianMemoryCore) G.ZhuTianMemoryCore = memoryCore(this.original.ZhuTianMemoryCore);          // original modules stay shared and untouched
         // 语音美化 is one switch: when the native voice box is off, the original story-assist painter stays off too
         // (it would otherwise still wrap 莉莉丝：“…” paragraphs into voice cards). Tone avatars keep working.
         const Voice = this.original.ZhuTianLilithVoice;

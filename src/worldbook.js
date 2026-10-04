@@ -1,8 +1,9 @@
+import { SHOP_RULE, STORY_RULE, BOND_RULE } from './commerce-rules.js';
 // 诸天 worldbook as installed by this extension (0.8.1; 0.8.4 强力模块 defaults).
 // The 35 original v1.1 entries stay byte-for-byte in vendor/original (provenance-checked); this file only applies the
 // small native corrections on top when the book is built, and adds the entries for features the original never had.
 // Patches are exact text replacements: if a replaced text is missing (an edited copy), that patch is skipped, never guessed.
-export const WORLDBOOK_REV = '0.8.4';
+export const WORLDBOOK_REV = '1.1.0';
 
 /** 0.8.4 强力模块: worldbook entries the user can switch from 外挂管理 (book-wide). `def` = state in a NEW install;
  *  神豪挥霍 and 诸天打手 are constant (injected every turn) in v1.1 and dominate the economy/fights, so they start off.
@@ -56,7 +57,7 @@ function extraEntries(base) {
 }
 
 /** Original rules → the worldbook entries this version installs. Returns { rules, applied, skipped }. */
-export function latestRules(original) {
+export function latestRules(original, { legacy = false } = {}) {
     const rules = structuredClone(Array.isArray(original) ? original : []), applied = [], skipped = [];
     for (const p of PATCHES) {
         const r = rules.find(x => x.comment === p.comment);
@@ -66,6 +67,12 @@ export function latestRules(original) {
     const have = new Set(rules.map(r => r.comment));
     for (const e of extraEntries(rules)) if (!have.has(e.comment)) rules.push(e);
     for (const r of rules) if (DEFAULT_OFF.includes(r.comment)) r.disable = true;   // 0.8.4: new installs start balanced
+    if (!legacy) for (const r of rules) {
+        if (r.comment === '09｜商城｜系统商城') r.content = SHOP_RULE;
+        if (r.comment === '05｜核心｜状态栏规则补充') r.content = r.content.replace('</rule_setting_simple>', STORY_RULE + '\n</rule_setting_simple>');
+        if (r.comment === '29｜情感｜恋爱攻略') r.content = r.content.replace('</rule_setting_simple>', BOND_RULE + '\n</rule_setting_simple>');
+        if (r.comment === '11｜商城｜万界盲盒') r.content = r.content.replace('</rule_setting_simple>', '\n商品内容遵循商品定制并近期避重；不要重抽本地已确定的品阶。不为平衡添加使用限制。只在用户主动发送摘要时衔接剧情，不要求发送全部抽奖日志。\n</rule_setting_simple>');
+    }
     rules.forEach((r, i) => { r.uid = i; r.displayIndex = i; });
     return { rules, applied, skipped };
 }
@@ -74,11 +81,12 @@ export function latestRules(original) {
  *  (added by the user, or renamed in an older copy) is kept after them and counted; the user's on/off choice of a built-in entry is kept. */
 export function mergeWorldbook(existing, latest) {
     const old = Object.values(existing?.entries || {});
-    const byComment = new Map(old.map(e => [e.comment, e]));
+    const byComment = new Map();
+    for (const e of old) if (!byComment.has(e.comment)) byComment.set(e.comment, e);
     const ours = new Set(latest.map(r => r.comment));
-    const out = latest.map(r => { const prev = byComment.get(r.comment); return prev ? { ...structuredClone(r), disable: !!prev.disable } : structuredClone(r); });
-    const kept = old.filter(e => !ours.has(e.comment));   // never silently dropped; reported so the user can review
+    const out = latest.map(r => { const prev = byComment.get(r.comment); return prev ? { ...structuredClone(r), ...structuredClone(prev), content: r.content, comment: r.comment, disable: !!prev.disable } : structuredClone(r); });
+    const kept = old.filter(e => !ours.has(e.comment) || byComment.get(e.comment) !== e);   // never silently dropped; reported so the user can review
     const entries = {};
     [...out, ...kept.map(e => structuredClone(e))].forEach((e, i) => { entries[i] = { ...e, uid: i, displayIndex: i }; });
-    return { book: { entries }, replaced: out.filter(r => byComment.has(r.comment)).length, added: out.filter(r => !byComment.has(r.comment)).length, kept: kept.length };
+    return { book: { ...structuredClone(existing), entries }, replaced: out.filter(r => byComment.has(r.comment)).length, added: out.filter(r => !byComment.has(r.comment)).length, kept: kept.length };
 }

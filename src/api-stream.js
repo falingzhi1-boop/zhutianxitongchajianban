@@ -34,7 +34,7 @@ export function parseSse(text) {
 
 /** The parsed stream as the non-stream JSON body the original code expects. */
 export function toCompletion(p, model = '') {
-    return { id: p.id || 'zt-stream', object: 'chat.completion', model: p.model || model,
+    return { zt_reasoning_present: !!p.reasoning, id: p.id || 'zt-stream', object: 'chat.completion', model: p.model || model,
         choices: [{ index: 0, finish_reason: p.finish || 'stop', message: { role: 'assistant', content: p.content } }] };
 }
 

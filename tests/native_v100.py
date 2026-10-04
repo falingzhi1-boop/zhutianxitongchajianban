@@ -134,7 +134,7 @@ def phone(browser):
 
     # ---------- ledger structure version ----------
     st = page.evaluate("()=>__zhutianApp.ctx?.chatMetadata?.zhutianCovenantTerminal?.ledgerSchema ?? SillyTavern.getContext().chatMetadata.zhutianCovenantTerminal?.ledgerSchema")
-    ok('structure version 1 recorded in chat metadata (not in the ledger the AI sees)', st == 1 and 'ledgerSchema' not in z(page), str(st))
+    ok('current structure version 2 recorded in chat metadata (not in the ledger the AI sees)', st == 2 and 'ledgerSchema' not in z(page), str(st))
     r = page.evaluate("""async()=>{const c=SillyTavern.getContext();c.chatMetadata.zhutianCovenantTerminal.ledgerSchema=99;
       let err='';try{await __zhutianApp.bridge.updateVariablesWith(v=>{v.诸天系统.系统点=999;return v;},{type:'chat'});}catch(e){err=e.message}
       const chk=await __zhutianApp.dataIO.checkSchema();const p=__zhutianApp.bridge.getVariables({type:'chat'}).诸天系统.系统点;
@@ -143,7 +143,7 @@ def phone(browser):
     r = page.evaluate("""async()=>{const c=SillyTavern.getContext();delete c.chatMetadata.zhutianCovenantTerminal.ledgerSchema;c.chatMetadata.variables.诸天系统.背包='坏数据';
       const chk=await __zhutianApp.dataIO.checkSchema();return {chk,bag:__zhutianApp.bridge.getVariables({type:'chat'}).诸天系统.背包,schema:c.chatMetadata.zhutianCovenantTerminal.ledgerSchema,
       reasons:__zhutianApp.bridge.backups().map(b=>b.reason||'')}}""")
-    ok('an old ledger is backed up, repaired and marked structure 1', r['chk']['state'] == 'upgraded' and r['bag'] == [] and r['schema'] == 1 and any('结构升级' in x for x in r['reasons']), json.dumps(r, ensure_ascii=False)[:300])
+    ok('an old ledger is backed up, repaired and marked structure 2', r['chk']['state'] == 'upgraded' and r['bag'] == [] and r['schema'] == 2 and any('结构升级' in x for x in r['reasons']), json.dumps(r, ensure_ascii=False)[:300])
 
     # ---------- error lines ----------
     page.evaluate("()=>{__zhutianApp.hub.open('group');}"); page.wait_for_timeout(700)
@@ -177,7 +177,7 @@ def landscape(browser):
     page = ctx.new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:300]))
     Z.boot(page); Z.open_chat(page) if page.evaluate("SillyTavern.getContext().characters.length") else Z.setup_chat(page)
-    page.evaluate("()=>{__zhutianApp.hub.open('ov')}"); page.wait_for_timeout(1000)
+    page.evaluate("()=>{__zhutianApp.settings.set('mobileLayout','auto');__zhutianApp.hub.open('ov')}"); page.wait_for_timeout(1000)
     vis = lambda: page.evaluate("()=>[...__zhutianApp.hub.shadow.querySelectorAll('nav.zt-hub-nav .nav-button')].filter(b=>b.offsetParent&&getComputedStyle(b).display!=='none').map(b=>b.dataset.page||'more')")
     v = vis()
     ok('landscape rail: six pinned pages + 更多 (no scrolling through ~20 entries)', v == ['ov', 'task', 'shop', 'bag', 'group', 'set', 'more'] or sorted(v) == sorted(['ov', 'task', 'shop', 'bag', 'group', 'set', 'more']), json.dumps(v))

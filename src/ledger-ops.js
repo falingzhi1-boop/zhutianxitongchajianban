@@ -1,6 +1,6 @@
 // Ledger operations for terminal modules (聊天群, 自拟外挂, …).
 // Same semantics as the original 3.1 helpers (adjustSysPoints / bagAdd): points never go negative, spending raises
-// 累计消费, same 名称+品级 stacks. Every commit is ONE locked write through the native Bridge followed by a read-back
+// 累计消费, same 名称+品级 stacks unless appraisal / collection requires separate source lots. Every commit is ONE locked write through the native Bridge followed by a read-back
 // check; callers show success only after `commit` resolves (the rule is: never show 已入库 before it is booked).
 export const GRADES = ['凡品', '灵品', '仙品', '神品', '禁忌'];
 export const TIER_PRICE = { 凡品: 100, 灵品: 1e4, 仙品: 1e7, 神品: 1e8, 禁忌: 1e10 };
@@ -56,9 +56,9 @@ export function bagAdd(z, item, n = 1) {
     const q = Math.max(1, Math.floor(num(n, 1)));
     const bag = Array.isArray(z.背包) ? z.背包 : (z.背包 = []);
     const key = (item.名称 || '') + '|' + (item.品级 || '');
-    const hit = bag.find(x => (x.名称 || '') + '|' + (x.品级 || '') === key);
+    const hit = bag.find(x => (x.名称 || '') + '|' + (x.品级 || '') === key && !x.收纳凭据 && !x.鉴定 && !item.收纳凭据 && !item.鉴定);
     if (hit) { hit.数量 = num(hit.数量, 1) + q; for (const k of ['价格', '来源', '分类', '效果']) if (!hit[k] && item[k]) hit[k] = item[k]; }
-    else bag.push({ 名称: item.名称, 品级: item.品级 || '凡品', 来源: item.来源 || '', 价格: item.价格 || 0, 分类: item.分类 || '其他', 效果: item.效果 || '', 数量: q });
+    else bag.push({ ...structuredClone(item), 名称: item.名称, 品级: item.品级 || '凡品', 来源: item.来源 || '', 价格: item.价格 || 0, 分类: item.分类 || '其他', 效果: item.效果 || '', 数量: q });
 }
 /** Removes n of bag[index]; returns the removed item snapshot. */
 export function bagTake(z, index, n = 1) {
@@ -75,7 +75,7 @@ export function bagTake(z, index, n = 1) {
  * its return value is kept as `result`. `probe(z)` must return the same JSON before (inside the write) and after
  * (read back) — e.g. the new point balance and a receipt id — otherwise the commit is reported as not booked.
  */
-export async function commit(bridge, mutate, probe = z => [z.系统点, z.界面记账时间]) {
+export async function commit(bridge, mutate, probe = z => [z.系统点, z.界面记账时间], { expectedIdentity } = {}) {
     let result, want;
     await bridge.updateVariablesWith(v => {
         const z = ensureLedger(v);
@@ -83,7 +83,7 @@ export async function commit(bridge, mutate, probe = z => [z.系统点, z.界面
         z.商城等级 = shopLevel(z);           // keep the derived field in step, like the original ztDerive does
         want = JSON.stringify(probe(z));
         return v;
-    }, { type: 'chat' });
+    }, { type: 'chat', verify: true, expectedIdentity });
     const back = bridge.getVariables({ type: 'chat' })?.诸天系统;
     if (!back || JSON.stringify(probe(back)) !== want) throw Error('账本读回不一致：这次操作没有确认入账。请到「设置 → 账本回滚」核对。');
     return result;

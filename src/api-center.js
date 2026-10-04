@@ -6,6 +6,7 @@
 // The same storage is written, so the original status-bar gear dialog and the Lilith connection page keep showing the
 // values chosen here and vice versa. "酒馆当前主API" writes the reserved sentinel URL (th-bridge MAIN_API_URL), which
 // the native bridge answers through SillyTavern generateRaw; nothing is ever sent to that host.
+import { saveEnvironment } from './save-environment.js';
 import { MAIN_API_URL, MAIN_API_MODEL, isMainApi } from './th-bridge.js';
 import { ROUTES, MAIN, readRoutes, writeRoutes, withPreset, withoutPreset, withRoute, routeText, cleanName, normalizeStore } from './api-routes.js';
 
@@ -32,6 +33,7 @@ export function readConfigs(bridge, ns) {
 export async function saveConfigs(bridge, ns, { url, key, model, maxTokens }, { status = true, assistant = true } = {}) {
     const main = isMainApi(url);
     const cfg = main ? { url: MAIN_API_URL, key: 'st-main', model: MAIN_API_MODEL } : { url: String(url).trim(), key: String(key).trim(), model: String(model || '').trim() };
+    const cap = Number(maxTokens); if (Number.isInteger(cap) && cap >= 64 && cap <= 65536) cfg.maxTokens = cap;
     if (status) {
         await bridge.updateVariablesWith(v => { v[STATUS_KEY] = { ...cfg }; return v; }, { type: 'global' });
         try { localStorage.setItem(STATUS_LOCAL, JSON.stringify(cfg)); } catch { /* private mode */ }
@@ -60,6 +62,7 @@ function formHtml({ status, assistant, inline, routes }) {
     const tick = 'style="width:auto;min-width:0;flex:none;margin:3px 0 0;accent-color:var(--accent,#c59bee)"';
     const same = sameConfig(status, assistant), anySet = !!(status?.url || assistant?.url);
     const both = status?.url && assistant?.url;
+    const saveWarning = saveEnvironment().reason;
     const state = !anySet
         ? `<b style="color:#ffcf8a">⚠ 还没有设置 API</b><span>状态栏里的 AI 功能（进货、盲盒、许愿、招募、天眼…）和莉莉丝私聊都要用它。按下面 3 步填好即可。</span>`
         : same
@@ -68,7 +71,7 @@ function formHtml({ status, assistant, inline, routes }) {
     const opt = (value, on, title, sub) => `<label style="display:flex;gap:10px;align-items:flex-start;margin:0;min-height:0;height:auto;padding:10px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--accent,#c59bee) ${on ? 55 : 18}%,transparent);cursor:pointer"><input type="radio" name="mode" value="${value}" ${on ? 'checked' : ''} ${tick}><span style="display:grid;gap:2px;min-width:0"><b>${title}</b><small style="opacity:.72">${sub}</small></span></label>`;
     const step = (n, t) => `<div style="display:flex;align-items:center;gap:8px;margin-top:4px"><span style="display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--accent,#c59bee) 30%,transparent);font-size:12px;flex:none">${n}</span><b>${t}</b></div>`;
     const lbl = 'display:grid;gap:4px';
-    return `<form ${inline ? '' : 'method="dialog"'} style="padding:${inline ? '4px 2px' : '18px 20px'};display:grid;gap:10px">
+    return `${saveWarning ? `<p role="alert" data-save-warning>${esc(saveWarning)}</p>` : ''}<form ${inline ? '' : 'method="dialog"'} style="padding:${inline ? '4px 2px' : '18px 20px'};display:grid;gap:10px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="font-size:16px;letter-spacing:1px">${inline ? '连接 · AI 接口设置' : '诸天 · AI 接口设置'}</b>${inline ? '' : `<button value="close" ${btn}>关闭</button>`}</div>
       <div data-state style="display:grid;gap:3px;padding:10px 12px;border-radius:10px;background:#ffffff0a;font-size:13px;overflow-wrap:anywhere">${state}</div>
       <div data-presets style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="font-weight:500;white-space:nowrap">接口预设</b><select data-f="preset" aria-label="选择接口预设" style="${field};flex:1 1 140px;min-width:0;width:140px;text-overflow:ellipsis">${presetOptions(routes)}</select><button type="button" data-act="preset-del" ${btn}>删除</button></div>
@@ -92,7 +95,7 @@ function formHtml({ status, assistant, inline, routes }) {
       ${routesHtml(routes, { field, btn })}
       <details style="font-size:12px;opacity:.9"><summary style="cursor:pointer">高级设置（一般不用改）</summary>
         <div style="display:grid;gap:8px;margin-top:8px">
-          <label style="${lbl}">莉莉丝单次回复长度上限（tokens，可留空；思考模型可填 4096）<input name="max" type="number" min="64" max="65536" style="${field}" value="${esc(assistant.maxTokens ?? '')}"></label>
+          <label style="${lbl}">默认 / 预设最大输出（tokens，含思考；留空由各功能决定，可分功能覆盖）<input name="max" type="number" min="64" max="65536" style="${field}" value="${esc(status.maxTokens ?? assistant.maxTokens ?? '')}"></label>
           <div>保存到（默认两处都保存，保持一致）：</div>
           <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="toStatus" checked ${tick}> 状态栏的 AI 功能（进货 / 盲盒 / 许愿 / 招募…）</label>
           <label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" name="toAssistant" checked ${tick}> 莉莉丝（私聊 / 记忆 / 工作台）</label>
@@ -162,7 +165,7 @@ function bindForm(root, { bridge, ns, notify, rerender }) {
     root.querySelector('[data-act=test]').addEventListener('click', async () => {
         const c = current(); const bad = check(c); if (bad) return say(bad, true);
         say('测试中…'); const t0 = performance.now(), control = new AbortController(), timer = setTimeout(() => control.abort(), 45000);
-        try { const r = await bridge.customChat(c, [{ role: 'user', content: '回复两个字：成功' }], { maxTokens: 16, signal: control.signal }); say(`连接正常（${Math.round(performance.now() - t0)} ms · ${r.via === 'st-proxy' ? '经酒馆服务器转发' : r.via === 'st-main' ? '酒馆主 API' : '浏览器直连'}）：${String(r.text).trim().slice(0, 40)}`); }
+        try { const r = await bridge.customChat(c, [{ role: 'user', content: '回复两个字：成功' }], { maxTokens: 4096, signal: control.signal }); say(`连接正常（${Math.round(performance.now() - t0)} ms · ${r.via === 'st-proxy' ? '经酒馆服务器转发' : r.via === 'st-main' ? '酒馆主 API' : '浏览器直连'}）：${String(r.text).trim().slice(0, 40)}`); }
         catch (e) { say('测试失败：' + (e?.message || e), true); } finally { clearTimeout(timer); }
     });
     // ---------- 1.0: presets ----------
@@ -207,21 +210,21 @@ function bindForm(root, { bridge, ns, notify, rerender }) {
     f.addEventListener('change', async e => {
         const sl = e.target.closest?.('[data-route-sel]'); if (!sl) return;
         const id = sl.dataset.routeSel; if (sl.value === 'own') return;
-        try { const s = await writeRoutes(bridge, withRoute(store(), id, sl.value)); repaint(); say(`已保存：${label(id)} → ${routeText(s, id)}。下一次请求生效。`); }
+        try { const s = await writeRoutes(bridge, withRoute(store(), id, sl.value)); repaint(); say(`已提交保存：${label(id)} → ${routeText(s, id)}。下一次请求生效。`); }
         catch (err) { say('保存失败：' + (err?.message || err), true); repaint(); }
     });
     f.addEventListener('click', async e => {
         const b = e.target.closest?.('[data-route-own]'); if (!b) return;
         const id = b.dataset.routeOwn, c = current();
         if (mode() !== 'main') { const bad = check(c); if (bad) return say(`${label(id)}：${bad}`, true); }
-        try { const s = await writeRoutes(bridge, withRoute(store(), id, mode() === 'main' ? MAIN : c)); repaint(); say(`已保存：${label(id)} → ${routeText(s, id)}。只影响这个功能，默认接口不变。`); }
+        try { const s = await writeRoutes(bridge, withRoute(store(), id, mode() === 'main' ? MAIN : c)); repaint(); say(`已提交保存：${label(id)} → ${routeText(s, id)}。只影响这个功能，默认接口不变。`); }
         catch (err) { say('保存失败：' + (err?.message || err), true); }
     });
     syncName();
     root.querySelector('[data-act=save]').addEventListener('click', async () => {
         const c = current(); const bad = check(c); if (bad) return say(bad, true);
         if (!f.toStatus.checked && !f.toAssistant.checked) return say('至少勾选一个应用目标。', true);
-        try { await saveConfigs(bridge, ns, c, { status: f.toStatus.checked, assistant: f.toAssistant.checked }); notify(); rerender?.('已保存。状态栏与莉莉丝助手下一次请求即使用新配置（单独设置过的功能不受影响）。'); if (!rerender) say('已保存。状态栏与莉莉丝助手下一次请求即使用新配置（单独设置过的功能不受影响）。'); }
+        try { await saveConfigs(bridge, ns, c, { status: f.toStatus.checked, assistant: f.toAssistant.checked }); notify(); rerender?.('已提交给酒馆保存；若保存失败请查看诊断，重载后核对。状态栏与莉莉丝助手下一次请求即使用新配置（单独设置过的功能不受影响）。'); if (!rerender) say('已提交给酒馆保存；若保存失败请查看诊断，重载后核对。状态栏与莉莉丝助手下一次请求即使用新配置（单独设置过的功能不受影响）。'); }
         catch (e) { say('保存失败：' + (e?.message || e), true); }
     });
     return { say };

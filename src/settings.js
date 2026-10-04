@@ -1,6 +1,7 @@
 // Extension-level settings (extension_settings[ID]) plus the native SillyTavern settings drawer.
 // Nothing here is chat data; API keys entered in the Lilith connection page live in scriptVariables, which stay
 // in the user's local settings.json and are never part of this repository.
+import { assertSaveEnvironment, recordSaveFailure } from './save-environment.js';
 import { ID, VERSION } from './contracts.js';
 import { HOST_TESTED } from './compat.js';
 
@@ -75,13 +76,17 @@ export class Settings {
         return store[ID];
     }
     get(key) { return this.all[key]; }
-    set(key, value) { const all = this.all; all[key] = value; this.save(); this.emit(key); }
-    patch(key, part) { const all = this.all; all[key] = merge(all[key] || {}, part); this.save(); this.emit(key); }
-    save() { this.ctx().saveSettingsDebounced(); }
+    set(key, value) { assertSaveEnvironment(); const all = this.all, prev = all[key]; all[key] = value; try { this.save(); } catch (e) { all[key] = prev; throw e; } this.emit(key); }
+    patch(key, part) { this.set(key, merge(this.all[key] || {}, part)); }
+    save() {
+        assertSaveEnvironment();
+        try { const pending = this.ctx().saveSettingsDebounced(); pending?.catch?.(e => recordSaveFailure(e, '设置保存')); return pending; }
+        catch (e) { recordSaveFailure(e, '设置保存'); throw e; }
+    }
     onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
     emit(key) { for (const fn of this.listeners) try { fn(key); } catch (e) { console.warn('[诸天设置]', e); } }
     scriptVariables() { const v = this.all.scriptVariables; return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
-    setScriptVariables(v) { this.all.scriptVariables = v; this.save(); }
+    setScriptVariables(v) { this.set('scriptVariables', v); }
 
     /** Native settings drawer in the Extensions panel. 0.5.0: everything lives in the terminal; only the entry and the
      *  emergency restore stay here (works on 1.16–1.19: plain inline-drawer markup). */

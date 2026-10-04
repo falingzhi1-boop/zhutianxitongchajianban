@@ -346,6 +346,7 @@ export class StatusBarHost {
     frame(panel, id, opts = {}) {
         const token = 'f' + (++this.seq) + '-' + Date.now().toString(36);
         const iframe = document.createElement('iframe');
+        iframe.dataset.ztFloor = String(id);
         iframe.className = 'zt-sb-frame'; iframe.dataset.ztFrame = token; iframe.title = '诸天系统状态栏 · 楼 ' + id;
         iframe.setAttribute('scrolling', 'no'); iframe.style.cssText = 'width:100%;border:0;display:block;height:560px;background:transparent;';
         const c = this.ctx(); let content = panel;
@@ -362,6 +363,7 @@ export class StatusBarHost {
         // Its gear now opens the one API 中心 (terminal 连接 page when the terminal is open, otherwise the popup).
         iframe.addEventListener('load', () => {
             const d = iframe.contentDocument; if (!d) return;
+            this.enhanceFrame?.(iframe, d);
             d.addEventListener('click', e => {
                 if (!e.target?.closest?.('.btn-open-api,label[for="api-modal-toggle"]')) return;
                 if (typeof this.openApi !== 'function') return;     // no app hook: keep the original dialog

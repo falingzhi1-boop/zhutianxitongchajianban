@@ -1,3 +1,4 @@
+import { listBonds } from './bonds-data.js';
 // 图谱 (0.7.0): the ledger as explorable spaces — 事件线 · 羁绊图 · 星图 · 能力树.
 // Every node is built from one real record and its detail panel shows that record's raw fields plus a way back to where
 // it lives (engine page / 聊天群 / 外挂管理 / the chat floor). Builders are pure (unit-tested); nothing here invents data:
@@ -61,8 +62,7 @@ export function buildBonds(z) {
     nodes.push({ id: 'host', type: 'host', label: '宿主', sub: TIERS[num(z?.宿主实力档)]?.n || '实力未确认', x: cx, y: cy, rec: { 当前世界: z?.当前世界 || '', 宿主实力档: z?.宿主实力档 ?? '' }, src: '诸天系统' });
     const ring = [];
     ring.push({ id: 'lilith', type: 'lilith', label: '莉莉丝', sub: '系统契约', rec: { 身份: '诸天系统 · 契约者', 系统点: z?.系统点 ?? '' }, src: '诸天系统', w: 100, kind: 'system' });
-    const love = obj(z?.恋爱目标);
-    if (str(love.姓名) && !EMPTY.test(str(love.姓名))) ring.push({ id: 'bond:love', type: 'love', label: cut(love.姓名, 6), sub: `好感 ${num(love.好感度)}`, rec: love, src: '诸天系统.恋爱目标', w: num(love.好感度), kind: 'love', dark: num(love.黑化值) > 0, name: str(love.姓名) });
+    for (const love of listBonds(z).filter(p => p.source === 'bond')) ring.push({ id: 'bond:p:' + love.id, bond: love.id, type: 'love', label: cut(love.姓名, 6), sub: `${love.世界} · 好感 ${num(love.好感度)}`, rec: love, src: '诸天系统.羁绊库', w: num(love.好感度), kind: 'love', dark: num(love.黑化值) > 0, name: str(love.姓名) });
     arr(z?.打手).forEach((m, i) => { if (m?.名称) ring.push({ id: 'bond:s:' + i, type: 'summon', label: cut(m.名称, 6), sub: `忠诚 ${num(m.忠诚)}`, rec: m, src: `诸天系统.打手[${i}]`, w: num(m.忠诚), kind: 'summon', name: str(m.名称) }); });
     const g = obj(z?.聊天群);
     arr(g.成员).forEach(m => { if (m?.id && m?.名称) ring.push({ id: 'bond:m:' + m.id, type: 'member', label: cut(m.名称, 6), sub: cut(m.世界 || '', 7), rec: { id: m.id, 名称: m.名称, 世界: m.世界, 实力档: m.档, 好感: m.好感, 身份: m.身份, 性格: m.性格, 特产: m.特产 }, src: `诸天系统.聊天群.成员[${m.id}]`, w: num(m.好感, 20), kind: 'member', member: m.id, descended: g.降临?.id === m.id, name: str(m.名称) }); });
@@ -243,6 +243,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
         const out = [];
         if (n.task) out.push(b(`data-open-task="${esc(n.task)}"`, '在任务页定位', true));
         if (n.floor !== null && n.floor !== undefined) out.push(b(`data-floor="${n.floor}"`, `跳到楼层 #${n.floor}`));
+        if (n.bond) out.push(b(`data-open-bond="${esc(n.bond)}"`, '查看此人物羁绊', true));
         if (n.member) out.push(b(`data-open-member="${esc(n.member)}"`, '在聊天群查看', true));
         if (n.type === 'love' || n.type === 'summon') out.push(b(`data-go="${n.type === 'love' ? 'bond' : 'plug'}"`, n.type === 'love' ? '打开羁绊页' : '打开外挂页（诸天打手）', true));
         if (n.type === 'lilith') out.push(b('data-go="work"', '去工作台'));
@@ -288,6 +289,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
             if (d.jumpTask) { this.hub.go('events'); return setTimeout(() => this.select('events', 'task:' + d.jumpTask), 30); }
             if (d.openTask) return this.openTask(d.openTask);
             if (d.floor) return this.jumpFloor(Number(d.floor));
+            if (d.openBond) return this.app.bonds?.open(d.openBond);
             if (d.openMember) { this.hub.go('group'); const g = this.app.group; if (g) { g.view = 'members'; g.pm = d.openMember; g.paint(true); } return; }
             if (d.go) return this.hub.go(d.go);
             if (d.hist) { const x = this.app.fx?.history?.[Number(d.hist)]; if (x) this.app.fx.openRecord(x); return; }

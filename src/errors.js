@@ -3,6 +3,8 @@
 // refunded on failure); a failed read-back says the ledger may have changed and points to the rollback; anything
 // unknown gets no ledger claim at all.
 const RULES = [
+    { re: /当前环境无法保存/, ledger: '没有改动', next: '' },
+    { re: /核验期间页面账本已变化/, ledger: '没有改动', next: '刷新数据后重新确认，保留其它来源的改账，不要自动重复提交' },
     // read-back / partial write — the one case where the ledger may have changed
     { re: /读回不一致|写入状态不明|已冻结/, ledger: '可能已经写入', next: '打开 设置 → 旧存档迁移 / 账本回滚，核对后需要的话回滚到上一份备份' },
     { re: /只读|结构版本/, ledger: '没有改动（只读）', next: '更新插件到最新版' },

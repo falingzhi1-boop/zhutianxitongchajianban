@@ -10,6 +10,7 @@ import { tavernHelperMacrosActive } from './macro-like.js';
 import { latestRules, mergeWorldbook, WORLDBOOK_REV, moduleStates, applyModules, BALANCE_MODULES } from './worldbook.js';
 import { findBindings, unbindAll, restoreBindings, describe as describeBindings } from './wb-unbind.js';
 import { buildReport, copyText } from './diag-report.js';
+import { stable } from './ledger-plan.js';
 import { errorLine } from './errors.js';
 
 export const WORLD_NAME = '诸天万界最强系统';
@@ -56,15 +57,41 @@ export class Features {
     /** Brings an existing book up to this version: backup first (a separate book), then built-in entries replaced,
      *  the user's own entries and on/off choices kept. */
     async updateWorldbook() {
-        const c = this.ctx; let book = null;
-        try { book = await c.loadWorldInfo(WORLD_NAME); } catch { book = null; }
+        if (this.wbUpdating) throw Error('世界书正在升级，请勿重复提交。');
+        this.wbUpdating = true;
+        try { return await this.writeWorldbookUpgrade(); } finally { this.wbUpdating = false; }
+    }
+    async writeWorldbookUpgrade() {
+        const c = this.ctx;
+        // Host loadWorldInfo returns cached data even after failed saves. Verify the server, not its cache.
+        const readDisk = async name => {
+            const response = await fetch('/api/worldinfo/get', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: c.getRequestHeaders(), body: JSON.stringify({ name }), signal: AbortSignal.timeout(15000) });
+            if (!response.ok) throw Error('世界书服务器核验失败 HTTP ' + response.status);
+            return response.json();
+        };
+        const book = await readDisk(WORLD_NAME);
         if (!book?.entries || !Object.keys(book.entries).length) return { ...(await this.installWorldbook('none')), created: true };
-        const stamp = new Date().toLocaleString('sv-SE').replace(/[-: ]/g, '').slice(0, 12), backup = `${WORLD_NAME}-备份-${stamp}`;
+        const stamp = new Date().toLocaleString('sv-SE').replace(/[-: ]/g, '').slice(0, 14), backup = `${WORLD_NAME}-备份-${stamp}-${crypto.randomUUID().slice(0, 8)}`;
         await c.saveWorldInfo(backup, structuredClone(book), true);
+        const backupRead = await readDisk(backup);
+        if (stable(backupRead?.entries) !== stable(book.entries)) throw Error('世界书备份读回不一致，未更新原书。');
+        const legacy = latestRules(this.app.original.ZhuTianBuiltinRules, { legacy: true }).rules;
         const r = mergeWorldbook(book, this.latestRules());
+        let preserved = 0; const seen = new Set();
+        for (const old of Object.values(book.entries)) {
+            if (seen.has(old.comment)) continue; // duplicate comment rows are kept verbatim, not replaced
+            seen.add(old.comment);
+            const base = legacy.find(x => x.comment === old.comment), next = Object.values(r.book.entries).find(x => x.comment === old.comment);
+            if (base && next && old.content !== base.content && old.content !== next.content) {
+                if (!globalThis.confirm(`「${old.comment}」内容与插件旧版不同，可能有你的自定义修改。已备份到 ${backup}。确定覆盖为新版？取消只保留这一条。`)) { const uid = next.uid; r.book.entries[uid] = { ...structuredClone(old), uid }; preserved++; }
+            }
+        }
+        if (stable(await readDisk(WORLD_NAME)) !== stable(book)) throw Error('升级期间世界书被其它操作改动，已停止覆盖；备份：' + backup);
         await c.saveWorldInfo(WORLD_NAME, r.book, true);
         await c.updateWorldInfoList?.();
-        return { ...(await this.worldbookStatus()), backup, replaced: r.replaced, added: r.added, kept: r.kept };
+        const checked = await readDisk(WORLD_NAME);
+        if (stable(checked?.entries) !== stable(r.book.entries)) throw Error('更新结果未核实，请从备份书核对：' + backup);
+        return { ...(await this.worldbookStatus()), backup, preserved, replaced: r.replaced, added: r.added, kept: r.kept };
     }
     /** 0.8.4 强力模块: current on/off of the switchable entries in the installed book (book-wide, all chats). */
     async moduleStates() {
@@ -195,7 +222,8 @@ export class Features {
                 return;
             }
             if (act === 'update') {
-                try { const r = await this.updateWorldbook(); out.textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：替换 ${r.replaced} 条、新增 ${r.added} 条、保留你自己的 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', '世界书已更新到插件最新版'); }
+                if (!confirm('升级影响：商城改为不强制削弱，禁忌仅获得时有门槛；补充剧情收纳、多人羁绊和盲盒规则。先备份整本世界书；保留你的开关、关键词和插入设置，自改同名正文逐条询问。是否继续？')) return;
+                try { const r = await this.updateWorldbook(); out.textContent = r.created ? `已安装最新版（${r.count} 条）。` : `已更新：同步 ${r.replaced - r.preserved} 条、新增 ${r.added} 条、保留自改正文 ${r.preserved} 条及自定义条目 ${r.kept} 条；旧版已备份为“${r.backup}”。`; this.toast('success', r.preserved ? '世界书已处理；保留的自改条目请手动合并新规则' : '世界书已更新到插件最新版'); }
                 catch (err) { out.textContent = '未完成：' + errorLine(err); }
                 return;
             }

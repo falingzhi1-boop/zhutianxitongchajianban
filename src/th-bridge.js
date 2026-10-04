@@ -1,3 +1,8 @@
+import { assertSaveEnvironment, recordSaveFailure } from './save-environment.js';
+import { preserveNative } from './native-owned.js';
+import { stable } from './ledger-plan.js';
+import { syncBonds } from './bonds-data.js';
+import { completionText } from './model-response.js';
 // Native replacement for the small Tavern Helper surface that the original 诸天 v1.1 sources call.
 // Storage locations are the ones SillyTavern itself (and Tavern Helper) already use, so old saves need no conversion:
 //   chat   -> chat_metadata.variables               (ST core /setvar, TH type:'chat')
@@ -89,15 +94,22 @@ export class Bridge {
         const merge = (a, b) => { for (const [k, v] of Object.entries(b || {})) a[k] = plainObject(v) && plainObject(a[k]) ? merge(a[k], v) : clone(v); return a; };
         return this.updateVariablesWith(v => merge(v, variables), options);
     }
-    async updateVariablesWith(updater, { type = 'chat' } = {}) {
+    async updateVariablesWith(updater, options = {}) {
+        try { assertSaveEnvironment(); return await this.#updateVariablesWith(updater, options); }
+        catch (error) { recordSaveFailure(error, '变量保存'); throw error; }
+    }
+    async #updateVariablesWith(updater, { type = 'chat', verify = false, expectedIdentity, engine = false, replaceLedger = false } = {}) {
         if (this.dead) throw Error('扩展已停用，未写入。');
-        if (type === 'chat') return this.#writeChat(updater);
+        if (type === 'chat') return this.#writeChat(updater, { verify, expectedIdentity, engine, replaceLedger });
         if (type === 'global') {
             const c = this.ctx(); c.extensionSettings.variables ??= {};
             const draft = clone(plainObject(c.extensionSettings.variables.global) ? c.extensionSettings.variables.global : {});
             const next = (await updater(draft)) ?? draft;
             if (!plainObject(next)) throw Error('全局变量必须是对象，未写入。');
-            c.extensionSettings.variables.global = next; c.saveSettingsDebounced(); this.emit('global'); return clone(next);
+            const prev = c.extensionSettings.variables.global;
+            c.extensionSettings.variables.global = next;
+            try { await c.saveSettingsDebounced(); } catch (e) { c.extensionSettings.variables.global = prev; throw e; }
+            this.emit('global'); return clone(next);
         }
         if (type === 'script') {
             const prev = this.settings.scriptVariables(), draft = clone(prev);
@@ -109,26 +121,63 @@ export class Bridge {
         }
         throw Error('不支持写入的变量类型：' + type);
     }
-    async #writeChat(updater) {
+    async #writeChat(updater, { verify = false, expectedIdentity, engine = false, replaceLedger = false } = {}) {
         const expected = identity(this.ctx());
+        if (expectedIdentity && expected !== expectedIdentity) throw Error('聊天已切换；未写入。');
         if (!expected) throw Error('请先打开单角色聊天；群聊暂不写入。');
         if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前原生结算写入状态不明，已冻结此聊天的所有账本写入；请重载核对。');
-        if (!navigator.locks) throw Error('浏览器缺少 Web Locks，无法安全写入账本。');
+        assertSaveEnvironment({ requireLocks: true });
         return navigator.locks.request('zhutian-ledger:' + expected, { signal: AbortSignal.timeout(20000) }, async () => {
             const c = this.ctx();
+            if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前写入状态未确认，已冻结交易；请重载核对。');
             if (this.dead || identity(c) !== expected) throw Error('聊天已经切换，取消写入。');
             // 1.0: a ledger written by a newer plugin (higher structure version) is read-only here
             const schema = Number(c.chatMetadata?.[STORAGE]?.ledgerSchema) || 0;
             if (schema > LEDGER_SCHEMA) throw Error(`这个聊天的账本由更新版本的插件写过（结构版本 ${schema}，本插件 ${LEDGER_SCHEMA}），为避免写坏已改为只读。请更新插件。`);
-            const before = plainObject(c.chatMetadata.variables) ? c.chatMetadata.variables : {};
+            const metadata = c.chatMetadata, chat = c.chat;
+            const before = clone(plainObject(metadata.variables) ? metadata.variables : {});
+            const stamp = stable(before);
+            const guard = () => {
+                const live = this.ctx();
+                if (this.dead || identity(live) !== expected || live.chat !== chat || live.chatMetadata !== metadata) throw Error('聊天已经切换或上下文已变化，取消写入。');
+                if (stable(plainObject(metadata.variables) ? metadata.variables : {}) !== stamp) throw Error('核验期间页面账本已变化，未写入；请刷新数据后重新确认，不会自动重扣。');
+                if ((Number(metadata[STORAGE]?.ledgerSchema) || 0) > LEDGER_SCHEMA || this.adapter.transactions?.uncertain?.has(expected)) throw Error('结算权限已变化，未写入。');
+            };
             const serialized = JSON.stringify(before), draft = clone(before);
+            const target = verify ? { avatar_url: c.characters?.[c.characterId]?.avatar, file_name: c.getCurrentChatId() } : null;
+            const diskVariables = async () => {
+                const r = await fetch('/api/chats/get', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: c.getRequestHeaders(), body: JSON.stringify(target), signal: AbortSignal.timeout(15000) });
+                if (!r.ok) throw Error('无法核对服务器账本 HTTP ' + r.status);
+                const chat = await r.json();
+                if (!Array.isArray(chat) || !chat[0]?.chat_metadata) throw Error('服务器没有返回聊天元数据');
+                return chat[0].chat_metadata.variables || {};
+            };
+            if (verify) {
+                if (this.adapter.isGenerating()) throw Error('主聊天正在生成，请结束后再操作。');
+                const disk = await diskVariables();
+                guard();
+                if (stable(disk) !== stamp) throw Error('服务器账本与当前页面不同，请重载后重试；未写入。');
+                if (identity(this.ctx()) !== expected) throw Error('聊天已切换；未写入。');
+            }
+            guard();
             const next = (await updater(draft)) ?? draft;
+            guard();
             if (!plainObject(next)) throw Error('聊天变量必须是对象，未写入。');
-            if (identity(this.ctx()) !== expected) throw Error('聊天已经切换，取消写入。');
+            if (this.dead || identity(this.ctx()) !== expected) throw Error('聊天已经切换或插件已停用，取消写入。');
+            if (verify && this.adapter.isGenerating()) throw Error('主聊天开始生成，取消写入。');
+            if (engine) preserveNative(next.诸天系统, before.诸天系统);
+            if (!replaceLedger) syncBonds(next.诸天系统, before.诸天系统);
             if (JSON.stringify(next) === serialized) return clone(next);
             this.#backup(c, before, next);
             c.chatMetadata.variables = next;
-            await c.saveMetadata();
+            try {
+                await c.saveMetadata();
+                if (verify && stable(await diskVariables()) !== stable(next)) throw Error('服务器读回不一致');
+                if (verify && identity(this.ctx()) !== expected) throw Error('写入后聊天已切换');
+            } catch (e) {
+                if (verify) { this.adapter.transactions?.uncertain?.add(expected); throw Error('写入状态未确认，已冻结交易；请重载核对，不要重复提交。' + e.message); }
+                throw e;
+            }
             this.emit('chat'); this.adapter.notify();
             return clone(next);
         });
@@ -159,11 +208,14 @@ export class Bridge {
         return item;
     }
     async restoreBackup(at) {
+        const expected = identity(this.ctx()), before = JSON.stringify(this.getVariables({ type: 'chat' }));
         const item = this.backups().find(x => x.at === at);
         if (!item) throw Error('备份不存在。');
         // 1.0: the state before the rollback is always backed up (it used to be skipped within 90 s of another write)
         const pre = await this.snapshot('回滚前');
-        await this.updateVariablesWith(v => { v.诸天系统 = clone(item.ledger); return v; });
+        if (!expected || identity(this.ctx()) !== expected) throw Error('回滚期间聊天已切换，未写入。');
+        await this.updateVariablesWith(v => { if (JSON.stringify(v) !== before) throw Error('备份后账本已变化，请重新预览回滚。'); v.诸天系统 = clone(item.ledger); return v; }, { verify: true, expectedIdentity: expected, replaceLedger: true });
+        if (identity(this.ctx()) !== expected) throw Error('回滚后聊天已切换，请返回原聊天核对。');
         const c = this.ctx(); const meta = c.chatMetadata[STORAGE];
         meta.ledgerBackups = (meta.ledgerBackups || []).filter(x => x.at < at || (pre && x.at === pre.at));
         await c.saveMetadata();
@@ -275,9 +327,15 @@ export class Bridge {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw Error(`${direct ? '独立 API' : '酒馆转发'}返回 HTTP ${response.status}${data?.error?.message ? ' · ' + data.error.message : ''}`);
         if (data?.error) throw Error('接口错误：' + (data.error.message || JSON.stringify(data.error)).slice(0, 200));
-        const choice = data?.choices?.[0], text = choice?.message?.content ?? choice?.text;
-        if (choice?.finish_reason === 'length' && !String(text || '').trim()) throw Error('模型思考占满了输出额度，没给出正文；可调大最大输出长度或换用不带思考的模型');
-        if (typeof text !== 'string' || !text.trim()) throw Error('接口未返回文字内容');
+        let text;
+        try { text = completionText(data, maxTokens); }
+        catch (e) {
+            // One bounded retry, only for an empty truncated response. An explicit configured cap is never exceeded.
+            if (e.code !== 'EMPTY_LENGTH' || config.maxTokens || maxTokens >= 8192) throw e;
+            const next = Math.min(8192, Math.max(2048, maxTokens * 2));
+            globalThis.toastr?.info?.(`未返回正文；仅重试一次，额度 ${next} tokens（服务商可能计费）`, '诸天 · 模型');
+            return this.customChat({ ...config, maxTokens: next }, messages, { signal, maxTokens: next, temperature, plain });
+        }
         return { text, via: direct ? 'direct' : 'st-proxy' };
     }
     /** Model ids for an OpenAI-compatible base URL. Direct first (skipped when the caller already saw the browser block
@@ -340,25 +398,28 @@ export class Bridge {
         // route (preset / own config / 酒馆主 API) is pointed there on the way out. No route → unchanged.
         const id = route || classifyStatus(messages.find(m => m.role === 'system')?.content);
         const over = id ? resolveRoute(readRoutes(this), id) : null;
+        const defaultCap = Number(this.getVariables({ type: 'global' })?.诸天系统_API?.maxTokens);
+        const configuredCap = Number(over?.maxTokens) || (Number.isInteger(defaultCap) && defaultCap >= 64 && defaultCap <= 65536 ? defaultCap : 0);
+        if (configuredCap) limit = configuredCap;
         if (over) {
             this.lastRoute = { id, via: over.via, at: Date.now() };
             const tag = e => Object.assign(Error(`${e?.message || e}（${routeLabel(id)} 用的是${over.via}）`), { status: e?.status });
             try {
-                if (over.main) return await this.mainChat(messages, { maxTokens: limit });
                 if (over.maxTokens) limit = over.maxTokens;
+                if (over.main) return await this.mainChat(messages, { maxTokens: limit });
                 custom_api = { ...(custom_api || {}), apiurl: over.url, key: over.key, model: over.model };
             } catch (e) { throw tag(e); }
             if (custom_api.apiurl && !isMainApi(custom_api.apiurl)) {
                 const control = new AbortController(), timer = setTimeout(() => control.abort(), 90000);
                 const temperature = Number.isFinite(Number(custom_api.temperature)) ? Number(custom_api.temperature) : undefined;
-                try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
+                try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model, ...(configuredCap ? { maxTokens: configuredCap } : {}) }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
                 catch (e) { throw tag(e); } finally { clearTimeout(timer); }
             }
         }
         if (custom_api?.apiurl && !isMainApi(custom_api.apiurl)) {
             const control = new AbortController(), timer = setTimeout(() => control.abort(), 90000);
             const temperature = Number.isFinite(Number(custom_api.temperature)) ? Number(custom_api.temperature) : undefined;
-            try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
+            try { return (await this.customChat({ url: custom_api.apiurl, key: custom_api.key, model: custom_api.model, ...(configuredCap ? { maxTokens: configuredCap } : {}) }, messages, { signal: control.signal, maxTokens: limit, temperature, plain: temperature === undefined })).text; }
             finally { clearTimeout(timer); }
         }
         return this.mainChat(messages, { maxTokens: limit });
@@ -387,9 +448,9 @@ export class Bridge {
         const self = this;
         return {
             getVariables: o => self.getVariables(o),
-            replaceVariables: (v, o) => self.replaceVariables(v, o),
-            updateVariablesWith: (fn, o) => self.updateVariablesWith(fn, o),
-            insertOrAssignVariables: (v, o) => self.insertOrAssignVariables(v, o),
+            replaceVariables: (v, o) => self.replaceVariables(v, { ...o, engine: true }),
+            updateVariablesWith: (fn, o) => self.updateVariablesWith(fn, { ...o, engine: true }),
+            insertOrAssignVariables: (v, o) => self.insertOrAssignVariables(v, { ...o, engine: true }),
             getCurrentMessageId: () => messageId(),
             getLastMessageId: () => (typeof lastId === 'function' ? lastId() : self.getLastMessageId()),
             generateRaw: o => self.generateRaw(o),

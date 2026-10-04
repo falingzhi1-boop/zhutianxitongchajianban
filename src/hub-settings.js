@@ -1,4 +1,5 @@
 // 终端 · 设置页: every switch and tool that used to hide in the Extensions drawer, grouped, in the terminal itself.
+import { saveEnvironment } from './save-environment.js';
 import { VERSION } from './contracts.js';
 import { HOST_TESTED } from './compat.js';
 import { esc } from './hub.js';
@@ -129,14 +130,15 @@ export class HubSettings {
         }).join('');
         el.innerHTML = `<div class="zt-eyebrow">TERMINAL SETTINGS</div><h2 class="zt-h">设置</h2><p class="zt-sub">诸天终端 ${VERSION} · 已验收 SillyTavern ${HOST_TESTED.join(' / ')} · 无需酒馆助手<br><small>AI 功能（商城进货 / 许愿 / 抽取、工作台、自动记忆、私聊、聊天群）为<b>实验性</b>：只用模拟模型验收过，第一次用真实模型前请先导出存档。</small></p>
 <div class="zt-set-search"><input type="search" data-f="sset" placeholder="搜索设置，例如：悬浮、世界书、超时" aria-label="搜索设置" enterkeyhint="search"></div>
+${saveEnvironment().reason ? `<p class="zt-note" role="alert" data-save-warning>${esc(saveEnvironment().reason)}</p>` : ''}
 ${groups}<p class="zt-set-none" hidden>没有找到匹配的设置。</p>`;
         const search = el.querySelector('[data-f=sset]');
         search.oninput = () => this.filter(el, search.value);
         el.onchange = e => {
             const input = e.target.closest('[data-k]'); if (!input) return;
             const v = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Math.max(Number(input.min) || 0, Math.min(Number(input.max) || 6, Math.floor(Number(input.value)) || 0)) : input.value;
-            this.write(input.dataset.k, v);
-            this.app.hub?.toast('已保存');
+            try { this.write(input.dataset.k, v); this.app.hub?.toast('设置已交给酒馆保存；如报错请查看诊断'); }
+            catch (err) { this.app.hub?.toast(errorLine(err), 7000); this.render(el); }
         };
         el.onclick = e => { const b = e.target.closest('[data-act]'); if (b) this.run(b.dataset.act); };
     }

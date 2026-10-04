@@ -133,12 +133,13 @@ test('regrade skill: raise only, cap follows, 圆满 cleared, receipt stamped; s
     assert.throws(() => regrade(z, { kind: 'skill', key: '基础吐纳', name: '基础吐纳' }, '神品'), /系统给的/);
     assert.throws(() => regrade(z, e, '禁忌'), /只能是/);
 });
-test('regrade item: raise only, recycle value frozen, merges into an existing stack', () => {
+test('regrade item: raise only, recycle value frozen, does not absorb differently valued stacks', () => {
     const z = ledger(), [low] = candidates(z).items;
     const r = regrade(z, low, '仙品', { how: '手动修正', at: 2 });
     assert.equal(r.changed, true);
     const left = z.背包.filter(i => i.名称 === '古剑');
-    assert.equal(left.length, 1); assert.equal(left[0].品级, '仙品'); assert.equal(left[0].数量, 3);
+    assert.equal(left.length, 2); assert.equal(left[0].品级, '仙品'); assert.equal(left[0].数量, 1);
+    assert.equal(left[0].价格, TIER_PRICE.凡品); assert.equal(left[1].数量, 2); assert.equal(left[1].价格, 0);
     assert.equal(left[0].鉴定.方式, '手动修正');
     const z2 = ledger(), [l2] = candidates(z2).items;
     regrade(z2, l2, '灵品');

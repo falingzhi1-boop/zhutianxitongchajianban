@@ -65,7 +65,7 @@ def phone_context(browser, w, h):
 
 def portrait_suite(browser):
     ctx, page, errs = phone_context(browser, 390, 844)
-    Z.boot(page); Z.setup_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.setup_chat(page)
     js(page, "app.settings.set('mobileLayout','auto');")
     ui_key = js(page, "return Object.keys(app.settings.scriptVariables()).find(k=>k.endsWith('_UI'))||''")
     js(page, "const v=app.settings.scriptVariables();const k=arg||Object.keys(v).find(k=>k.endsWith('_UI'));if(k){v[k]={...(v[k]||{}),window:{x:120,y:60,w:1000,h:720}};app.settings.setScriptVariables(v);}", ui_key)
@@ -157,7 +157,7 @@ def portrait_suite(browser):
 
 def small_suite(browser):
     ctx, page, errs = phone_context(browser, 360, 640)
-    Z.boot(page); Z.open_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.open_chat(page)
     js(page, "h.open('ov');await wait(1200);")
     r = js(page, "const b=d.getBoundingClientRect();return {box:[b.left,b.top,b.width,b.height].map(Math.round),page:Math.round(sr.querySelector('.page-scroll').getBoundingClientRect().height)}")
     ok('small phone 360×640: full screen, page area ≥ 420 px', r['box'] == [0, 0, 360, 640] and r['page'] >= 420, json.dumps(r))
@@ -176,7 +176,7 @@ def small_suite(browser):
 def desktop_suite(browser):
     page = browser.new_page(viewport={'width': 1400, 'height': 900}); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:300]))
-    Z.boot(page); Z.open_chat(page)
+    Z.boot(page); page.evaluate("__zhutianApp.settings.set('floatLilith','auto')"); Z.open_chat(page)
     r = js(page, "h.open('ov');await wait(1200);const b=d.getBoundingClientRect();const r={mode:d.dataset.ztMobile||'',w:Math.round(b.width),h:Math.round(b.height),radius:getComputedStyle(d).borderTopLeftRadius};h.close();await wait(500);return r")
     ok('desktop 1400×900 (mouse): unchanged floating window, no phone layout', r['mode'] == '' and r['w'] < 1400 and r['h'] < 900 and r['radius'] != '0px', json.dumps(r))
     ok('desktop: no page errors', not errs, '; '.join(errs)[:300])

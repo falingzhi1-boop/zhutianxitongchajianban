@@ -3,7 +3,8 @@
 // below), which host interfaces work, the status-bar / latest-floor state, the AI endpoint HOST + model name, the last
 // 真机自检 result and the last plugin errors. What never goes in: API keys, script variables, chat text, ledger values,
 // character names. Everything passes redact() once more before it leaves (belt and braces for error messages).
-import { VERSION } from './contracts.js';
+import { saveEnvironment } from './save-environment.js';
+import { VERSION, PATCH_REV } from './contracts.js';
 import { phoneLayout, viewportBox } from './mobile.js';
 import { ROUTES, readRoutes, routeText, routeLabel } from './api-routes.js';
 
@@ -52,7 +53,7 @@ export class ErrorLog {
     start() {
         for (const kind of ['error', 'warn']) {
             const orig = console[kind], self = this;
-            const wrapped = function (...args) { try { if (typeof args[0] === 'string' && /^\[诸天/.test(args[0])) self.push(kind, args); } catch { /* never break logging */ } return orig.apply(this, args); };
+            const wrapped = function (...args) { try { if (typeof args[0] === 'string' && /^\[诸天/.test(args[0])) self.push(kind, args); else if (typeof args[0] === 'string' && /^(?:Error saving settings:|Failed to save settings:)/.test(args[0])) self.push('save', ['[宿主设置保存] 保存失败，请检查服务器连接并重载核对；宿主延迟保存失败，不记录请求内容或密钥。']); } catch { /* never break logging */ } return orig.apply(this, args); };
             console[kind] = wrapped;
             this.disposers.push(() => { if (console[kind] === wrapped) console[kind] = orig; });
         }
@@ -82,7 +83,7 @@ export function environment(app) {
     const vv = globalThis.visualViewport, box = viewportBox(vv, innerWidth, innerHeight);
     let standalone = false; try { standalone = matchMedia('(display-mode: standalone)').matches; } catch { /* ignore */ }
     return {
-        ua: navigator.userAgent, lang: navigator.language, secure: !!globalThis.isSecureContext, standalone,
+        ua: navigator.userAgent, lang: navigator.language, ...saveEnvironment(), standalone,
         inner: `${innerWidth}×${innerHeight}`, screen: `${screen?.width}×${screen?.height}`, dpr: devicePixelRatio, coarse,
         visual: vv ? `${box.w}×${box.h} @${box.top},${box.left} (键盘 ${box.kb}px)` : '不支持 visualViewport',
         safe: safeArea(), layout: phoneLayout(app?.settings?.get('mobileLayout') || 'auto', { w: innerWidth, h: innerHeight, coarse }) || '浮动窗口',
@@ -95,9 +96,9 @@ const line = (k, v) => `${k}：${v}`;
 export function buildReport(app, { errors = app?.errorLog?.items || [] } = {}) {
     const out = [`【诸天终端诊断信息】${new Date().toISOString()}`];
     const safe = (title, fn) => { try { const r = fn(); if (r !== undefined && r !== null && r !== '') out.push(...(Array.isArray(r) ? r : [r])); } catch (e) { out.push(`${title}：读取失败（${e.message}）`); } };
-    safe('版本', () => [line('插件', VERSION), line('SillyTavern', `${app.adapter?.version || '?'} — ${app.adapter?.support?.reason || ''}`)]);
+    safe('版本', () => [line('插件', VERSION), line('修订', PATCH_REV), line('SillyTavern', `${app.adapter?.version || '?'} — ${app.adapter?.support?.reason || ''}`)]);
     safe('设备', () => { const e = environment(app); return ['', '— 设备 —', line('浏览器', e.ua), line('语言', e.lang), line('窗口', `${e.inner}（屏幕 ${e.screen}，像素比 ${e.dpr}）`), line('可见区域', e.visual),
-        line('触摸屏', e.coarse ? '是' : '否'), line('安全区', e.safe ? `上 ${e.safe.top} 右 ${e.safe.right} 下 ${e.safe.bottom} 左 ${e.safe.left}` : '未知'), line('HTTPS', e.secure ? '是' : '否（剪贴板等功能受限）'),
+        line('触摸屏', e.coarse ? '是' : '否'), line('安全区', e.safe ? `上 ${e.safe.top} 右 ${e.safe.right} 下 ${e.safe.bottom} 左 ${e.safe.left}` : '未知'), line('安全上下文', e.secure ? '是' : '否'), line('连接协议', e.protocol), line('Web Locks', e.locks ? '可用' : '不可用'), line('保存能力', e.canSave ? '环境预检通过（不代表服务器已保存）' : e.reason || '未检测'),
         line('添加到主屏幕运行', e.standalone ? '是' : '否'), line('手机布局', `${e.layout}${e.current ? '（当前 ' + e.current + '）' : ''}${e.kbMode ? '，键盘方式 ' + e.kbMode : ''}`)]; });
     safe('接口', () => ['', '— 宿主接口 —', ...(app.adapter?.capabilities || []).map(c => `${c.ok ? '✅' : '❌'} ${c.label}`)]);
     safe('状态栏', () => { const sb = app.statusbar?.state || {}, d = app.statusbar?.diagnoseLast?.(); return ['', '— 运行状态 —', line('状态栏', `${sb.mode || '?'} — ${sb.reason || ''}`), d ? line('最新楼层', `${d.ok === true ? '✅' : d.ok === false ? '⚠' : 'ℹ'} ${d.text}`) : line('最新楼层', '无'),
