@@ -98,13 +98,15 @@ export class Bridge {
         try { assertSaveEnvironment(); return await this.#updateVariablesWith(updater, options); }
         catch (error) { recordSaveFailure(error, '变量保存'); throw error; }
     }
-    async #updateVariablesWith(updater, { type = 'chat', verify = false, expectedIdentity, engine = false, replaceLedger = false } = {}) {
+    async #updateVariablesWith(updater, { type = 'chat', verify = false, expectedIdentity, engine = false, replaceLedger = false, frameGuard } = {}) {
         if (this.dead) throw Error('扩展已停用，未写入。');
-        if (type === 'chat') return this.#writeChat(updater, { verify, expectedIdentity, engine, replaceLedger });
+        frameGuard?.();
+        if (type === 'chat') return this.#writeChat(updater, { verify, expectedIdentity, engine, replaceLedger, frameGuard });
         if (type === 'global') {
             const c = this.ctx(); c.extensionSettings.variables ??= {};
             const draft = clone(plainObject(c.extensionSettings.variables.global) ? c.extensionSettings.variables.global : {});
             const next = (await updater(draft)) ?? draft;
+            frameGuard?.();
             if (!plainObject(next)) throw Error('全局变量必须是对象，未写入。');
             const prev = c.extensionSettings.variables.global;
             c.extensionSettings.variables.global = next;
@@ -114,6 +116,7 @@ export class Bridge {
         if (type === 'script') {
             const prev = this.settings.scriptVariables(), draft = clone(prev);
             let next = (await updater(draft)) ?? draft;
+            frameGuard?.();
             if (!plainObject(next)) throw Error('脚本变量必须是对象，未写入。');
             // 0.9.0: e.g. the phone layout keeps the desktop window box out of a full-screen session's writes
             for (const f of this.scriptFilters) { try { const v = f(next, prev); if (plainObject(v)) next = v; } catch (e) { console.warn('[诸天] 脚本变量过滤', e); } }
@@ -121,13 +124,14 @@ export class Bridge {
         }
         throw Error('不支持写入的变量类型：' + type);
     }
-    async #writeChat(updater, { verify = false, expectedIdentity, engine = false, replaceLedger = false } = {}) {
+    async #writeChat(updater, { verify = false, expectedIdentity, engine = false, replaceLedger = false, frameGuard } = {}) {
         const expected = identity(this.ctx());
         if (expectedIdentity && expected !== expectedIdentity) throw Error('聊天已切换；未写入。');
         if (!expected) throw Error('请先打开单角色聊天；群聊暂不写入。');
         if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前原生结算写入状态不明，已冻结此聊天的所有账本写入；请重载核对。');
         assertSaveEnvironment({ requireLocks: true });
         return navigator.locks.request('zhutian-ledger:' + expected, { signal: AbortSignal.timeout(20000) }, async () => {
+            frameGuard?.();
             const c = this.ctx();
             if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前写入状态未确认，已冻结交易；请重载核对。');
             if (this.dead || identity(c) !== expected) throw Error('聊天已经切换，取消写入。');
@@ -138,6 +142,7 @@ export class Bridge {
             const before = clone(plainObject(metadata.variables) ? metadata.variables : {});
             const stamp = stable(before);
             const guard = () => {
+                frameGuard?.();
                 const live = this.ctx();
                 if (this.dead || identity(live) !== expected || live.chat !== chat || live.chatMetadata !== metadata) throw Error('聊天已经切换或上下文已变化，取消写入。');
                 if (stable(plainObject(metadata.variables) ? metadata.variables : {}) !== stamp) throw Error('核验期间页面账本已变化，未写入；请刷新数据后重新确认，不会自动重扣。');
@@ -443,19 +448,34 @@ export class Bridge {
         return null;
     }
 
-    /** API exposed to status-bar iframes. `messageId` is the floor that hosts the iframe. */
+    /** Frame capabilities belong to the creating chat/context and are permanently revoked on release or switch. */
     frameApi(messageId, lastId) {
-        const self = this;
-        return {
-            getVariables: o => self.getVariables(o),
-            replaceVariables: (v, o) => self.replaceVariables(v, { ...o, engine: true }),
-            updateVariablesWith: (fn, o) => self.updateVariablesWith(fn, { ...o, engine: true }),
-            insertOrAssignVariables: (v, o) => self.insertOrAssignVariables(v, { ...o, engine: true }),
-            getCurrentMessageId: () => messageId(),
-            getLastMessageId: () => (typeof lastId === 'function' ? lastId() : self.getLastMessageId()),
-            generateRaw: o => self.generateRaw(o),
-            listModels: (u, k) => self.listModels(u, k),
+        const self = this, c = this.ctx(), expected = identity(c), chat = c?.chat, metadata = c?.chatMetadata;
+        let active = true, stop;
+        const dispose = () => { active = false; stop?.(); stop = null; };
+        const guard = () => {
+            const live = self.ctx();
+            if (!active || self.dead || identity(live) !== expected || live?.chat !== chat || live?.chatMetadata !== metadata) {
+                dispose(); throw Error('终端页面已失效：聊天已切换、重载或页面已关闭，请在当前聊天重新打开终端。');
+            }
         };
+        const read = fn => { guard(); return fn(); };
+        const request = async fn => { guard(); const result = await fn(); guard(); return result; };
+        // The guard also runs inside the writer after lock acquisition and after an async updater.
+        const options = o => ({ ...o, engine: true, expectedIdentity: expected, frameGuard: guard });
+        const api = {
+            getVariables: o => read(() => self.getVariables(o)),
+            replaceVariables: (v, o) => request(() => self.replaceVariables(v, options(o))),
+            updateVariablesWith: (fn, o) => request(() => self.updateVariablesWith(fn, options(o))),
+            insertOrAssignVariables: (v, o) => request(() => self.insertOrAssignVariables(v, options(o))),
+            getCurrentMessageId: () => read(() => messageId()),
+            getLastMessageId: () => read(() => (typeof lastId === 'function' ? lastId() : self.getLastMessageId())),
+            generateRaw: o => request(() => self.generateRaw(o)),
+            listModels: (u, k) => request(() => self.listModels(u, k)),
+        };
+        Object.defineProperties(api, { dispose: { value: dispose }, isCurrent: { value: () => { try { guard(); return true; } catch { return false; } } } });
+        stop = this.adapter.subscribe?.(() => { api.isCurrent(); });
+        return api;
     }
     dispose() { this.dead = true; for (const s of [...this.stops]) s.stop(); this.listeners.clear(); }
 }

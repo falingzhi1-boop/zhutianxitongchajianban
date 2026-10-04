@@ -66,7 +66,7 @@ export class Hub {
         const pill = this.shadow.querySelector('.version-pill'); if (pill) pill.textContent = VERSION;
         this.register('set', { title: '设置', render: el => this.app.hubSettings?.render(el) });
         this.bindClose();
-        this.disposers.push(this.a.subscribe(() => { this.refreshTop(); this.scheduleEngine(); }));
+        this.disposers.push(this.a.subscribe(() => { if (this.engineFrame && !this.app.statusbar.isCurrent(this.engineFrame)) this.dropEngine(); this.refreshTop(); this.scheduleEngine(); }));
         // 0.8.0: a ledger write from outside the engine (签到, 聊天群, 自拟外挂, 管理员 …) also refreshes the numbers shown
         // inside the engine page — before, only the top bar followed and 基础概览 kept the panel's old 系统点.
         this.disposers.push(this.app.bridge.onChange(() => { this.refreshTop(); this.scheduleEngineView(); }));
@@ -270,6 +270,8 @@ export class Hub {
     }
     syncEngine(force = false) {
         if (this.dead) return;
+        // Chat changes outrank modal/focus and generation guards: an old frame must never be kept alive.
+        if (this.engineFrame && !this.app.statusbar.isCurrent(this.engineFrame)) this.dropEngine();
         const t = this.engineTarget(), slot = this.shadow.getElementById('zt-engine-slot'); if (!slot) return;
         if (!t) { this.scheduleEngine(1000); return; }
         if (t.none) { this.dropEngine(); slot.innerHTML = '<div class="zt-empty">请先打开一个单角色聊天。诸天系统的数据保存在每个聊天里。</div>'; this.engineSig = ''; return; }
@@ -283,7 +285,7 @@ export class Hub {
         slot.querySelector('.zt-empty')?.remove();
         const old = this.engineFrame; this.engineFrame = frame; frame.classList.add('zt-engine-loading');
         slot.append(frame);
-        if (old) setTimeout(() => { this.app.statusbar.release(old); old.remove(); }, 60);
+        if (old) { this.app.statusbar.release(old); setTimeout(() => old.remove(), 60); }
     }
     get engineBusy() {
         const doc = this.engineFrame?.contentDocument; if (!doc) return false;

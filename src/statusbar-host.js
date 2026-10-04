@@ -373,7 +373,8 @@ export class StatusBarHost {
         iframe.srcdoc = html;
         return iframe;
     }
-    release(iframe) { const t = this.frames.get(iframe); if (t) { this.registry?.frames.delete(t); this.frames.delete(iframe); } }
+    isCurrent(iframe) { return this.registry?.frames.get(this.frames.get(iframe))?.isCurrent() === true; }
+    release(iframe) { const t = this.frames.get(iframe); if (t) { this.registry?.frames.get(t)?.dispose(); this.registry?.frames.delete(t); this.frames.delete(iframe); } }
     latestFrame() { const all = [...document.querySelectorAll('#chat .' + STATUSBAR_CLASS)]; return all.at(-1) || null; }
     focusLatest() { if (this.openHub) { this.openHub('ov'); return true; } const box = this.latestFrame(); if (!box) return false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.querySelector('button.zt-sb-history,.zt-sb-compact')?.click(); return true; }
     /** New-chat initialization using the ORIGINAL ensureSystemVars() of the status bar (same defaults, same schema). */

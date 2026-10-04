@@ -4,7 +4,7 @@ export const STORAGE = 'zhutianCovenantTerminal';
 export const LEDGER_SCHEMA = 2;
 export const PROMPT = `${ID}/memory`;
 export const VERSION = '1.1.0';
-export const PATCH_REV = '1.1.0-patch3';
+export const PATCH_REV = '1.1.0-patch4';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
