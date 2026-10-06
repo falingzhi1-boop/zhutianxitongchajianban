@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { Commerce, foldGrades, foldedRow, gachaMode, GACHA_MODES, CLASSIC_BATCH } from '../src/commerce.js';
+import { Commerce, foldGrades, foldedRow, gachaMode, GACHA_MODES, classicTokens } from '../src/commerce.js';
 import { listBonds, pullMember, dropPulled, sortBonds, pulledEntry } from '../src/bonds-data.js';
 import { relKind, favorStage, filterPeople } from '../src/bonds.js';
 import { buildBonds } from '../src/hub-atlas.js';
@@ -40,8 +40,8 @@ function gachaApp({ points = 5e6, failWrite = false } = {}) {
     const app = {
         adapter: { context: () => ctx, currentIdentity: () => 'c1', ledger: () => ctx.chatMetadata.variables.诸天系统, isGenerating: () => false, transactions: { uncertain: new Set() } },
         bridge: { dead: false, getVariables: () => ({}),
-            async generateRaw({ user_input }) {
-                const ids = [...user_input.matchAll(/"id":(\d+)/g)].map(m => +m[1]); calls.push(ids.length);
+            async generateRaw({ user_input, max_tokens }) {
+                const ids = [...user_input.matchAll(/"id":(\d+)/g)].map(m => +m[1]); calls.push(ids.length); calls.tokens = [...(calls.tokens || []), max_tokens];
                 const slots = JSON.parse(user_input.split('槽位：')[1].split('\n')[0]);
                 return JSON.stringify(slots.map(s => ({ slot: s.id, name: uniq(s.id, 0x4e00), effect: uniq(s.id, 0x5e00) + '的效果', world: '原创宇宙', theme: s.theme, origin: '原创' })));
             },
@@ -64,8 +64,8 @@ for (const count of [10, 50, 120]) test(`1.1.2 经典折叠 ${count} 抽: one wr
     const singles = z.待处理物品.filter(r => r.数量 === 1 && !r.名称.endsWith('杂物'));
     assert.ok(singles.every(r => !folded.includes(r.品级)), 'no single item of a folded grade');
     assert.equal(f.calls.reduce((a, b) => a + b, 0), singles.length, 'only unfolded items reach the model');
-    assert.ok(f.calls.every(n => n <= CLASSIC_BATCH), f.calls.join(','));
-    assert.ok(f.calls.length <= Math.max(1, Math.ceil(singles.length / CLASSIC_BATCH)), 'large batches: ' + f.calls.join(','));
+    assert.equal(f.calls.length, singles.length ? 1 : 0, '1.1.3: the whole draw is one API call: ' + f.calls.join(','));
+    if (singles.length) assert.deepEqual(f.calls.tokens, [classicTokens(singles.length)], 'output budget scales with the item count');
     for (const g of folded) assert.ok(z.待处理物品.filter(r => r.品级 === g).length <= 1, g + ' folded into at most one row');
     if (count >= 100) assert.ok(singles.length >= 1, 'the 100th pull is a 仙品 (pity) and is generated on its own');
     assert.equal(z.商品历史.length, singles.length);
@@ -186,4 +186,10 @@ test('1.1.2 admin page is the 设置 entry; the original overlay stays reachable
     assert.match(src('index.js'), /\['adminConsole', AdminConsole\]/);
     assert.match(src('src/admin.js'), /currentIdentity\(\) !== this\.id\) \{ this\.render\(\); return this\.message\('聊天已切换/, 'a form read in chat A is never applied to chat B');
     assert.match(src('src/admin.js'), /dispose\(\) \{ this\.off\?\.\(\)/, 'listener paired with cleanup');
+});
+
+test('1.1.3 经典折叠: output budget for the single call', () => {
+    assert.equal(classicTokens(0), 8192); assert.equal(classicTokens(10), 8192);
+    assert.equal(classicTokens(49), 1024 + 240 * 49); assert.equal(classicTokens(500), 32768);
+    assert.match(GACHA_MODES.classic.note, /一次 API 调用/); assert.match(GACHA_MODES.classic.note, /只计数/);
 });

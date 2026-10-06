@@ -57,7 +57,7 @@ with sync_playwright() as p:
     page.evaluate("__zhutianApp.settings.set('floatSize','m')"); settle_wait(page, 400)
     # settings row exists
     page.evaluate("__zhutianApp.hub.open('set')"); settle_wait(page, 900)
-    has_row = page.evaluate("(()=>{const sr=__zhutianApp.hub.shadow;return [...sr.querySelectorAll('select')].some(s=>[...s.options].some(o=>o.value==='xl'&&/特大/.test(o.textContent)))})()")
+    has_row = page.evaluate("(()=>{const sr=__zhutianApp.hub.shadow;const v=[...(sr.querySelector('select[data-k=floatSize]')?.options||[])].map(o=>o.value);return v.includes('xl')&&v.includes('m')&&v[0]==='p20'})()")   # 1.1.3: 20%–100%
     ok('设置 → 莉莉丝 has the 悬浮莉莉丝大小 select', has_row)
     page.evaluate("__zhutianApp.hub.close()"); settle_wait(page, 1200)
 

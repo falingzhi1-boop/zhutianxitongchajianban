@@ -175,10 +175,10 @@ test('disablePlugin: asks first; cancel does nothing; calls disableExtension wit
 // ---------- 关闭悬浮莉莉丝 ----------
 test('closing the float says the console is reachable from the SillyTavern extensions panel', () => {
     assert.match(CLOSE_TEXT(false), /「扩展」面板/); assert.match(CLOSE_TEXT(false), /打开诸天终端/);
-    assert.match(CLOSE_TEXT(true), /唤醒按钮/); assert.doesNotMatch(CLOSE_TEXT(false), /唤醒按钮/);
+    assert.match(CLOSE_TEXT(), /头像都不再显示/);   // 1.1.3: 关闭 closes every floating entry; 切换 is separate
     assert.match(CLOSED_TEXT, /扩展/);
     const f = src('src/lilith-float.js');
-    assert.match(f, /拖到这里关闭悬浮窗/); assert.match(f, /'floatLilith', 'off'/);
+    assert.match(f, /拖到这里关闭悬浮窗/); assert.match(f, /'floatLilith', 'none'/);
     assert.match(src('src/settings.js'), /data-act="float"/);
 });
 test('settings: 品阶鉴定 and 一键关闭插件 are reachable', () => {
@@ -194,5 +194,5 @@ test('phone layout: fixed boxes outside the terminal are not placed with bottom 
         assert.doesNotMatch(r.replace(/bottom:auto/g, ''), /(^|[;{])bottom:/, f + ' ' + sel + ' must use top');
     }
     assert.doesNotMatch(src('styles/fx.css').match(/@media \(max-width:720px\)\{[^}]*\}/)[0], /bottom:84px/);
-    assert.match(src('src/lilith-float.js'), /showBin\(\) \{[\s\S]{0,200}innerHeight/);
+    assert.match(src('src/lilith-float.js'), /function showBinAt\(b\) \{[\s\S]{0,200}innerHeight/);
 });

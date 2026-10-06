@@ -52,7 +52,7 @@ with sync_playwright() as p:
     calls['product']=0;calls['items']=[];before=z();r=gacha(60);after=z();new=after['待处理物品'][len(before['待处理物品']):]
     fan=[x for x in new if x['品级']=='凡品']
     ok('60 pulls: every 凡品 in ONE row「凡品杂物 ×N」, Σ数量 = 60, one charge',r['r']=='ok' and len(fan)==1 and fan[0]['名称']=='凡品杂物' and sum(x['数量'] for x in new)==60 and after['系统点']==before['系统点']-600000,(r['r'],[(x['名称'],x['数量']) for x in new if x['数量']>1]))
-    ok('60 pulls: no 凡品 sent to the model; ≤20 items per request',all('凡品' not in g for g in calls['items']) and all(len(g)<=20 for g in calls['items']) and sum(len(g) for g in calls['items'])==len(new)-1,calls['items'])
+    ok('60 pulls: no 凡品 sent to the model; 1.1.3: one request',all('凡品' not in g for g in calls['items']) and len(calls['items'])==1 and sum(len(g) for g in calls['items'])==len(new)-1,calls['items'])
     calls['product']=0;calls['items']=[];before=z();r=gacha(120);after=z();new=after['待处理物品'][len(before['待处理物品']):]
     folded={x['品级']:x['数量'] for x in new if x['名称'].endswith('杂物')}
     ok('120 pulls: 凡品 and 灵品 folded, 仙品 generated one by one',r['r']=='ok' and set(folded)<={'凡品','灵品'} and '凡品' in folded and all(x['数量']==1 for x in new if not x['名称'].endswith('杂物')) and all(set(g)<={'仙品','神品'} for g in calls['items']) and sum(x['数量'] for x in new)==120,(folded,calls['items']))

@@ -22,12 +22,13 @@ const DEFAULTS = Object.freeze({
     worldbookAuto: true,         // install + bind the 诸天 worldbook on 诸天 chats (never overwrites, skips if already active)
     wbUnbindOnDisable: true,     // 0.8.2: disabling the extension (1.17+ hook) unbinds the 诸天 worldbook from cards / global / open chat
     wbUnbound: null,             // 0.8.2: what the last unbind removed (for 恢复绑定)
-    floatLilith: 'auto',         // 0.8.2: floating Lilith portrait — auto (phones / touch) | on | off
+    floatLilith: 'auto',         // 0.8.2: floating entry — auto (Lilith on phones / touch) | on (Lilith) | off (avatar) | none (1.1.3: closed, no floating entry)
     guide: null,                 // 0.9.3: 新手引导 answer {state: 'done'|'skipped', at, version}; null = opens once by itself
     deviceCheck: null,           // 0.9.1: last 手机真机自检 result {at, version, text} (no chat data; shown in 复制诊断信息)
     mobileLayout: 'auto',        // 0.9.0: terminal on phones — auto (full screen on phones) | full (always) | window (0.8.5 floating window)
     motion: 'auto',              // 1.0: 动态效果 auto (reduced motion / low fps on phones → lite) | full | lite
-    floatSize: 'm',              // 0.8.3: floating Lilith size xs 55 % | s 65 % | m 75 % (default) | l 90 % | xl 100 % (= 0.8.2)
+    floatSize: 'm',              // 0.8.3: floating Lilith size p20 / p30 / p40 (1.1.3) | xs 55 % | s 65 % | m 75 % (default) | l 90 % | xl 100 % (= 0.8.2)
+    avatarSize: 'xl',            // 1.1.3: round avatar launcher size, same keys; xl = 100 % (64 px, unchanged)
     apiTimeout: 180,             // 0.8.4: seconds for the original's independent-API requests (私聊 / 记忆 / 工作台); original fixed 60
     palette: 'auto',             // 0.8.4: 配色方案 — auto (world colours) | lilith | inkgold | celadon | sakura | frost | crimson | slate
     floatPos: null,              // 0.8.2: {x, y, edge, tucked} of the floating portrait
@@ -103,7 +104,8 @@ export class Settings {
   <div class="inline-drawer-content">
     <div class="zt-set-actions">
       <div class="menu_button" data-act="open">打开诸天终端</div>
-      <div class="menu_button" data-act="float" title="关掉的悬浮莉莉丝回到页面上">显示悬浮莉莉丝</div>
+      <div class="menu_button" data-act="float" title="关掉的悬浮窗以莉莉丝的样子回到页面上">显示悬浮莉莉丝</div>
+      <div class="menu_button" data-act="avatar" title="关掉的悬浮窗以圆形头像的样子回到页面上">显示头像</div>
       <div class="menu_button" data-act="restore" title="重新启用被“一键接管”停用的旧版正则与酒馆助手脚本">紧急恢复旧版</div>
     </div>
     <small class="zt-set-note">所有功能与设置都在终端里（莉莉丝头像 → 设置）。已验收宿主：SillyTavern ${HOST_TESTED.join(' / ')}；无需酒馆助手、无需导入正则。</small>

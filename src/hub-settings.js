@@ -8,6 +8,7 @@ import { MOBILE_LAYOUTS } from './mobile.js';
 import { MOTION_OPTIONS } from './perf.js';
 import { errorLine } from './errors.js';
 import { disablePlugin } from './plugin-switch.js';
+import { closeFloats } from './lilith-float.js';
 
 const sw = (k, label, desc = '') => ({ type: 'switch', k, label, desc });
 const sel = (k, label, options, desc = '') => ({ type: 'select', k, label, options, desc });
@@ -69,8 +70,10 @@ export class HubSettings {
                 adv(sel('apiTimeout', '独立 API 超时（私聊 / 记忆 / 工作台）', [['60', '60 秒（原版）'], ['120', '120 秒'], ['180', '180 秒（默认）'], ['300', '300 秒'], ['600', '600 秒（思考模型）']], '请求一律以流式传输（中途不断流），不会再被反向代理 / Cloudflare 以 502 掐断；超时只在模型一直不出完时生效。')),
             ] },
             { title: '莉莉丝', items: [
-                sel('floatLilith', '悬浮莉莉丝（代替左下角唤醒按钮）', [['auto', '自动：手机 / 触屏开启'], ['on', '总是开启'], ['off', '关闭（用原版唤醒按钮）']], '点一下打开终端；终端开着时点她只会说话，不会关终端；双击戳她；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住），拖到底部「关闭悬浮窗」可以关掉她（电脑上也可以右键）。关闭后从酒馆「扩展」→ 诸天终端 进入控制台。立绘看不到时，她的台词气泡在这里弹出。'),
-                sel('floatSize', '悬浮莉莉丝大小', [['xs', '特小（55%）'], ['s', '小（65%）'], ['m', '标准（75%，默认）'], ['l', '大（90%）'], ['xl', '特大（100%，0.8.2 的大小）']], '改完立即生效，位置保持。'),
+                sel('floatLilith', '悬浮窗（切换样子）', [['auto', '自动：手机 / 触屏用悬浮莉莉丝，电脑用头像'], ['on', '悬浮莉莉丝'], ['off', '头像（原版唤醒按钮）'], ['none', '已关闭（页面上不显示悬浮窗）']], '这里是「切换」：莉莉丝 ⇄ 头像。点一下打开终端；长按拖动，拖到屏幕左右边缘会躲起来（位置会记住）；拖到底部有两个目标——「换成头像 / 换成莉莉丝」是切换，「关闭悬浮窗」是关闭（电脑上莉莉丝也可以右键）。关闭后从酒馆「扩展」→ 诸天终端 进入控制台、恢复悬浮窗。'),
+                act('float-close', '关闭悬浮窗…', '关闭 = 莉莉丝和头像都不显示（不是切换）。随时可在上面选回来，或在酒馆「扩展」→ 诸天终端 点「显示悬浮莉莉丝 / 显示头像」。'),
+                sel('floatSize', '悬浮莉莉丝大小', [['p20', '20%（最小）'], ['p30', '30%'], ['p40', '40%'], ['xs', '55%'], ['s', '65%'], ['m', '75%（默认）'], ['l', '90%'], ['xl', '100%']], '最小 20%；改完立即生效，位置保持。'),
+                sel('avatarSize', '头像悬浮窗大小', [['p20', '20%（最小）'], ['p30', '30%'], ['p40', '40%'], ['xs', '55%'], ['s', '65%'], ['m', '75%'], ['l', '90%'], ['xl', '100%（默认）']], '圆形头像（电脑上是左下角唤醒按钮）的大小；最小 20%。'),
                 adv(sw('touchGestures', '真实触摸互动（抚摸 / 长按 / 视线跟随）')),
                 sw('haptics', '触摸震动反馈（手机）'),
                 sel('portrait.mode', '立绘模式', [['rig', '原版分层动画（伪 Live2D）'], ['variants', '原版 + 表情差分（随语气切换）'], ['live2d', '真 Live2D（需自备 Cubism 模型）']]),
@@ -170,6 +173,7 @@ ${groups}<p class="zt-set-none" hidden>没有找到匹配的设置。</p>`;
             appraise: () => app.hub.go('appraise'),
             'plugin-off': () => disablePlugin(app),
             admin: () => app.hub.openAdmin(),
+            'float-close': () => closeFloats(app),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(errorLine(e), '诸天')),
         };
         // 1.1.1: sections added by modules can bring their own buttons ({ actions: { id: fn } })

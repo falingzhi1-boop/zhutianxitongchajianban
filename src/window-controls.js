@@ -1,5 +1,6 @@
 // 1.1 touch floating window + circular launcher. Does not alter the portrait's gesture owner.
 import { keepWindowBox } from './mobile.js';
+import { FLOAT_SIZES, BIN_CSS, binHtml, showBinAt, binHit, binHot, swapFloat, closeFloats } from './lilith-float.js';
 export function clampBox(b, v) {
     const w = Math.max(180, Math.min(v.w - 16, Number(b.w) || v.w - 24));
     const h = Math.max(180, Math.min(v.h - 24, Number(b.h) || v.h * .8));
@@ -45,6 +46,12 @@ export class WindowControls {
         this.sh = h.shadow; this.d = h.shell.dialog; this.entry = this.sh.getElementById('entry');
         const style = document.createElement('style'); style.textContent = `#zt-layout-toggle{font-size:11px!important;min-width:48px!important;width:auto!important;padding:6px!important}#zt-touch-resize{display:none;position:absolute;bottom:5px;right:5px;width:44px;height:44px;touch-action:none;background:#503a63;color:#fff;border-radius:12px;z-index:20;font-size:23px}:host([data-zt-touch-window]) #zt-touch-resize{display:block}:host([data-zt-touch-window]) #drag-handle{touch-action:none!important}:host([data-zt-touch-window]) dialog{min-width:0!important;min-height:0!important}#entry[data-zt-tucked=true]{opacity:.72;transition:opacity .2s}#entry[data-zt-tucked=true]:focus-visible{opacity:1}`;
         this.sh.append(style); this.off.push(() => style.remove());
+        // 1.1.3: avatar size (setting avatarSize, 20 %–100 %) and the drag targets 「换成莉莉丝」 / 「关闭悬浮窗」
+        const size = document.createElement('style'); size.id = 'zt-avatar-size'; this.sizeStyle = size;
+        const binStyle = document.createElement('style'); binStyle.textContent = BIN_CSS.replaceAll('.bin', '#zt-entry-bin');
+        const holder = document.createElement('div'); holder.innerHTML = binHtml('换成莉莉丝', 'zt-entry-bin', 'zt-entry-bin'); this.bin = holder.firstElementChild;
+        this.sh.append(size, binStyle, this.bin); this.off.push(() => { size.remove(); binStyle.remove(); this.bin.remove(); });
+        this.applySize();
         const b = document.createElement('button'); b.type = 'button'; b.id = 'zt-layout-toggle'; b.title = '切换全屏 / 可拖动浮窗'; h.shell.header?.prepend(b); this.toggle = b;
         this.on(b, 'click', e => { e.stopPropagation(); this.app.settings.set('mobileLayout', this.app.mobile?.full ? 'window' : 'full'); this.app.mobile?.apply(); this.sync(true); });
         const grip = document.createElement('button'); grip.type = 'button'; grip.id = 'zt-touch-resize'; grip.textContent = '⤡'; grip.setAttribute('aria-label', '拖动调整窗口大小'); this.d.append(grip); this.off.push(() => { b.remove(); grip.remove(); });
@@ -53,7 +60,7 @@ export class WindowControls {
         this.on(window, 'resize', schedule); this.on(visualViewport, 'resize', schedule); this.on(visualViewport, 'scroll', schedule);
         // 1.1.1: the header only has its final box after the open animation (terminal / 私聊) — re-dock the avatar then
         this.on(this.sh, 'animationend', schedule); this.on(this.sh, 'transitionend', schedule);
-        this.off.push(this.app.settings.onChange(k => { if (k === 'mobileLayout') this.sync(true); }));
+        this.off.push(this.app.settings.onChange(k => { if (k === 'mobileLayout') this.sync(true); if (k === 'avatarSize') { this.applySize(); this.sync(true); } }));
         h.hook('onOpen', () => this.sync(true)); h.hook('onClose', schedule);
         this.obs = new MutationObserver(schedule); this.obs.observe(this.d, { attributes: true, attributeFilter: ['open', 'style'] });
         if (this.entry) this.obs.observe(this.entry, { attributes: true, attributeFilter: ['data-docked', 'style'] });
@@ -109,12 +116,18 @@ export class WindowControls {
         Object.assign(this.d.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
         this.d.style.setProperty('--zt-window-height', b.h + 'px'); return b;
     }
+    /** 1.1.3: scale the undocked launcher (round avatar on phones, pill on desktop); `scale` keeps the top-left corner. */
+    applySize() {
+        const k = FLOAT_SIZES[this.app.settings.get('avatarSize')] || 1; this.k = k;
+        if (this.sizeStyle) this.sizeStyle.textContent = k === 1 ? '' : `#entry:not([data-docked=true]){scale:${k};transform-origin:0 0}`;
+    }
     placeLauncher(pos = this.app.settings.get('circlePosition') || {}) {
         if (!this.entry || this.entry.dataset.docked === 'true') return;
         const r = this.entry.getBoundingClientRect(), size = r.width || 64, p = launcherPosition(pos, this.viewport(), size);
         // The legacy placer writes left/top on dialog changes. Transform accounts for that without fighting its observer.
         const x = parseFloat(this.entry.style.left) || 0, y = parseFloat(this.entry.style.top) || 0;
-        const tr = `translate(${p.x - x}px,${p.y - y}px)`;
+        const k = this.k || 1;   // the scale applies after the transform → divide the shift so the box lands at p
+        const tr = `translate(${+((p.x - x) / k).toFixed(2)}px,${+((p.y - y) / k).toFixed(2)}px)`;
         if (this.entry.style.transform !== tr) this.entry.style.transform = tr;
         this.entry.dataset.ztTucked = String(p.tucked); this.lp = p; return p;
     }
@@ -132,7 +145,10 @@ export class WindowControls {
     move(e) {
         const g = this.g; if (!g || e.pointerId !== g.id) return;
         e.preventDefault(); e.stopImmediatePropagation(); const dx = e.clientX - g.sx, dy = e.clientY - g.sy;
-        if (!g.moved && Math.abs(dx) + Math.abs(dy) < 6) return; g.moved = true;
+        if (!g.moved && Math.abs(dx) + Math.abs(dy) < 6) return;
+        if (!g.moved && g.launcher) showBinAt(this.bin);
+        g.moved = true;
+        if (g.launcher) { const hot = binHit(this.bin, e.clientX, e.clientY); if (hot !== g.hot) { g.hot = hot; binHot(this.bin, hot); if (hot) navigator.vibrate?.(6); } }
         const b = { ...g.initial };
         if (g.resize) { b.w += dx; b.h += dy; } else { b.x += dx; b.y += dy; }
         if (g.launcher) this.placeLauncher({ ...b, tucked: false }); else this.placeWindow(b);
@@ -141,7 +157,15 @@ export class WindowControls {
         const g = this.g; if (!g || e.pointerId !== g.id) return;
         e.preventDefault(); e.stopImmediatePropagation(); this.g = null; this.suppress = Date.now() + 600;
         try { g.el.releasePointerCapture(g.id); } catch { /* pointer already released */ }
+        const target = g.launcher && g.moved && !cancel ? (binHit(this.bin, e.clientX, e.clientY) || g.hot || '') : '';
+        this.hideBin();
         if (cancel) { this.sync(true); return; }
+        if (target) {   // 1.1.3: dropped on 「换成莉莉丝」(切换) or 「关闭悬浮窗」(关闭) — the avatar goes back to where it was
+            this.placeLauncher();
+            if (target === 'swap') { swapFloat(this.app, 'lilith'); globalThis.toastr?.info('拖动莉莉丝到屏幕底部可以换回头像，或关闭悬浮窗。', '诸天 · 已切换成悬浮莉莉丝', { timeOut: 5000 }); }
+            else void closeFloats(this.app);
+            return;
+        }
         if (g.launcher) {
             if (!g.moved && !g.tucked) { this.entry.click(); return; }
             const v = this.viewport(), p = this.lp || g.initial, size = g.initial.w;
@@ -152,6 +176,7 @@ export class WindowControls {
             this.app.settings.set('circlePosition', next); this.placeLauncher(next);
         } else this.app.settings.set('touchWindowBox', this.box);
     }
-    cancel() { const g = this.g; this.g = null; if (g) try { g.el.releasePointerCapture(g.id); } catch { /* no capture */ } }
+    hideBin() { this.bin?.classList.remove('show'); binHot(this.bin, ''); }
+    cancel() { this.hideBin(); const g = this.g; this.g = null; if (g) try { g.el.releasePointerCapture(g.id); } catch { /* no capture */ } }
     dispose() { this.dead = true; this.cancel(); cancelAnimationFrame(this.raf); this.obs?.disconnect(); this.off.splice(0).forEach(f => f()); this.sh?.host.removeAttribute('data-zt-touch-window'); this.entry?.style.removeProperty('transform'); }
 }

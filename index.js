@@ -108,7 +108,7 @@ class App {
         if(this.hub?.page==='api')try{mountApiInline(this.hub.shadow.getElementById('page-api'),this.apiOpts());}catch(e){console.warn('[诸天] 连接页',e);}
         // 0.9.3: 新手引导 (after the 连接 page hook, so its 「回到引导」 strip lands on top of the mounted form)
         if(this.hub)try{this.guide=new Onboarding(this).start();this.parts.push(this.guide);}catch(e){console.warn('[诸天] 新手引导未启动',e);}
-        this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy(),float:()=>this.float?.show()});
+        this.settings.mountDrawer({open:()=>this.openTerminal(),restore:()=>this.restoreLegacy(),float:()=>this.float?.show(),avatar:()=>{this.settings.set('floatLilith','off');globalThis.toastr?.info('拖动头像到屏幕底部可以换成莉莉丝，或关闭悬浮窗。','诸天 · 头像已显示',{timeOut:5000});}});
         globalThis.__zhutianApp=this;
     }
     openTerminal(page){if(this.hub)this.hub.open(page);else this.assistant?.open();}

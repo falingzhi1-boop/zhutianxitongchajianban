@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { VERSION } from '../src/contracts.js';
 
 const read = f => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
-const V = '1.1.2';
+const V = '1.1.3';
 
 test(`version ${V} in contracts, manifest, package.json and both package-lock entries`, () => {
     assert.equal(VERSION, V);

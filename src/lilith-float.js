@@ -26,7 +26,8 @@ export const POKE_LINES = Object.freeze(['呀！戳哪里呢～', '再戳就收�
 // her (one wing, half her face) stays visible.
 const W = 150, H = 165, EDGE = 26, PEEK_K = 0.36;
 /** 0.8.3 悬浮莉莉丝大小. Default 'm' (75 %) — 0.8.2's full size was too big on phones. */
-export const FLOAT_SIZES = Object.freeze({ xs: 0.55, s: 0.65, m: 0.75, l: 0.9, xl: 1 });
+// 1.1.3: down to 20 % (p20 / p30 / p40); the same keys size the round avatar launcher (setting avatarSize)
+export const FLOAT_SIZES = Object.freeze({ p20: 0.2, p30: 0.3, p40: 0.4, xs: 0.55, s: 0.65, m: 0.75, l: 0.9, xl: 1 });
 export function floatDims(size) { const k = FLOAT_SIZES[size] || FLOAT_SIZES.m; return { w: Math.round(W * k), h: Math.round(H * k), peek: Math.max(24, Math.round(W * k * PEEK_K)), k }; }
 /** Percent box (left/top/width/height) of a part of the art inside the float (pure, for tests). */
 export function artBox([x, y, w, h], box = FLOAT_ART.box) {
@@ -56,7 +57,10 @@ export function parkSpot(p, vw, vh, dims = { w: W, h: H }, side = '') {
     return settle({ x: right ? vw : -1, y: vh - dims.h - 64 }, vw, vh, dims.w, dims.h);
 }
 /** Should the floating portrait be used? auto = touch / narrow screens. */
-export function wantFloat(mode, { coarse = false, width = 1280 } = {}) { return mode === 'on' || (mode !== 'off' && (coarse || width <= 720)); }
+/** 1.1.3: floatLilith = auto | on (悬浮莉莉丝) | off (头像 = the original launcher) | none (关闭: no floating entry at all). */
+export function wantFloat(mode, { coarse = false, width = 1280 } = {}) { return mode === 'on' || (mode === 'auto' && (coarse || width <= 720)); }
+/** Which floating entry shows: 'lilith' | 'avatar' | 'none'. Pure. */
+export function floatEntry(mode, env = {}) { return mode === 'none' ? 'none' : wantFloat(mode || 'auto', env) ? 'lilith' : 'avatar'; }
 
 const CSS = `
 :host{all:initial}
@@ -98,9 +102,11 @@ const CSS = `
 .fl[data-lite=true] .rig{filter:none}
 .fl[data-lite=true] .torso,.fl[data-lite=true] .wing{animation:none}
 /* 1.0: 拖到底部「关闭悬浮窗」 · 桌面右键菜单 */
-.bin{position:fixed;left:50%;top:0;z-index:2147483099;translate:-50% 0;display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:#140d1fe6;border:1px dashed #f0abfc88;color:#f5e8ff;font:500 13px/1.2 system-ui,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px #0008;opacity:0;scale:.9;pointer-events:none;transition:opacity .18s,scale .18s,background .18s}
+.bin{position:fixed;left:50%;top:0;z-index:2147483099;translate:-50% 0;display:flex;gap:14px;opacity:0;scale:.9;pointer-events:none;transition:opacity .18s,scale .18s}
 .bin.show{opacity:1;scale:1}
-.bin.hot{background:#7f1d4de6;border-style:solid;border-color:#fda4af;scale:1.08}
+.bin .tgt{display:flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;background:#140d1fe6;border:1px dashed #f0abfc88;color:#f5e8ff;font:500 13px/1.2 system-ui,'PingFang SC','Microsoft YaHei',sans-serif;white-space:nowrap;box-shadow:0 8px 28px #0008;transition:background .18s,scale .18s}
+.bin .tgt.hot{background:#4c2d75e6;border-style:solid;border-color:#d8b4fe;scale:1.08}
+.bin .tgt[data-t=close].hot{background:#7f1d4de6;border-color:#fda4af}
 .bin svg{width:18px;height:18px;flex:none}
 .menu{position:fixed;z-index:2147483101;min-width:150px;padding:5px;border-radius:10px;background:#160f22f2;border:1px solid #ffffff22;box-shadow:0 10px 30px #000a;font:13px/1.3 system-ui,'PingFang SC','Microsoft YaHei',sans-serif}
 .menu[hidden]{display:none}
@@ -111,9 +117,54 @@ const CSS = `
 .fl[data-lite=true] .rig{filter:drop-shadow(0 calc(var(--k,1) * 5px) calc(var(--k,1) * 4px) #0008)}.fl[data-lite=true] :is(.rig,.torso,.wing,.pose){animation:none!important}.fl[data-lite=true] :is(.pose,.face){transition:none}
 `;
 
-/** 1.0: what closing the float means, and where the terminal is afterwards. */
-export const CLOSE_TEXT = hasEntry => `悬浮莉莉丝会从页面上消失（账本、设置都不受影响）。\n\n关闭后随时可以从酒馆的「扩展」面板（顶栏积木图标）→「诸天终端」→「打开诸天终端」重新进入控制台。${hasEntry ? '\n左下角的原版莉莉丝唤醒按钮也会回来。' : ''}\n\n想让她回来：扩展面板里点「显示悬浮莉莉丝」，或终端「设置 → 莉莉丝 → 悬浮莉莉丝」。`;
-export const CLOSED_TEXT = '要进入控制台：酒馆「扩展」面板（顶栏积木图标）→「诸天终端」→「打开诸天终端」。想让她回来：同一处点「显示悬浮莉莉丝」。';
+/** 1.0 / 1.1.3: what 关闭 means (every floating entry goes: Lilith *and* the avatar), and where the terminal is afterwards. */
+export const CLOSE_TEXT = () => `悬浮窗会从页面上消失——悬浮莉莉丝和头像都不再显示（账本、设置都不受影响）。\n\n关闭后随时可以从酒馆的「扩展」面板（顶栏积木图标）→「诸天终端」→「打开诸天终端」进入控制台。\n\n想让悬浮窗回来：扩展面板里点「显示悬浮莉莉丝」或「显示头像」，或终端「设置 → 莉莉丝 → 悬浮窗」。\n只想换个样子？用「切换」：莉莉丝 ⇄ 头像。`;
+export const CLOSED_TEXT = '要进入控制台：酒馆「扩展」面板（顶栏积木图标）→「诸天终端」→「打开诸天终端」。想让悬浮窗回来：同一处点「显示悬浮莉莉丝」或「显示头像」。';
+export const BIN_CSS = `.bin{position:fixed;left:50%;top:0;z-index:2147483099;translate:-50% 0;display:flex;gap:14px;opacity:0;scale:.9;pointer-events:none;transition:opacity .18s,scale .18s}
+.bin.show{opacity:1;scale:1}
+.bin .tgt{display:flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;background:#140d1fe6;border:1px dashed #f0abfc88;color:#f5e8ff;font:500 13px/1.2 system-ui,'PingFang SC','Microsoft YaHei',sans-serif;white-space:nowrap;box-shadow:0 8px 28px #0008;transition:background .18s,scale .18s}
+.bin .tgt.hot{background:#4c2d75e6;border-style:solid;border-color:#d8b4fe;scale:1.08}
+.bin .tgt[data-t=close].hot{background:#7f1d4de6;border-color:#fda4af}
+.bin svg{width:18px;height:18px;flex:none}`;
+const X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const SWAP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>';
+/** 1.1.3: the drop targets shown while a floating entry is dragged — 「切换」 and 「关闭」 are two different things. */
+export function binHtml(swapLabel, cls = 'bin', id = '') {
+    return `<div class="${cls}"${id ? ` id="${id}"` : ''} aria-hidden="true"><div class="tgt" data-t="swap">${SWAP_SVG}<span>拖到这里${swapLabel}</span></div><div class="tgt" data-t="close">${X_SVG}<span>拖到这里关闭悬浮窗</span></div></div>`;
+}
+/** Position the targets near the bottom (top from innerHeight — SillyTavern's phone layout transforms <html>). */
+export function showBinAt(b) {
+    if (!b) return; b.classList.add('show');
+    const h = b.offsetHeight || 38;
+    b.style.top = `calc(${Math.max(8, innerHeight - h - 22)}px - env(safe-area-inset-bottom, 0px))`;
+}
+/** Which target ('swap' | 'close' | '') is under the pointer — generous: 16 px around each. */
+export function binHit(b, x, y) {
+    if (!b?.classList.contains('show') || !Number.isFinite(x) || !Number.isFinite(y)) return '';
+    for (const t of b.querySelectorAll('.tgt')) { const r = t.getBoundingClientRect(); if (x > r.left - 16 && x < r.right + 16 && y > r.top - 24 && y < r.bottom + 24) return t.dataset.t; }
+    return '';
+}
+export function binHot(b, hot) { for (const t of b?.querySelectorAll('.tgt') || []) t.classList.toggle('hot', t.dataset.t === hot); }
+/** 1.1.3 关闭: asks, then floatLilith = 'none' (no Lilith, no avatar). Shared by the float, the avatar launcher and 设置. */
+let asking = false;
+export async function closeFloats(app, { ask = confirmBox } = {}) {
+    if (asking) return false; asking = true;
+    try {
+        if (!await ask(CLOSE_TEXT(), { ok: '关闭悬浮窗', cancel: '先不关', title: '关闭悬浮窗？' })) return false;
+        app.settings.set('floatLilith', 'none');
+        globalThis.toastr?.info(CLOSED_TEXT, '诸天 · 悬浮窗已关闭', { timeOut: 12000, extendedTimeOut: 6000 });
+        return true;
+    } finally { asking = false; }
+}
+/** 1.1.3 切换: Lilith ⇄ avatar. Returns the new mode. */
+export function swapFloat(app, to) {
+    const env = { coarse: matchMedia('(pointer: coarse)').matches, width: innerWidth };
+    const cur = floatEntry(app.settings.get('floatLilith') || 'auto', env);
+    const target = to || (cur === 'lilith' ? 'avatar' : 'lilith');
+    const mode = target === 'avatar' ? 'off' : wantFloat('auto', env) ? 'auto' : 'on';
+    app.settings.set('floatLilith', mode);
+    return mode;
+}
 export class LilithFloat {
     constructor(app) { this.app = app; this.disposers = []; this.mood = ''; this.hideT = 0; this.tempTuck = false; this.lineIdx = 0; this.pokeIdx = 0; this.lastTap = 0; }
     get settings() { return this.app.settings; }
@@ -128,9 +179,9 @@ export class LilithFloat {
         const faces = Object.entries(A.faces).map(([k, r]) => at(r, 'face', 'face-' + k).replace('class="face"', `class="face" data-face="${k}"`)).join('');
         sh.innerHTML = `<style>${CSS}</style><div class="fl" hidden data-side="left" data-mood="neutral"><div class="bubble" role="status" aria-live="polite"><b>莉莉丝</b><span></span></div>`
             + `<div class="rig" aria-hidden="true"><div class="pose">${at(A.parts.wingL, 'wing l', 'wingl')}${at(A.parts.wingR, 'wing r', 'wingr')}<div class="torso">${at(A.parts.body, 'body', 'body')}${faces}</div></div></div>`
-            + `<button class="fig" type="button" aria-label="莉莉丝：点一下打开诸天终端，长按拖动，拖到屏幕边缘可以藏起来，拖到底部可以关闭悬浮窗"></button></div>`
-            + `<div class="bin" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span>拖到这里关闭悬浮窗</span></div>`
-            + `<div class="menu" role="menu" hidden><button type="button" role="menuitem" data-m="open">打开诸天终端</button><button type="button" role="menuitem" data-m="hide">藏到屏幕边</button><button type="button" role="menuitem" class="danger" data-m="close">关闭悬浮窗…</button></div>`;
+            + `<button class="fig" type="button" aria-label="莉莉丝：点一下打开诸天终端，长按拖动，拖到屏幕边缘可以藏起来，拖到底部可以切换成头像或关闭悬浮窗"></button></div>`
+            + binHtml('换成头像')
+            + `<div class="menu" role="menu" hidden><button type="button" role="menuitem" data-m="open">打开诸天终端</button><button type="button" role="menuitem" data-m="hide">藏到屏幕边</button><button type="button" role="menuitem" data-m="swap">切换成头像</button><button type="button" role="menuitem" class="danger" data-m="close">关闭悬浮窗…</button></div>`;
         this.el = sh.querySelector('.fl'); this.fig = sh.querySelector('.fig'); this.bubble = sh.querySelector('.bubble'); this.text = this.bubble.querySelector('span'); this.el.dataset.lite = String(!!this.app?.perf?.lite);
         this.bin = sh.querySelector('.bin'); this.menu = sh.querySelector('.menu');
         this.pose = sh.querySelector('.pose'); this.faces = Object.fromEntries([...sh.querySelectorAll('.face')].map(i => [i.dataset.face, i]));
@@ -156,7 +207,7 @@ export class LilithFloat {
     sync() {
         const on = this.wanted();
         this.el.hidden = !on;
-        this.hideOriginalEntry(on);
+        this.hideOriginalEntry(on || this.settings.get('floatLilith') === 'none');   // 1.1.3: 关闭 hides the avatar too
         if (on) { if (this.app.hub?.isOpen) { this.tempTuck = false; this.onHub(true); } else this.place(this.pos(), false); }
     }
     /** The original pill launcher stays for desktop; with the floating portrait it would be a second Lilith. */
@@ -278,16 +329,17 @@ export class LilithFloat {
             const vx = d.last ? x - d.last.x : 0; d.tilt = clamp((d.tilt || 0) * 0.6 - vx * 0.9, -16, 16);
             this.pose.style.setProperty('--tilt', d.tilt.toFixed(1) + 'deg');
             f.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`; d.last = { x, y };
-            const hot = this.overBin(e.clientX, e.clientY); if (hot !== d.hot) { d.hot = hot; this.bin.classList.toggle('hot', hot); if (hot) vib(6); }
+            const hot = this.overBin(e.clientX, e.clientY); if (hot !== d.hot) { d.hot = hot; binHot(this.bin, hot); if (hot) vib(6); }
         };
         const up = e => {
             if (!d || e.pointerId !== d.id) return;
             clearTimeout(d.timer); const g = d; d = null; f.classList.remove('drag'); this.pose.style.removeProperty('--tilt');
-            this.bin.classList.remove('show', 'hot');
-            if (g.drag && (g.hot || this.overBin(e.clientX, e.clientY))) {      // 1.0: dropped on 「关闭悬浮窗」
-                this.place(this.cur || this.pos(), false);
+            const target = g.drag ? (this.overBin(e.clientX, e.clientY) || g.hot) : '';
+            this.bin.classList.remove('show'); binHot(this.bin, '');
+            if (target) {      // 1.1.3: dropped on 「切换成头像」 or 「关闭悬浮窗」
+                this.place(this.pos(), false);
                 this.suppressClick = true; setTimeout(() => { this.suppressClick = false; }, 60);
-                void this.askClose();
+                if (target === 'swap') this.swap(); else void this.askClose();
                 return;
             }
             if (g.drag) {
@@ -300,7 +352,7 @@ export class LilithFloat {
             }
             if (g.moved || Date.now() - g.t > 600) { this.suppressClick = true; setTimeout(() => { this.suppressClick = false; }, 60); }
         };
-        const cancel = () => { this.bin.classList.remove('show', 'hot'); if (d) { clearTimeout(d.timer); d = null; f.classList.remove('drag'); this.pose.style.removeProperty('--tilt'); this.place(this.cur || this.pos(), false); } };
+        const cancel = () => { this.bin.classList.remove('show'); binHot(this.bin, ''); if (d) { clearTimeout(d.timer); d = null; f.classList.remove('drag'); this.pose.style.removeProperty('--tilt'); this.place(this.cur || this.pos(), false); } };
         const click = e => {
             e.preventDefault(); if (this.suppressClick) return;
             const now = Date.now(), dbl = now - this.lastTap < 320; this.lastTap = now;
@@ -314,27 +366,17 @@ export class LilithFloat {
         this.fig.addEventListener('contextmenu', e => { e.preventDefault(); if (d?.touch || e.pointerType === 'touch' ) return; this.openMenu(e.clientX, e.clientY); });
         this.fig.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.tap(); } });
     }
-    /** Show 「拖到这里关闭悬浮窗」 near the bottom of the screen. Placed with `top` from innerHeight (like the figure itself):
-     *  SillyTavern's phone layout gives <html> a transform and height 0, so a `bottom:` on a fixed element would put the bar
-     *  above the top of the screen. */
-    showBin() {
-        const b = this.bin; if (!b) return;
-        b.classList.add('show');
-        const h = b.offsetHeight || 38;
-        b.style.top = `calc(${Math.max(8, innerHeight - h - 22)}px - env(safe-area-inset-bottom, 0px))`;
-    }
-    /** Is the pointer over the 「关闭悬浮窗」 target? (generous: the bar plus 24 px around it) */
-    overBin(x, y) {
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !this.bin?.classList.contains('show')) return false;
-        const r = this.bin.getBoundingClientRect();
-        return x > r.left - 24 && x < r.right + 24 && y > r.top - 24 && y < r.bottom + 24;
-    }
+    /** Show the 「切换成头像」 / 「关闭悬浮窗」 targets near the bottom of the screen. */
+    showBin() { showBinAt(this.bin); }
+    /** Which target is the pointer over? 'swap' | 'close' | '' */
+    overBin(x, y) { return binHit(this.bin, x, y); }
     bindMenu() {
         const m = this.menu, close = () => { m.hidden = true; };
         m.addEventListener('click', e => {
             const b = e.target.closest('[data-m]'); if (!b) return; close();
             if (b.dataset.m === 'open') this.app.openTerminal();
             else if (b.dataset.m === 'hide') { const p = this.cur || this.pos(); this.place(settle({ x: p.x > innerWidth / 2 ? innerWidth : -1, y: p.y }, innerWidth, innerHeight, this.dims.w, this.dims.h), true); }
+            else if (b.dataset.m === 'swap') this.swap();
             else if (b.dataset.m === 'close') void this.askClose();
         });
         m.addEventListener('keydown', e => { if (e.key === 'Escape') { close(); this.fig.focus(); } });
@@ -349,17 +391,21 @@ export class LilithFloat {
         m.style.left = clamp(x, 4, innerWidth - w - 4) + 'px'; m.style.top = clamp(y, 4, innerHeight - h - 4) + 'px';
         m.querySelector('button')?.focus({ preventScroll: true });
     }
-    /** 1.0: 关闭悬浮窗 — asks first, and says where the terminal is afterwards (酒馆「扩展」面板). Resolves true when closed. */
+    /** 1.0 / 1.1.3: 关闭悬浮窗 — asks first; closes every floating entry (also the avatar). Resolves true when closed. */
     async askClose({ ask = confirmBox } = {}) {
         if (this.asking) return false; this.asking = true;
         try {
-            const yes = await ask(CLOSE_TEXT(!!this.app.assistant?.shadow), { ok: '关闭悬浮窗', cancel: '留着她', title: '关闭悬浮莉莉丝？' });
+            const yes = await closeFloats(this.app, { ask });
             if (!yes) { this.say('哼，就知道你舍不得我～', { mood: 'smug', ms: 2400 }); return false; }
             this.menu.hidden = true; this.quiet?.();
-            this.settings.set('floatLilith', 'off');
-            globalThis.toastr?.info(CLOSED_TEXT, '诸天 · 悬浮莉莉丝已关闭', { timeOut: 12000, extendedTimeOut: 6000 });
             return true;
         } finally { this.asking = false; }
+    }
+    /** 1.1.3 切换: the floating Lilith becomes the round avatar (not closed). */
+    swap() {
+        this.menu.hidden = true; this.quiet?.();
+        swapFloat(this.app, 'avatar');
+        globalThis.toastr?.info('拖动头像到屏幕底部可以换回莉莉丝，或关闭悬浮窗。', '诸天 · 已切换成头像', { timeOut: 5000 });
     }
     /** Drawer 「显示悬浮莉莉丝」 / settings: bring her back on this device. */
     show() {

@@ -3,8 +3,8 @@ export const STORAGE = 'zhutianCovenantTerminal';
 /** 1.0: structure version of the 诸天系统 ledger, kept in chatMetadata[STORAGE].ledgerSchema (see src/data-io.js). */
 export const LEDGER_SCHEMA = 2;
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '1.1.2';
-export const PATCH_REV = '1.1.2';
+export const VERSION = '1.1.3';
+export const PATCH_REV = '1.1.3';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -104,6 +104,7 @@ export const CAPABILITIES = [
     {name:'一键关闭插件与关闭悬浮莉莉丝',state:'implemented',scope:'1.0 玩家反馈：设置 → 插件开关 调用酒馆 disableExtension（先确认）；悬浮莉莉丝拖到底部或右键关闭，确认框提示从酒馆「扩展」面板重新进入控制台，扩展面板可让她回来。1.19 浏览器验收'},
     {name:'数据块格式守卫',state:'implemented',scope:'1.1.1 玩家反馈：新回复的 <ZhuTianPanel> 混入正文 / 思维链 / 其他卡变量、没闭合、大小写或代码块、只写在思维链里、多个块时自动整理（健康的块一字不改；原文备份在楼层，可还原）；旧楼层显示与提示词过滤按整理后的块；每轮格式提醒；「激活/领悟《X》」改写为 收录:X'},
     {name:'数据块补记',state:'experimental',scope:'1.1.1 实验性（模拟模型验收）：回复缺少数据块时按世界书模板和本轮正文让「数据块补记」接口补写一次（默认只在缺失时，可关闭）；写入前核对聊天 / 楼层 / 分页 / 正文未变；真实模型未验收'},
-    {name:'抽卡模式切换',state:'implemented',scope:'1.1.2 玩家反馈：经典折叠（默认，整次一起结算，≥50 抽凡品合为一行、≥100 抽灵品也合为一行，折叠部分不调用模型，逐件部分每次请求最多 20 件）/ 十抽一结算（1.1.1 方式）；抽卡区和商品定制页都能切换'},
+    {name:'抽卡模式切换',state:'implemented',scope:'1.1.2 玩家反馈：经典折叠（默认，整次一起结算，≥50 抽凡品合为一行、≥100 抽灵品也合为一行，折叠部分只计数不生成；1.1.3：其余物品一次 API 调用全部生成）/ 十抽一结算（1.1.1 方式）；抽卡区和商品定制页都能切换'},
+    {name:'悬浮窗切换 / 关闭',state:'implemented',scope:'1.1.3 玩家反馈：「切换」（悬浮莉莉丝 ⇄ 头像）和「关闭」（两种都不显示，从酒馆扩展面板进入）分开；莉莉丝和头像拖到底部都有两个目标；设置里可单独关闭；悬浮莉莉丝 / 头像大小最低 20%；终端 × 只关终端'},
     {name:'羁绊页重做与群员拉入',state:'implemented',scope:'1.1.2 玩家反馈：按本世界 / 全部 / 恋人 / 打手 / 群友筛选，本世界优先；人物卡显示好感阶段、黑化 / 悔意条和整理后的资料；聊天群群员默认不进羁绊，可在聊天群群员页或关系图「拉入羁绊」，拉入的群友可移出'},
 ];

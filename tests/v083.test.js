@@ -8,7 +8,7 @@ import { VERSION, CAPABILITIES } from '../src/contracts.js';
 const read = f => readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 
 test('size presets: default 75 %, touch target never below 24 px (1.0: the cut-out figure is 150×165 at xl)', () => {
-    assert.deepEqual(Object.keys(FLOAT_SIZES), ['xs', 's', 'm', 'l', 'xl']);
+    assert.deepEqual(Object.keys(FLOAT_SIZES), ['p20', 'p30', 'p40', 'xs', 's', 'm', 'l', 'xl']);   // 1.1.3: down to 20 %
     assert.deepEqual(floatDims(undefined), floatDims('m'));
     assert.deepEqual(floatDims('m'), { w: 113, h: 124, peek: 41, k: 0.75 });
     assert.deepEqual(floatDims('xl'), { w: 150, h: 165, peek: 54, k: 1 });
