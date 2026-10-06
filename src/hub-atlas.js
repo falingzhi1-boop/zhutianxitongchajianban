@@ -66,7 +66,9 @@ export function buildBonds(z) {
     for (const love of listBonds(z).filter(p => p.source === 'bond')) ring.push({ id: 'bond:p:' + love.id, bond: love.id, type: 'love', label: cut(love.姓名, 6), sub: `${love.世界} · 好感 ${num(love.好感度)}`, rec: love, src: '诸天系统.羁绊库', w: num(love.好感度), kind: 'love', dark: num(love.黑化值) > 0, name: str(love.姓名) });
     arr(z?.打手).forEach((m, i) => { if (m?.名称) ring.push({ id: 'bond:s:' + i, type: 'summon', label: cut(m.名称, 6), sub: `忠诚 ${num(m.忠诚)}`, rec: m, src: `诸天系统.打手[${i}]`, w: num(m.忠诚), kind: 'summon', name: str(m.名称) }); });
     const g = obj(z?.聊天群);
-    arr(g.成员).forEach(m => { if (m?.id && m?.名称) ring.push({ id: 'bond:m:' + m.id, type: 'member', label: cut(m.名称, 6), sub: cut(m.世界 || '', 7), rec: { id: m.id, 名称: m.名称, 世界: m.世界, 实力档: m.档, 好感: m.好感, 身份: m.身份, 性格: m.性格, 特产: m.特产 }, src: `诸天系统.聊天群.成员[${m.id}]`, w: num(m.好感, 20), kind: 'member', member: m.id, descended: g.降临?.id === m.id, name: str(m.名称) }); });
+    // 1.1.2: a member pulled into 羁绊 is drawn once, as that 羁绊 (inner ring); the others stay on the outer ring
+    const pulled = new Set(arr(z?.羁绊库).map(p => p?.群员ID).filter(Boolean));
+    arr(g.成员).forEach(m => { if (m?.id && m?.名称 && !pulled.has(m.id)) ring.push({ id: 'bond:m:' + m.id, type: 'member', label: cut(m.名称, 6), sub: cut(m.世界 || '', 7), rec: { id: m.id, 名称: m.名称, 世界: m.世界, 实力档: m.档, 好感: m.好感, 身份: m.身份, 性格: m.性格, 特产: m.特产 }, src: `诸天系统.聊天群.成员[${m.id}]`, w: num(m.好感, 20), kind: 'member', member: m.id, descended: g.降临?.id === m.id, name: str(m.名称) }); });
     const n = ring.length, inner = ring.filter(r => r.kind !== 'member'), outer = ring.filter(r => r.kind === 'member');
     const place = (list, R, off) => list.forEach((r, i) => { const a = off + (i / Math.max(1, list.length)) * Math.PI * 2; r.x = Math.round(cx + Math.cos(a) * R); r.y = Math.round(cy + Math.sin(a) * R * 0.82); });
     place(inner, outer.length ? 110 : 150, -Math.PI / 2); place(outer, 205, -Math.PI / 2 + Math.PI / Math.max(2, outer.length) + (inner.length % 2 ? 0 : 0.35));
@@ -131,7 +133,7 @@ export function buildTree(z, plugins = { off: [], custom: [] }) {
 const PAGES = [['events', '事件线', 'task'], ['bonds', '羁绊图', 'heart'], ['stars', '星图', 'atlas'], ['tree', '能力树', 'lotus']];
 const HINT = {
     events: '还没有任务记录。AI 发布任务后，这里会按楼层画出 起因 → 任务 → 结算。',
-    bonds: '只有你和莉莉丝。锁定羁绊、召唤打手或邀请群员后会出现在这里。',
+    bonds: '只有你和莉莉丝。锁定羁绊、召唤打手或邀请群员后会出现在这里（群员可在这里「拉入羁绊」）。',
     stars: '还没有世界记录。AI 写入「当前世界」或在下方记录一次穿越后，星图会点亮。',
     tree: '',
 };
@@ -245,7 +247,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
         if (n.task) out.push(b(`data-open-task="${esc(n.task)}"`, '在任务页定位', true));
         if (n.floor !== null && n.floor !== undefined) out.push(b(`data-floor="${n.floor}"`, `跳到楼层 #${n.floor}`));
         if (n.bond) out.push(b(`data-open-bond="${esc(n.bond)}"`, '查看此人物羁绊', true));
-        if (n.member) out.push(b(`data-open-member="${esc(n.member)}"`, '在聊天群查看', true));
+        if (n.member) out.push(b(`data-pull-bond="${esc(n.member)}"`, '拉入羁绊', true), b(`data-open-member="${esc(n.member)}"`, '在聊天群查看'));
         if (n.type === 'love' || n.type === 'summon') out.push(b(`data-go="${n.type === 'love' ? 'bond' : 'plug'}"`, n.type === 'love' ? '打开羁绊页' : '打开外挂页（诸天打手）', true));
         if (n.type === 'lilith') out.push(b('data-go="work"', '去工作台'));
         if (n.go) out.push(b(`data-go="${n.go}"`, { art: '打开神通页', cult: '打开修行页', plug: '打开外挂页', plugmgr: '打开外挂管理' }[n.go] || '打开', true));
@@ -291,6 +293,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
             if (d.openTask) return this.openTask(d.openTask);
             if (d.floor) return this.jumpFloor(Number(d.floor));
             if (d.openBond) return this.app.bonds?.open(d.openBond);
+            if (d.pullBond) { t.disabled = true; try { await this.app.bonds?.pull(d.pullBond); } catch (err) { this.hub.toast('拉入羁绊失败：' + err.message, 6000); } finally { t.disabled = false; } return; }
             if (d.openMember) { this.hub.go('group'); const g = this.app.group; if (g) { g.view = 'members'; g.pm = d.openMember; g.paint(true); } return; }
             if (d.go) return this.hub.go(d.go);
             if (d.hist) { const x = this.app.fx?.history?.[Number(d.hist)]; if (x) this.app.fx.openRecord(x); return; }

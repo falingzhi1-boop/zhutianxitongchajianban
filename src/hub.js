@@ -337,8 +337,15 @@ export class Hub {
         try { w.ztRefreshVisible?.(root); } catch (e) { console.warn('[诸天终端] 页面刷新失败', e); }
         this.onEngineView?.(root, f.contentDocument);
     }
-    /** 管理员控制台 (original openAdmin) — 0.8.0 entry: 设置 → 高级. The ◆ five-click entry is hidden in the terminal. */
+    /** 管理员控制台 — 1.1.2: the terminal page (src/admin.js); the original overlay stays reachable from it. */
     async openAdmin() {
+        if (!this.a.currentIdentity()) throw Error('请先打开单角色聊天。');
+        if (!this.ledger()) throw Error('当前聊天还没有诸天账本，先在「设置 → 新聊天初始化」创建。');
+        if (this.pages.has('admin')) { this.go('admin'); return true; }
+        return this.openOriginalAdmin();
+    }
+    /** Original openAdmin overlay — 0.8.0 entry: 设置 → 高级. The ◆ five-click entry is hidden in the terminal. */
+    async openOriginalAdmin() {
         if (!this.a.currentIdentity()) throw Error('请先打开单角色聊天。');
         if (!this.ledger()) throw Error('当前聊天还没有诸天账本，先在「设置 → 新聊天初始化」创建。');
         this.open('ov');

@@ -7,6 +7,22 @@ import { canAcquireForbidden, THEMES, CATEGORIES, USES, preferences, rollGacha, 
 
 /** 1.1.1: model batch sizes (halved down to 1 when an answer is cut off) and the gacha settlement chunk. */
 export const GACHA_BATCH = 5, SHOP_BATCH = 8, GACHA_CHUNK = 10;
+/** 1.1.2 经典折叠: items generated per model call (fewer, larger requests; still halved when an answer is cut off). */
+export const CLASSIC_BATCH = 20;
+/** 1.1.2: the gacha mode the player picked (default 经典折叠). */
+export const gachaMode = settings => (settings?.get?.('gachaMode') === 'chunk' ? 'chunk' : 'classic');
+export const GACHA_MODES = Object.freeze({
+    classic: { label: '经典折叠', note: '整次抽取一起结算、一次扣费；≥50 抽时凡品合成一行「凡品杂物 ×N」，≥100 抽时灵品也合成一行，折叠的部分不调用模型；其余逐件生成，每次请求最多 20 件。失败不扣费。' },
+    chunk: { label: '十抽一结算', note: '每 10 抽单独生成、校验、扣费，所有物品逐件生成（每次请求 5 件）；中途失败时已完成的部分照常入账，剩余的不扣费。调用次数较多。' },
+});
+/** 1.1.2 经典折叠: the grades a draw of `count` pulls folds into one summary row (old 3.1 behaviour, thresholds 50 / 100). */
+export function foldGrades(count) { return count >= 100 ? ['凡品', '灵品'] : count >= 50 ? ['凡品'] : []; }
+/** One 待处理 row standing for `n` folded pulls of `grade` — worth exactly n single items (price × 数量). Pure. */
+export function foldedRow(grade, n) {
+    return { 名称: `${grade}杂物`, 品级: grade, 分类: '其他', 效果: `本次盲盒开出的 ${n} 件${grade}零散物资（经典折叠：合并记录，未逐件生成）`, 来源: '盲盒', 价格: L.TIER_PRICE[grade], 数量: n };
+}
+/** A generated product as a 待处理 row. Pure. */
+export const pendingRow = it => ({ 名称: it.name, 品级: it.grade, 分类: it.category, 效果: `${it.effect}（来源：${it.world}；${it.origin}）`, 来源: '盲盒', 价格: L.TIER_PRICE[it.grade], 数量: 1 });
 /** Was this model answer cut off? finish_reason length / max_tokens, or a JSON array that never closes. Pure. */
 export function looksTruncated(text, finish = '') {
     if (/^(length|max_tokens)$/i.test(String(finish || ''))) return true;
@@ -21,7 +37,7 @@ export class Commerce {
         h.addNav('交易', 'commerce', '商品定制', 'gear', { title: '商品定制', render: el => this.render(el) });
         const sb = this.app.statusbar; if (sb) { const prev = sb.enhanceFrame, enhance = (f, d) => { prev?.(f, d); this.mount(f, d); }; sb.enhanceFrame = enhance; this.off.push(() => { if (sb.enhanceFrame === enhance) sb.enhanceFrame = prev; }); }
         h.hook('onEngine', (f, doc) => this.mount(f, doc));
-        h.hook('onEngineView', () => { try { this.paintShenPity(h.engineFrame?.contentDocument); } catch { /* engine gone */ } });
+        h.hook('onEngineView', () => { try { const d = h.engineFrame?.contentDocument; this.paintShenPity(d); this.paintGachaMode(d); } catch { /* engine gone */ } });
         return this;
     }
     pref(kind) { return preferences(this.app.settings.get('commerce')?.[kind]); }
@@ -29,7 +45,14 @@ export class Commerce {
         const section = kind => { const p = this.pref(kind), choices = (key, all) => all.map(v => `<label style="display:inline-flex;gap:5px;margin:5px"><input type="checkbox" name="${key}" value="${v}" ${p[key].includes(v) ? 'checked' : ''}>${v}</label>`).join('');
             return `<form class="zt-card" data-kind="${kind}"><h3>${kind === 'shop' ? '商店进货' : '盲盒奖励'}定制</h3><label>来源 <select name="scope"><option value="mixed" ${p.scope === 'mixed' ? 'selected' : ''}>诸天混合</option><option value="current" ${p.scope === 'current' ? 'selected' : ''}>当前世界</option><option value="named" ${p.scope === 'named' ? 'selected' : ''}>指定世界/作品</option></select></label><input name="world" maxlength="80" value="${esc(p.world)}" placeholder="指定作品/世界（原名）"><p>混合题材</p>${choices('themes', THEMES)}<p>商品类别</p>${choices('categories', CATEGORIES)}<p>用途</p>${choices('uses', USES)}<p><label>排除项（逗号分隔）<input name="exclude" maxlength="400" value="${esc(p.exclude)}" placeholder="不想再出现的物品或题材"></label></p><label><input name="original" type="checkbox" ${p.original ? 'checked' : ''}>允许原创（原作声明也需自行核实）</label><p><select name="repeats"><option value="avoid">近期避重（含相似效果）</option><option value="consumables" ${p.repeats === 'consumables' ? 'selected' : ''}>允许常用消耗品重复</option></select></p><button class="zt-btn primary" type="submit">保存${kind === 'shop' ? '商店' : '盲盒'}配置</button><span role="status"></span></form>`;
         };
-        el.innerHTML = `<h3>商品定制</h3><p class="zt-note">本地决定题材组合与品阶，模型生成内容，再校验和近期避重。定制不改变盲盒概率。盲盒凡60% / 灵38% / 仙1.9% / 神0.1%，第100抽仙品保底 · 1000 抽必出神品，禁忌不在盲盒池。生成失败不扣系统点；API调用可能计费。一次最多200抽，分批生成；每 10 抽结算一次，中途失败时已完成的部分照常入账，剩余的不扣费。</p>${section('shop')}${section('gacha')}`;
+        const mode = gachaMode(this.app.settings);
+        const modeCard = `<section class="zt-card" data-gacha-mode><h3>抽卡模式 <small>1.1.2 · 抽卡区里也能切换</small></h3><div class="zt-actions">${Object.entries(GACHA_MODES).map(([id, m]) => `<button type="button" class="zt-btn${mode === id ? ' primary' : ''}" data-mode="${id}" aria-pressed="${mode === id}">${m.label}${id === 'classic' ? '（默认）' : ''}</button>`).join('')}</div><p class="zt-note">${GACHA_MODES[mode].note}</p></section>`;
+        el.innerHTML = `<h3>商品定制</h3><p class="zt-note">本地决定题材组合与品阶，模型生成内容，再校验和近期避重。定制不改变盲盒概率。盲盒凡60% / 灵38% / 仙1.9% / 神0.1%，第100抽仙品保底 · 1000 抽必出神品，禁忌不在盲盒池。生成失败不扣系统点；API调用可能计费。一次最多200抽。</p>${modeCard}${section('shop')}${section('gacha')}`;
+        el.querySelector('[data-gacha-mode]').onclick = e => {
+            const b = e.target.closest('[data-mode]'); if (!b) return;
+            try { this.app.settings.set('gachaMode', b.dataset.mode); } catch (err) { this.app.hub.toast('抽卡模式未保存：' + err.message, 6000); return; }
+            this.render(el); try { this.paintGachaMode(this.app.hub.engineFrame?.contentDocument); } catch { /* engine gone */ }
+        };
         el.querySelectorAll('form').forEach(form => form.onsubmit = e => {
             e.preventDefault(); const fd = new FormData(form), p = { scope: fd.get('scope'), world: fd.get('world'), exclude: fd.get('exclude'), original: fd.has('original'), repeats: fd.get('repeats'), themes: fd.getAll('themes'), categories: fd.getAll('categories'), uses: fd.getAll('uses') };
             if (!p.themes.length || !p.categories.length || !p.uses.length || (p.scope === 'named' && !String(p.world).trim())) { form.querySelector('[role=status]').textContent = '请至少选择一种题材/类别/用途，并填写指定世界。'; return; }
@@ -49,7 +72,7 @@ export class Commerce {
         const root = doc.querySelector('.mvu-sys'), btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = '商品定制 / 近期避重'; btn.style.cssText = 'padding:10px;margin:8px;border-radius:8px'; btn.onclick = () => this.app.hub.go('commerce');
         root?.querySelector('.btn-refresh-store')?.parentElement?.append(btn); off.push(() => btn.remove());
         this.strictStacking(frame, off);
-        this.paintShenPity(doc);
+        this.paintShenPity(doc); this.paintGachaMode(doc);
         // The snapshot original functions are untouched, but UI probabilities now agree with the local planner.
     }
     /** 1.1.1 audit: the original bagAdd (still used by 无限口袋) stacks on 名称+品级 only — route it through the strict
@@ -76,9 +99,9 @@ export class Commerce {
      * long effects ran past the output budget and the whole JSON failed) keeps its complete objects and the batch size
      * is halved for the rest; grade / category / theme are taken from the local slot.
      */
-    async generate(kind, slots, p, recent, token) {
+    async generate(kind, slots, p, recent, token, batch = 0) {
         const accepted = [], history = recent.slice(), done = new Set(), half = a => a.slice(0, Math.max(1, Math.floor(a.length / 2)));
-        let size = kind === 'gacha' ? GACHA_BATCH : SHOP_BATCH;
+        let size = batch || (kind === 'gacha' ? GACHA_BATCH : SHOP_BATCH);
         for (;;) {
             const left = slots.filter(x => !done.has(x.id)); if (!left.length) break;
             let pending = left.slice(0, size), reason = '', cut = false;
@@ -133,6 +156,7 @@ export class Commerce {
                 this.app.hub.toast('新库存已保存；刷新记录仅保留在本地日志。', 5000);
                 return;
             }
+            if (gachaMode(this.app.settings) === 'classic') return await this.classic(count, p, token, button, frame);
             // 1.1.1: the gacha settles every 10 pulls — each chunk rolls from the ledger as it is now, is generated,
             // checked and charged on its own. A failure stops there: what was settled stays, the rest is not charged.
             const all = []; let doneCount = 0;
@@ -149,7 +173,7 @@ export class Commerce {
                         if (JSON.stringify(current.盲盒状态 || {}) !== before) throw Error('保底状态已改变，请重新抽取');
                         L.spend(current, n * GACHA_FEE);
                         current.盲盒状态 = { ...(current.盲盒状态 || {}), ...roll.state }; current.待处理物品 ||= [];
-                        current.待处理物品.push(...products.map(it => ({ 名称: it.name, 品级: it.grade, 分类: it.category, 效果: `${it.effect}（来源：${it.world}；${it.origin}）`, 来源: '盲盒', 价格: L.TIER_PRICE[it.grade], 数量: 1 })));
+                        current.待处理物品.push(...products.map(pendingRow));
                         current.商品历史 = [...(current.商品历史 || []), ...products.map(it => ({ name: it.name, effect: it.effect, world: it.world, theme: it.theme, batch }))].slice(-160);
                         audit(current, kind, `盲盒 ${n} 抽${count > n ? `（第 ${doneCount + 1}–${doneCount + n} 抽 / 共 ${count}）` : ''}：扣 ${n * GACHA_FEE} 点，${products.length} 件进入待处理结果`);
                     });
@@ -165,6 +189,59 @@ export class Commerce {
             if (all.length) w.addCartRecord?.(root, `盲盒抽取（${doneCount}次）`, `${all.map(it => `[${it.grade}]${it.name}`).join('、')}；结果已存入待处理物品，保留后才入背包。`);
             if (doneCount === count) this.app.hub.toast('抽取已保存，请在待处理结果中保留或分解。', 5000);
         } finally { this.busy = false; button.disabled = false; button.textContent = old; }
+    }
+    /**
+     * 1.1.2 经典折叠 (the pre-1.1.1 way, as asked by players to spare the model): the whole draw is rolled from the ledger
+     * once, generated, then charged in ONE verified write. ≥50 pulls fold every 凡品 into one row, ≥100 pulls fold 灵品
+     * too — folded pulls never reach the model. Any failure before the write charges nothing.
+     */
+    async classic(count, p, token, button, frame) {
+        const w = frame.contentWindow, root = frame.contentDocument?.querySelector('.mvu-sys'), z = this.app.adapter.ledger(), fee = count * GACHA_FEE;
+        if (Number(z.系统点) < fee) throw Error('系统点不足；未开始生成。');
+        const before = JSON.stringify(z.盲盒状态 || {}), roll = rollGacha(z.盲盒状态, count), folded = foldGrades(count);
+        const counts = {}; for (const g of roll.grades) counts[g] = (counts[g] || 0) + 1;
+        const slots = planSlots(roll.grades.filter(g => !folded.includes(g)), p, z.当前世界);
+        button.textContent = slots.length ? `生成并校验中…（逐件 ${slots.length} 件，未扣系统点）` : '结算中…（未扣系统点）';
+        let products = [];
+        if (slots.length) try { products = await this.generate('gacha', slots, p, z.商品历史 || [], token, CLASSIC_BATCH); } catch (e) { throw Error(e.message.replace(/。?$/, '') + '。未扣系统点，保底未变化。'); }
+        const rows = [...products.map(pendingRow), ...folded.filter(g => counts[g]).map(g => foldedRow(g, counts[g]))];
+        const foldText = folded.filter(g => counts[g]).map(g => `${g} ${counts[g]} 件合为一行`).join('、');
+        const batch = crypto.randomUUID();
+        try {
+            await checkedCommit(this.app, token, current => {
+                if (JSON.stringify(current.盲盒状态 || {}) !== before) throw Error('保底状态已改变，请重新抽取');
+                L.spend(current, fee);
+                current.盲盒状态 = { ...(current.盲盒状态 || {}), ...roll.state }; current.待处理物品 ||= [];
+                current.待处理物品.push(...rows);
+                current.商品历史 = [...(current.商品历史 || []), ...products.map(it => ({ name: it.name, effect: it.effect, world: it.world, theme: it.theme, batch }))].slice(-160);
+                audit(current, 'gacha', `盲盒 ${count} 抽（经典折叠）：扣 ${fee} 点，${rows.length} 行进入待处理结果${foldText ? `（${foldText}）` : ''}`);
+            });
+        } catch (e) {
+            if (isUncertain(this.app, token)) throw Error(`盲盒 ${count} 抽的保存结果未能确认（可能已扣点并写入待处理），交易已冻结。请重载聊天核对系统点与待处理物品，不要重复抽取。（${e.message}）`);
+            throw Error(e.message.replace(/。?$/, '') + '。未扣系统点，保底未变化。');
+        }
+        refreshEngine(this.app); this.paintShenPity(frame.contentDocument);
+        try { w?.addCartRecord?.(root, `盲盒抽取（${count}次 · 经典折叠）`, `${rows.map(r => `[${r.品级}]${r.名称}${r.数量 > 1 ? ' ×' + r.数量 : ''}`).join('、')}；结果已存入待处理物品，保留后才入背包。`); } catch { /* cart is cosmetic */ }
+        this.app.hub.toast(`抽取已保存${foldText ? `（${foldText}）` : ''}，请在待处理结果中保留或分解。`, 5000);
+    }
+    /** 1.1.2: 抽卡模式 switch next to the original gacha buttons (and on the 商品定制 page). */
+    paintGachaMode(doc) {
+        const first = doc?.querySelector?.('.btn-gacha'); if (!first) return;
+        let box = doc.querySelector('.zt-gacha-mode');
+        if (!box) {
+            box = doc.createElement('div'); box.className = 'zt-gacha-mode';
+            box.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px dashed rgba(180,140,220,.45);border-radius:10px;font-size:12px;line-height:1.6';
+            (first.parentElement || first).after(box);
+            box.addEventListener('click', e => {
+                const b = e.target.closest?.('[data-zt-gacha-mode]'); if (!b) return;
+                e.preventDefault(); e.stopPropagation();
+                try { this.app.settings.set('gachaMode', b.dataset.ztGachaMode); } catch (err) { this.app.hub.toast('抽卡模式未保存：' + err.message, 6000); }
+                this.paintGachaMode(doc);
+            });
+        }
+        const mode = gachaMode(this.app.settings);
+        const btn = id => `<button type="button" data-zt-gacha-mode="${id}" aria-pressed="${mode === id}" style="margin-right:6px;padding:3px 10px;border-radius:999px;border:1px solid rgba(180,140,220,.6);cursor:pointer;font:inherit;${mode === id ? 'background:#8d5fc0;color:#fff' : 'background:transparent;color:inherit'}">${GACHA_MODES[id].label}</button>`;
+        box.innerHTML = `<b style="margin-right:8px">抽卡模式</b>${btn('classic')}${btn('chunk')}<div style="opacity:.8;margin-top:4px">${GACHA_MODES[mode].note}</div>`;
     }
     /** 1.1.1 audit: 保留 / 分解 / 品阶分解 / 全部保留 / 回收 — one verified write instead of the original 2–N saves. */
     async item(button, frame) {

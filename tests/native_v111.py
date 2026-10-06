@@ -85,6 +85,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)
     js("__zhutianApp.hub.scheduleEngineView(0)");page.wait_for_timeout(800)
     ok('距神品保底 shown on the gacha card',('距神品保底 700 抽' in js("__zhutianApp.hub.engineFrame.contentDocument.querySelector('.zt-shen-pity')?.textContent||''")),js("__zhutianApp.hub.engineFrame.contentDocument.querySelector('.zt-shen-pity')?.textContent||''"))
+    js("__zhutianApp.settings.set('gachaMode','chunk')")  # 1.1.2: these checks are about 十抽一结算 (default is now 经典折叠)
     before=z();r=gacha(20,True);after=z()
     ok('20 draws: cut-off answer salvaged, two 10-draw settlements, exact fee',r['r']=='ok' and after['系统点']==before['系统点']-200000 and len(after['待处理物品'])==20 and sum(1 for x in after.get('操作日志',[]) if '盲盒 10 抽' in x['text'])==2,(r,after['系统点'],len(after['待处理物品'])))
     ok('神品保底计数 migrated from 累计抽数 and advanced',after['盲盒状态'].get('神品保底计数',-1)>=300 and after['盲盒状态']['累计抽数']==320,after['盲盒状态'])
@@ -94,6 +95,7 @@ with sync_playwright() as p:
     calls['product']=0;mode['bad_after']=0;before=z();r=gacha(10);after=z();mode['bad_after']=None
     ok('failure before any settlement: nothing charged',r['r']!='ok' and '未扣系统点' in r['r'] and after['系统点']==before['系统点'] and after['盲盒状态']==before['盲盒状态'],r['r'][:120])
 
+    js("__zhutianApp.settings.set('gachaMode',undefined)")  # leave the shared test install on the default
     # ---------- #5 page shift ----------
     js("()=>{const d=document.createElement('div');d.id='zt-qa-tall';d.style.cssText='height:3000px;width:1px';document.body.append(d);}")
     can=js("()=>{document.documentElement.scrollTop=300;document.body.scrollTop=300;const v=document.scrollingElement.scrollTop;document.documentElement.scrollTop=0;document.body.scrollTop=0;return v}")

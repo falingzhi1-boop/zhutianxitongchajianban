@@ -103,6 +103,8 @@ with sync_playwright() as p:
     js(page, "h.go('set');return 1"); page.wait_for_timeout(500)
     page.locator('#page-set details[data-tier=adv] > summary').click(); page.wait_for_timeout(200)   # 1.0: 管理员 lives in the folded 进阶设置 group
     page.locator('#page-set [data-act="admin"]').click()
+    page.wait_for_function("__zhutianApp.hub.page==='admin'", timeout=15000)   # 1.1.2: the terminal admin page; the original overlay is one click away
+    page.locator('#page-admin [data-original]').click()
     page.wait_for_function("(()=>{const d=__zhutianApp.hub.engineFrame?.contentDocument;const o=d?.querySelector('#admin-overlay');return o&&!o.hidden})()", timeout=15000)
     ok('设置 → 管理员控制台 opens the original admin panel', True)
     ok('the engine is not reloaded while the admin panel is open (busy guard)', js(page, "return h.engineBusy") is True)

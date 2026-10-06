@@ -3,6 +3,7 @@ import { OperationRecords } from './src/operation-records.js';
 import { Commerce } from './src/commerce.js';
 import { StoryCollect } from './src/story-collect.js';
 import { Bonds } from './src/bonds.js';
+import { AdminConsole } from './src/admin.js';
 import original from './vendor/original/runtime.js';
 import {HostAdapter} from './src/host-adapter.js';
 import {Hub} from './src/hub.js';
@@ -88,7 +89,7 @@ class App {
         try{this.lilith=new LilithStage(this).start();this.parts.push(this.lilith);}catch(e){console.warn('[诸天] 莉莉丝界面角色未启动',e);}
         // 0.9.0: phones get the terminal full screen (follows the keyboard; landscape = left rail). Before the float, which asks it.
         if(this.hub)try{this.mobile=new MobileLayout(this).start();this.parts.push(this.mobile);}catch(e){console.warn('[诸天] 手机布局未启动',e);}
-        for (const [key, Module] of [['windowControls', WindowControls], ['records', OperationRecords], ['commerce', Commerce], ['collect', StoryCollect], ['bonds', Bonds]]) {
+        for (const [key, Module] of [['windowControls', WindowControls], ['records', OperationRecords], ['commerce', Commerce], ['collect', StoryCollect], ['bonds', Bonds], ['adminConsole', AdminConsole]]) {
             try { this[key] = new Module(this).start(); this.parts.push(this[key]); }
             catch (e) { console.error('[诸天 1.1] 模块未启动', key, e); globalThis.toastr?.error?.(key + ' 未启动：' + e.message, '诸天'); }
         }

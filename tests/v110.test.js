@@ -76,7 +76,8 @@ test('1.1 switching incoming target retains previous data; different worlds do n
     keepPerson(next,{姓名:'小雨',世界:'乙',好感度:3});assert.equal(next.羁绊库.length,3);
 });
 test('1.1 view is read-only; members and summons remain non-romance identities',()=>{
-    const z={恋爱目标:{姓名:'甲'},聊天群:{成员:[{id:'g1',名称:'乙'}]},打手:[{名称:'丙'}]};const old=JSON.stringify(z);const list=listBonds(z);assert.equal(list.length,3);assert.equal(JSON.stringify(z),old);assert.equal(list.find(x=>x.姓名==='乙').关系,'群员');
+    // 1.1.2: chat-group members are no longer listed until the player pulls them in (see tests/v112.test.js)
+    const z={恋爱目标:{姓名:'甲'},聊天群:{成员:[{id:'g1',名称:'乙'}]},打手:[{名称:'丙'}]};const old=JSON.stringify(z);const list=listBonds(z);assert.equal(list.length,2);assert.equal(JSON.stringify(z),old);assert.equal(list.find(x=>x.姓名==='乙'),undefined);assert.equal(list.find(x=>x.姓名==='丙').关系,'打手');
 });
 test('1.1 manual person edits not overwritten by stale active mirror on view',()=>{
     const z={当前世界:'甲',恋爱目标:{姓名:'小雨',好感度:40}};migrateBonds(z);keepPerson(z,{姓名:'小雨',世界:'甲',好感度:70});assert.equal(listBonds(z)[0].好感度,70);
