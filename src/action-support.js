@@ -19,6 +19,8 @@ export async function checkedCommit(app, token, mutate) {
     }, { type: 'chat', verify: true, expectedIdentity: token.id });
     return result;
 }
+/** 1.1.1 audit: did a failed commit leave the chat frozen as "written or not — unknown"? (Bridge transactions.uncertain) */
+export function isUncertain(app, token) { return !!token?.id && !!app.adapter.transactions?.uncertain?.has(token.id); }
 export async function askFeature(app, route, system, user, maxTokens = 4096) {
     const c = readConfigs(app.bridge).status || {};
     return app.bridge.generateRaw({ route, user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], max_tokens: maxTokens,

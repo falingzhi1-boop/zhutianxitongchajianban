@@ -11,14 +11,23 @@
 import { BRIDGE_KEY, STATUSBAR_CLASS } from './contracts.js';
 import { extractVoices, buildVoiceCard, hasVoice, LEGACY_VOICE_ID } from './voice-box.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
+import { displayPanel } from './panel-guard.js';
+import { scrollWithin, resetPageScroll } from './page-scroll.js';
 
 export const PANEL_RE = /<ZhuTianPanel>([\s\S]*?)<\/ZhuTianPanel>/g;
 const SLOT = i => `ZTPANELSLOT${i}ZT`;
 const TOKEN = /(ZTPANELSLOT\d+ZT|ZTVOICESLOT\d+ZT)/;
 const escapeText = s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 export function hash(text) { let h = 2166136261; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+/** 1.1.1: a block that has story / <think> / other cards' code inside is shown cleaned — the stray text goes back into
+ *  the story in front of the block, a block without a single field is plain story. Healthy blocks are returned as they
+ *  are (same string: the engine keys each floor on the hash of the block). */
 export function splitPanels(text) {
-    const panels = []; const stripped = String(text ?? '').replace(PANEL_RE, (_, inner) => { panels.push(inner); return `\n\n${SLOT(panels.length - 1)}\n\n`; });
+    const panels = []; const stripped = String(text ?? '').replace(PANEL_RE, (_, inner) => {
+        const d = displayPanel(inner), story = d.story ? `\n\n${d.story}\n\n` : '';
+        if (!d.ok) return story || ' ';
+        panels.push(d.panel); return `${story}\n\n${SLOT(panels.length - 1)}\n\n`;
+    });
     return { panels, stripped };
 }
 /** Reads "字段: 值" / "字段：值" lines of a panel. */
@@ -339,7 +348,8 @@ export class StatusBarHost {
         for (let i = chat.length - 1; i >= 0; i--) {
             const m = chat[i]; if (!m || m.is_user || m.is_system) continue;
             PANEL_RE.lastIndex = 0; const hit = PANEL_RE.exec(m.mes || ''); PANEL_RE.lastIndex = 0;
-            if (hit) { const all = splitPanels(m.mes || '').panels; return { id: i, panel: all.at(-1) ?? hit[1] }; }
+            // 1.1.1: a block with no field at all (story wrapped in tags) is not a data block
+            if (hit) { const all = splitPanels(m.mes || '').panels; if (all.length) return { id: i, panel: all.at(-1) }; }
         }
         return null;
     }
@@ -376,7 +386,7 @@ export class StatusBarHost {
     isCurrent(iframe) { return this.registry?.frames.get(this.frames.get(iframe))?.isCurrent() === true; }
     release(iframe) { const t = this.frames.get(iframe); if (t) { this.registry?.frames.get(t)?.dispose(); this.registry?.frames.delete(t); this.frames.delete(iframe); } }
     latestFrame() { const all = [...document.querySelectorAll('#chat .' + STATUSBAR_CLASS)]; return all.at(-1) || null; }
-    focusLatest() { if (this.openHub) { this.openHub('ov'); return true; } const box = this.latestFrame(); if (!box) return false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.querySelector('button.zt-sb-history,.zt-sb-compact')?.click(); return true; }
+    focusLatest() { if (this.openHub) { this.openHub('ov'); return true; } const box = this.latestFrame(); if (!box) return false; scrollWithin(box, { behavior: 'smooth', block: 'center' }); resetPageScroll(); box.querySelector('button.zt-sb-history,.zt-sb-compact')?.click(); return true; }
     /** New-chat initialization using the ORIGINAL ensureSystemVars() of the status bar (same defaults, same schema). */
     async initializeChat() {
         if (!this.template) throw Error('原版状态栏模板未加载。');

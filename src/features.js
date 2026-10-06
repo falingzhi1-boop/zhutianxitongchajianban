@@ -76,13 +76,15 @@ export class Features {
         const backupRead = await readDisk(backup);
         if (stable(backupRead?.entries) !== stable(book.entries)) throw Error('世界书备份读回不一致，未更新原书。');
         const legacy = latestRules(this.app.original.ZhuTianBuiltinRules, { legacy: true }).rules;
+        // 1.1.1: what the previous version installed is not a user edit either (no false「自定义修改」question)
+        const known = [latestRules(this.app.original.ZhuTianBuiltinRules, { previous: true }).rules, latestRules(this.app.original.ZhuTianBuiltinRules, { legacy: true, previous: true }).rules];
         const r = mergeWorldbook(book, this.latestRules());
         let preserved = 0; const seen = new Set();
         for (const old of Object.values(book.entries)) {
             if (seen.has(old.comment)) continue; // duplicate comment rows are kept verbatim, not replaced
             seen.add(old.comment);
             const base = legacy.find(x => x.comment === old.comment), next = Object.values(r.book.entries).find(x => x.comment === old.comment);
-            if (base && next && old.content !== base.content && old.content !== next.content) {
+            if (base && next && old.content !== base.content && old.content !== next.content && !known.some(list => list.find(x => x.comment === old.comment)?.content === old.content)) {
                 if (!globalThis.confirm(`「${old.comment}」内容与插件旧版不同，可能有你的自定义修改。已备份到 ${backup}。确定覆盖为新版？取消只保留这一条。`)) { const uid = next.uid; r.book.entries[uid] = { ...structuredClone(old), uid }; preserved++; }
             }
         }
@@ -309,6 +311,8 @@ export class Features {
             ['酒馆助手 · 变量宏', st.get('macroLike') === false ? '⏸ 已关闭' : tavernHelperMacrosActive(this.ctx) ? '↪ 酒馆助手在运行，由它处理（插件让位）' : !app.macros ? '⚠ 未启动（见控制台）' : /缺少/.test(app.macros.state || '') ? `⚠ ${esc(app.macros.state)}` : `✅ 原生处理 {{get_chat_variable::…}}（${app.macros?.stats?.prompts || 0} 次生成）`],
             ['酒馆助手脚本 · 莉莉丝契约空间', app.assistant ? '✅ 原版代码经原生桥接运行（记忆、工作台、私聊、连接、立绘）' : '❌ ' + esc(app.assistantError || '未启用')],
             ['真实触摸互动', app.touch?.stage ? on('touchGestures', `轻点 + 抚摸 + 长按 + 视线跟随（轻点 ${app.touch.stats.taps} / 抚摸 ${app.touch.stats.strokes} / 长按 ${app.touch.stats.holds}）`) : '… 打开莉莉丝窗口后挂载'],
+            ['数据块格式守卫（1.1.1）', app.panelGuard ? (st.get('panelGuard')?.repair === false ? '⏸ 自动修复已关闭 · ' : '✅ ') + esc(app.panelGuard.diag()) : '⚠ 未启动（见控制台）'],
+            ['重roll 记账回滚（1.1.1）', app.rerollGuard ? `✅ swipe / 重新生成前先回滚本楼快照（本次会话回滚 ${app.rerollGuard.stats.rolled} 次 / 重新记账 ${app.rerollGuard.stats.rebooked} 次）` : '⚠ 未启动（见控制台）'],
             ['API · 状态栏', apiText(api.status)],
             ['API · 莉莉丝助手 / 私聊', apiText(api.assistant)],
             ['仍启用的旧版内容', legacy.length ? '⚠ ' + legacy.map(i => esc(`${i.kind === 'regex' ? '正则' : '脚本'}：${i.name}`)).join('；') + ' — 点“一键接管旧版”停用' + (left('script').length ? '（旧助手脚本与插件同时运行会出现两个莉莉丝）' : '') : '✅ 无，已完全由插件接管'],

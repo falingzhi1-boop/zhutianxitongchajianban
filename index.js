@@ -28,6 +28,8 @@ import {FX} from './src/fx.js';
 import {LilithStage} from './src/lilith-stage.js';
 import {SkillSync} from './src/skill-sync.js';
 import { Appraise } from './src/appraise.js';
+import { PanelGuard } from './src/panel-guard.js';
+import { RerollGuard } from './src/reroll-guard.js';
 import {LilithFloat} from './src/lilith-float.js';
 import {MobileLayout} from './src/mobile.js';
 import {ErrorLog} from './src/diag-report.js';
@@ -76,6 +78,9 @@ class App {
         try{this.skills=new SkillSync(this).start();this.parts.push(this.skills);}catch(e){console.warn('[诸天] 修行熟练度未启动',e);}
         // 1.0: 品阶鉴定 — 剧情里得到的功法 / 物品不再被锁死在凡品（AI 鉴定或手动修正，只升不降）
         try{this.appraise=new Appraise(this).start();this.parts.push(this.appraise);}catch(e){console.warn('[诸天] 品阶鉴定未启动',e);}
+        // 1.1.1: 数据块格式守卫 — 新回复的数据块混入正文 / 没闭合 / 写进思维链时自动整理；缺失时可补记
+        try{this.panelGuard=new PanelGuard(this).start();this.parts.push(this.panelGuard);}catch(e){console.warn('[诸天] 数据块格式守卫未启动',e);}
+        try{this.rerollGuard=new RerollGuard(this).start();this.parts.push(this.rerollGuard);}catch(e){console.warn('[诸天] 重roll 记账回滚未启动',e);}
         this.touch=new TouchLayer(this.settings);this.parts.push(this.touch);
         if(this.assistant){this.assistant.onMotion=m=>this.touch.attach(m);if(this.assistant.motion)this.touch.attach(this.assistant.motion);}
         this.portrait=new Portrait(this);this.parts.push(this.portrait);

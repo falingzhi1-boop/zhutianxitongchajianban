@@ -88,7 +88,7 @@ test('story prompt carries the real source of what came through the group', () =
 
 test('worldbook: original 35 kept, outdated admin/TH notes patched, 聊天群 entry added', () => {
     const base = original.ZhuTianBuiltinRules, { rules, applied, skipped } = latestRules(base);
-    assert.equal(base.length, 35); assert.equal(rules.length, 36); assert.equal(skipped.length, 0); assert.equal(applied.length, 2);
+    assert.equal(base.length, 35); assert.equal(rules.length, 36); assert.equal(skipped.length, 0); assert.equal(applied.length, 4);   // 1.1.1: +2 神品保底
     const e05 = rules.find(r => r.comment === '05｜核心｜状态栏规则补充').content;
     assert.ok(!e05.includes('◆ 连点五次打开') && e05.includes('管理员控制台」打开') && e05.includes('不需要酒馆助手'));
     const g = rules[35]; assert.equal(g.comment, '36｜联动｜诸天聊天群（插件）'); assert.equal(g.uid, 35); assert.equal(g.constant, true);

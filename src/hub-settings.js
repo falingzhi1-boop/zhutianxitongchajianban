@@ -172,6 +172,8 @@ ${groups}<p class="zt-set-none" hidden>没有找到匹配的设置。</p>`;
             admin: () => app.hub.openAdmin(),
             init: () => app.features.initChat().then(r => { t?.success(r.created ? `已按原版规则初始化账本（系统点 ${r.points}）` : '账本已存在；已按原版规则补齐缺失字段', '诸天'); app.hub.reloadEngine(); }).catch(e => t?.error(errorLine(e), '诸天')),
         };
-        try { const r = map[id]?.(); r?.catch?.(e => t?.error(errorLine(e), '诸天')); } catch (e) { t?.error(errorLine(e), '诸天'); }
+        // 1.1.1: sections added by modules can bring their own buttons ({ actions: { id: fn } })
+        const own = this.extra.map(x => (typeof x === 'function' ? null : x?.actions?.[id])).find(f => typeof f === 'function');
+        try { const r = (map[id] || own)?.(); r?.catch?.(e => t?.error(errorLine(e), '诸天')); } catch (e) { t?.error(errorLine(e), '诸天'); }
     }
 }

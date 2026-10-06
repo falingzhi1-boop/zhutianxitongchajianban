@@ -3,7 +3,7 @@ import { SHOP_RULE, STORY_RULE, BOND_RULE } from './commerce-rules.js';
 // The 35 original v1.1 entries stay byte-for-byte in vendor/original (provenance-checked); this file only applies the
 // small native corrections on top when the book is built, and adds the entries for features the original never had.
 // Patches are exact text replacements: if a replaced text is missing (an edited copy), that patch is skipped, never guessed.
-export const WORLDBOOK_REV = '1.1.0';
+export const WORLDBOOK_REV = '1.1.1';
 
 /** 0.8.4 强力模块: worldbook entries the user can switch from 外挂管理 (book-wide). `def` = state in a NEW install;
  *  神豪挥霍 and 诸天打手 are constant (injected every turn) in v1.1 and dominate the economy/fights, so they start off.
@@ -36,6 +36,13 @@ const PATCHES = [
     { comment: '05｜核心｜状态栏规则补充',
       from: '会被替换成真实数值（需要酒馆助手）。',
       to: '会被替换成真实数值（本插件原生支持，不需要酒馆助手）。' },
+    // 1.1.1: 神品 pity — the 1000th pull without a 神品 is a 神品 (matches the 0.1 % rate); 仙品 pity unchanged
+    { comment: '11｜商城｜万界盲盒', since: '1.1.1',
+      from: '神品次数}} 次（不重置保底）\n',
+      to: '神品次数}} 次（不重置仙品保底）\n- 神品保底进度：{{get_chat_variable::诸天系统.盲盒状态.神品保底计数}}/1000（满1000必出神品；1.1.1 前的存档在下一次抽取时补算）\n' },
+    { comment: '11｜商城｜万界盲盒', since: '1.1.1',
+      from: '神品出货只记录次数，不重置仙品保底。禁忌品阶绝对不可通过盲盒抽出。',
+      to: '神品出货不重置仙品保底；连续 1000 抽没有出神品时，第 1000 抽必出神品（神品保底重置，仙品保底照常累计）。禁忌品阶绝对不可通过盲盒抽出。' },
 ];
 
 const GROUP_RULE = `<rule_setting_simple>
@@ -56,10 +63,12 @@ function extraEntries(base) {
         constant: true, order: 110, position: 4, depth: 2, role: 0, disable: false }];
 }
 
-/** Original rules → the worldbook entries this version installs. Returns { rules, applied, skipped }. */
-export function latestRules(original, { legacy = false } = {}) {
+/** Original rules → the worldbook entries this version installs. Returns { rules, applied, skipped }.
+ *  `previous` = without this version's own patches (what an unmodified older install contains; not a customization). */
+export function latestRules(original, { legacy = false, previous = false } = {}) {
     const rules = structuredClone(Array.isArray(original) ? original : []), applied = [], skipped = [];
     for (const p of PATCHES) {
+        if (previous && p.since === WORLDBOOK_REV) continue;   // the book as the previous version installed it
         const r = rules.find(x => x.comment === p.comment);
         if (r && typeof r.content === 'string' && r.content.includes(p.from)) { r.content = r.content.replace(p.from, p.to); applied.push(p.from); }
         else skipped.push(p.from);

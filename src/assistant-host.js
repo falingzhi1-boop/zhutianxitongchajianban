@@ -9,6 +9,7 @@ import mountOriginalAssistant from '../vendor/original/assistant-runtime.js';
 import { streamedCompletion, reportApiError } from './api-stream.js';
 import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL, MAIN_API_URL, endpointOf } from './th-bridge.js';
 import { classifyAssistant, readRoutes, resolveRoute, routeLabel } from './api-routes.js';
+import { scrollWithin, resetPageScroll } from './page-scroll.js';
 
 const LEGACY_DOM_ID = 'zt-memory-assistant-v1';
 
@@ -226,7 +227,7 @@ export class AssistantHost {
                 el.style.outline = '2px solid var(--accent,#c59bee)'; el.style.outlineOffset = '3px'; el.style.borderRadius = '6px';
                 setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 4500);
             }
-            (on?.checked ? save : on)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+            const target = on?.checked ? save : on; if (target) { scrollWithin(target, { block: 'center', behavior: 'smooth' }); resetPageScroll(); }
         };
         btn.addEventListener('click', ev => {
             if (on && led && on.checked && led.checked) return;          // ticked: let the original decide (it also checks "saved")

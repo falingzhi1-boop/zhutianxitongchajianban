@@ -1,5 +1,6 @@
 import { esc } from './hub.js';
 import { hash } from './statusbar-host.js';
+import { stripPanels } from './panel-guard.js';
 import { capture, assertCapture, checkedCommit, askFeature, parseObject, audit, cleanText, refreshEngine } from './action-support.js';
 import { GRADE_CAP, normName } from './skill-sync.js';
 
@@ -56,7 +57,7 @@ export class StoryCollect {
     sources(first, last) {
         const chat = this.app.adapter.context().chat;
         if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < first || last - first > 9 || last >= chat.length) throw Error('一次选择1–10个有效楼层');
-        const sources = chat.slice(first, last + 1).flatMap((m, i) => m.is_user || m.is_system ? [] : [{ floor: first + i, sig: hash(String(m.mes) + '|' + (m.swipe_id || 0)), text: String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '') }]);
+        const sources = chat.slice(first, last + 1).flatMap((m, i) => m.is_user || m.is_system ? [] : [{ floor: first + i, sig: hash(String(m.mes) + '|' + (m.swipe_id || 0)), text: stripPanels(m.mes) }]);
         if (!sources.length || sources.reduce((n, x) => n + x.text.length, 0) > 24000) throw Error('请选择有正文的助手楼层，总长度不超过24000字');
         return sources;
     }

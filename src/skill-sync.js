@@ -18,7 +18,7 @@
 import { STORAGE, inert } from './contracts.js';
 import * as L from './ledger-ops.js';
 import { esc, fmtNum } from './hub.js';
-import { PANEL_RE } from './statusbar-host.js';
+import { stripPanels } from './panel-guard.js';
 
 export const STAGES = ['未入门', '入门', '熟练', '精通', '宗师', '入道'];
 export const STAGE_AT = Object.freeze({ 入门: 100, 熟练: 500, 精通: 2000, 宗师: 10000 });
@@ -92,7 +92,7 @@ export function panelField(panel, key) {
 }
 /** Story text of a floor without data blocks, tags and code. */
 export function storyText(mes) {
-    return String(mes || '').replace(PANEL_RE, ' ').replace(/<(style|script)[\s\S]*?<\/\1>/gi, ' ').replace(/```[\s\S]*?```/g, ' ').replace(/<[^>]+>/g, ' ');
+    return stripPanels(mes).replace(/<(style|script)[\s\S]*?<\/\1>/gi, ' ').replace(/```[\s\S]*?```/g, ' ').replace(/<[^>]+>/g, ' ');
 }
 /** 实战积累 candidates (pure). Returns [{name, gain, before, after, from, to}] — nothing when the panel already handled it. */
 export function practiceGains(z, story, practiceLine, max = PRACTICE_MAX) {

@@ -188,7 +188,7 @@ test('API: the terminal 连接 page hosts the API 中心 form; the original form
 // ---------- 强力模块 ----------
 test('强力模块: new installs start with 神豪挥霍 and 诸天打手 off; every listed entry exists in the book', () => {
     const rules = latestRules(original.ZhuTianBuiltinRules).rules;
-    assert.equal(WORLDBOOK_REV, '1.1.0');
+    assert.equal(WORLDBOOK_REV, '1.1.1');
     assert.deepEqual(DEFAULT_OFF, ['08｜核心｜神豪挥霍', '13｜外挂｜诸天打手']);
     for (const m of BALANCE_MODULES) assert.ok(rules.some(r => r.comment === m.comment), m.comment);
     assert.deepEqual(rules.filter(r => r.disable).map(r => r.comment), DEFAULT_OFF);

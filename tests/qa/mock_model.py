@@ -101,6 +101,19 @@ def route(allt):
     return STORY
 
 
+V111_POLLUTED = '（1.1.1 隔离测试）莉莉丝托腮看着你。\n\n<zhutianpanel>\n<think>先想一下数据块怎么写</think>\n他推开了洞府石门，寒气扑面而来。\n\n系统点: 1300\n好感度: 35/100\n当前任务: 引气入体\n任务进度: 40\n功法修炼: 领悟《太虚剑意》[仙品]\n系统播报: 宿主今天很努力\n\n石门在身后缓缓合拢。'
+V111_MISSING = '（1.1.1 隔离测试）这一轮只有正文，你在山道上遇见了一位白衣剑客。'
+
+
+def audit_reroll(last_user, msgs):
+    """1.1.1 审计 #7: like a real model, the new 名望 = the value the prompt shows (+50) and 持有金额 = last block in history (+100)."""
+    fame = int((re.search(r'名望(\d+)', last_user) or [0, 0])[1])
+    hist = ''.join(text_of([m]) for m in msgs if m.get('role') == 'assistant')
+    money = int((re.findall(r'持有金额:\s*(\d+)', hist) or ['500'])[-1])
+    return (f'（审计重roll）你完成了一次委托，获得名望。{time.time_ns()}\n\n<ZhuTianPanel>\n系统点: 1200\n好感度: 30/100\n当前任务: 引气入体\n'
+            f'任务进度: 30\n当前货币: 灵石\n持有金额: {money + 100}\n专属资源: 天命印记0｜血脉结晶0｜因果筹码0｜名望{fame + 50}｜岁月沉淀0\n'
+            f'功法修炼: 无\n系统播报: 重roll测试\n</ZhuTianPanel>')
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
@@ -129,6 +142,11 @@ class H(BaseHTTPRequestHandler):
         with open(args.log, 'a', encoding='utf8') as f:
             f.write(json.dumps({'t': time.time(), 'path': self.path, 'auth': self.headers.get('Authorization', ''), 'body': body}, ensure_ascii=False) + '\n')
         reply = route(text_of(body.get('messages')) or str(body.get('prompt', '')))
+        # 1.1.1 数据块格式守卫: a polluted / missing data block, chosen by a marker in the LAST user message only
+        last_user = next((text_of([m]) for m in reversed(body.get('messages') or []) if m.get('role') == 'user'), '')
+        if '【1.1.1污染】' in last_user: reply = V111_POLLUTED
+        elif '【1.1.1缺块】' in last_user: reply = V111_MISSING
+        elif '【审计重roll】' in last_user: reply = audit_reroll(last_user, body.get('messages') or [])
         # 0.8.4 timeout check: a message containing 慢速测试 takes ~66 s (longer than the original fixed 60 s abort)
         slow = '慢速测试' in (text_of(body.get('messages')) or '')
         if slow: reply = '慢速回复：' + '流' * 10

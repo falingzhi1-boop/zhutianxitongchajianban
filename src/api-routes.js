@@ -25,6 +25,7 @@ export const ROUTES = Object.freeze([
     { id: 'assess', label: '战力评估', base: 'status', group: '状态栏', desc: '能力档位评估' },
     { id: 'appraise', label: '品阶鉴定', base: 'status', group: '终端', desc: '剧情里得到的功法 / 物品重新判定品阶' },
     { id: 'group', label: '诸天聊天群', base: 'status', group: '终端', desc: '群聊、私聊群员、招募令、降临、挂单' },
+    { id: 'panel', label: '数据块补记', base: 'status', group: '终端', desc: '回复里缺少数据块时，按本轮正文补写一次（1.1.1）' },
     { id: 'chat', label: '莉莉丝私聊', base: 'assistant', group: '莉莉丝', desc: '和莉莉丝私下聊天' },
     { id: 'memory', label: '莉莉丝自动记忆', base: 'assistant', group: '莉莉丝', desc: '每轮整理诸天记忆' },
     { id: 'workbench', label: '莉莉丝工作台', base: 'assistant', group: '莉莉丝', desc: '分析、规划、复核建议' },

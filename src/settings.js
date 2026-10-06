@@ -42,7 +42,8 @@ const DEFAULTS = Object.freeze({
     world: { enabled: true, theme: 'auto', prompt: true },  // 0.7.0 世界主题: auto | default | xianxia | cyber | eerie; prompt = ask the model to record 当前世界/世界类型
     lilith: { react: true, pageLines: true, camera: true, story: true }, // 0.7.0 莉莉丝界面角色; 0.8.0 story = 气泡播报 + 点空白处的剧情台词
     appraise: { prompt: true, raise: true },                  // 1.0 品阶鉴定: 收录写明品阶的提示 · 「收录:X[更高品阶]」更正剧情功法
-    skills: { prompt: true, practice: true, cardAuto: false },   // 0.8.0 修行: 功法实效提示 · 实战积累 · 角色卡功法自动同步
+    skills: { prompt: true, practice: true, cardAuto: false },
+    panelGuard: { repair: true, backfill: 'missing', remind: true, skillHint: true }, // 1.1.1 数据块格式守卫: 自动修复新回复 · 缺失时补记 (missing | off) · 每轮格式提醒 · 剧情功法未入账提示   // 0.8.0 修行: 功法实效提示 · 实战积累 · 角色卡功法自动同步
     live2d: { accepted: false, coreUrl: LIVE2D_CORE_URL, model: '', scale: 1, x: 0, y: 0, follow: true, lipsync: true, idle: true, moodMap: {} },
     scriptVariables: {},
     legacyImported: false,

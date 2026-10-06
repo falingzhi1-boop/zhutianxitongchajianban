@@ -11,6 +11,7 @@
 //   * inputs use 16 px text (iOS zooms the whole page on smaller ones) and tap targets grow (styles/hub.css).
 // Layout only: no chat data, no ledger writes, the original window manager (vendor/original) is untouched — the
 // full-screen rules are CSS overrides keyed on dialog[data-zt-mobile]. Setting mobileLayout: auto | full | window.
+import { scrollWithin } from './page-scroll.js';
 
 /** Which phone layout applies (pure, for tests). Returns '' (normal window), 'port' or 'land'. */
 export function phoneLayout(mode, { w = 1280, h = 800, coarse = false } = {}) {
@@ -146,7 +147,7 @@ export class MobileLayout {
         if (!this.full || !el?.matches?.(TEXT_INPUT)) return;
         clearTimeout(this.revealT);
         // the keyboard animates in for ~250–400 ms; scroll after it settled, only inside the terminal's own scroll boxes
-        this.revealT = setTimeout(() => { try { if (el.isConnected && el.getRootNode()?.activeElement === el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch { /* ignore */ } }, 420);
+        this.revealT = setTimeout(() => { try { if (el.isConnected && el.getRootNode()?.activeElement === el) scrollWithin(el, { block: 'center' }); } catch { /* ignore */ } }, 420);
     }
     dispose() {
         this.dead = true; clearTimeout(this.revealT); if (this.raf) cancelAnimationFrame(this.raf);

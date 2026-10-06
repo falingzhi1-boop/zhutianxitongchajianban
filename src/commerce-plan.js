@@ -13,16 +13,55 @@ export function preferences(raw = {}) {
     const list = (a, all) => Array.isArray(a) && a.some(x => all.includes(x)) ? [...new Set(a.filter(x => all.includes(x)))] : all.slice();
     return { scope: ['mixed', 'current', 'named'].includes(raw.scope) ? raw.scope : 'mixed', world: String(raw.world || '').trim().slice(0, 80), themes: list(raw.themes, THEMES), categories: list(raw.categories, CATEGORIES), uses: list(raw.uses, USES), exclude: String(raw.exclude || '').slice(0, 400), original: raw.original !== false, repeats: raw.repeats === 'consumables' ? 'consumables' : 'avoid' };
 }
+/** 仙品 pity (100th pull) and, since 1.1.1, 神品 pity (1000th pull — matches the 0.1 % rate of the worldbook). */
+export const XIAN_PITY = 100, SHEN_PITY = 1000;
+/**
+ * 1.1.1: 神品保底计数 counts pulls since the last 神品 (a 仙品 does not reset it; a 神品 still does not reset the 仙品
+ * pity — "神品出货只记录次数，不重置仙品保底"). Old saves: without a 神品 so far, every pull counted (累计抽数, capped);
+ * after one we cannot know when it came, so the count starts at 0.
+ */
 export function rollGacha(old = {}, count, rand = randomUnit) {
     if (!Number.isInteger(count) || count < 1 || count > 200) throw Error('抽取次数须为1–200');
     const state = Object.fromEntries(['累计抽数', '保底计数', '仙品次数', '神品次数'].map(k => [k, Math.max(0, Math.floor(Number(old[k]) || 0))]));
+    state.神品保底计数 = shenCounter(old);
     const grades = [];
     for (let i = 0; i < count; i++) {
-        const r = rand(); const g = state.保底计数 >= 99 ? '仙品' : r < .001 ? '神品' : r < .02 ? '仙品' : r < .4 ? '灵品' : '凡品';
+        const r = rand();
+        const g = state.神品保底计数 >= SHEN_PITY - 1 ? '神品' : state.保底计数 >= XIAN_PITY - 1 ? '仙品' : r < .001 ? '神品' : r < .02 ? '仙品' : r < .4 ? '灵品' : '凡品';
         grades.push(g); state.累计抽数++;
-        if (g === '仙品') { state.仙品次数++; state.保底计数 = 0; } else { state.保底计数++; if (g === '神品') state.神品次数++; }
+        if (g === '神品') { state.神品次数++; state.神品保底计数 = 0; state.保底计数++; }
+        else if (g === '仙品') { state.仙品次数++; state.保底计数 = 0; state.神品保底计数++; }
+        else { state.保底计数++; state.神品保底计数++; }
     }
     return { state, grades };
+}
+/** 神品保底计数 of a (possibly pre-1.1.1) 盲盒状态. */
+export function shenCounter(old = {}) {
+    const v = old?.神品保底计数;
+    if (v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v))) return Math.max(0, Math.floor(Number(v)));
+    const n = k => Math.max(0, Math.floor(Number(old?.[k]) || 0));
+    return n('神品次数') > 0 ? 0 : Math.min(n('累计抽数'), SHEN_PITY - 1);
+}
+/** Pulls left until the guaranteed 神品 (1 = the next pull). */
+export const shenPityLeft = (state = {}) => Math.max(1, SHEN_PITY - shenCounter(state));
+/** 1.1.1: complete objects of a JSON array that was cut off (output budget hit) — brace matching, strings respected. */
+export function parseObjectsLoose(text) {
+    const s = String(text || ''), out = []; let depth = 0, start = -1, inStr = false, esc = false;
+    const from = s.indexOf('['); if (from < 0) return out;
+    for (let i = from + 1; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) { if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === '{') { if (depth++ === 0) start = i; }
+        else if (ch === '}' && depth > 0 && --depth === 0) { try { const o = JSON.parse(s.slice(start, i + 1)); if (o && typeof o === 'object') out.push(o); } catch { /* skip a broken one */ } }
+        else if (ch === ']' && depth === 0) break;
+    }
+    return out;
+}
+/** Grade / category / theme are decided locally per slot: a model that echoes them wrongly no longer fails the batch. */
+export function fitSlot(row, slot) {
+    if (!row || typeof row !== 'object') return row;
+    return { ...row, grade: slot.grade, category: slot.category, ...(slot.world ? {} : { theme: slot.theme }) };
 }
 export function shopGrades(z, rand = randomUnit) {
     const grades = ['凡品', '凡品', '凡品', '凡品', '灵品', '灵品', '灵品', '仙品'];

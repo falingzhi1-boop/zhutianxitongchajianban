@@ -1,4 +1,6 @@
 import { compactLegacyOperation } from './operation-records.js';
+import { displayPanel } from './panel-guard.js';
+const OPEN_TAG = '<ZhuTianPanel>', CLOSE_TAG = '</ZhuTianPanel>';
 // "诸天状态栏 · 旧楼层不发给AI" as a native generation interceptor (manifest.generate_interceptor).
 // Original regex: /<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/gm → '' , promptOnly, minDepth 2 (depth 0 = newest floor).
 // SillyTavern calls the interceptor with its prompt copy of the chat (coreChat) before the prompt is built; the
@@ -16,7 +18,8 @@ export function stripOldPanels(chat, keepDepth = 2) {
         const depth = chat.length - 1 - i, m = chat[i];
         if (depth < keep || !m || typeof m.mes !== 'string' || !m.mes.includes('<ZhuTianPanel>')) continue;
         PANEL_BLOCK.lastIndex = 0;
-        const mes = m.mes.replace(PANEL_BLOCK, '');
+        // 1.1.1: story the model wrote inside an old block stays in the prompt (only the data lines are removed)
+        const mes = m.mes.replace(PANEL_BLOCK, block => displayPanel(block.slice(OPEN_TAG.length, -CLOSE_TAG.length)).story);
         if (mes !== m.mes) { chat[i] = { ...m, mes }; changed++; }
     }
     return changed;

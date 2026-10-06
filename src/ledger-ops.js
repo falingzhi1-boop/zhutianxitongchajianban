@@ -1,6 +1,6 @@
 // Ledger operations for terminal modules (聊天群, 自拟外挂, …).
 // Same semantics as the original 3.1 helpers (adjustSysPoints / bagAdd): points never go negative, spending raises
-// 累计消费, same 名称+品级 stacks unless appraisal / collection requires separate source lots. Every commit is ONE locked write through the native Bridge followed by a read-back
+// 累计消费, identical rows (名称+品级+价格+来源+分类+效果) stack, anything else is its own row (1.1.1). Every commit is ONE locked write through the native Bridge followed by a read-back
 // check; callers show success only after `commit` resolves (the rule is: never show 已入库 before it is booked).
 export const GRADES = ['凡品', '灵品', '仙品', '神品', '禁忌'];
 export const TIER_PRICE = { 凡品: 100, 灵品: 1e4, 仙品: 1e7, 神品: 1e8, 禁忌: 1e10 };
@@ -52,12 +52,19 @@ export function earn(z, amount) {
     const a = Math.floor(num(amount)); if (a <= 0) return;
     z.系统点 = Math.floor(num(z.系统点) + a); z.界面记账时间 = Date.now();
 }
+/** 1.1.1 audit: what makes two bag rows the same thing. Name + grade alone merged a price-1 story 仙品 with a
+ *  10,000,000-point blind-box 仙品 (the merged row kept one price, so 回收 paid the wrong amount). Rows now stack only
+ *  when name, grade, price, source, category and effect are all equal; appraised / collected rows never stack. */
+export function stackKey(item) {
+    const s = v => String(v ?? '').trim();
+    return JSON.stringify([s(item?.名称), s(item?.品级) || '凡品', Math.floor(num(item?.价格) || TIER_PRICE[s(item?.品级) || '凡品'] || 100), s(item?.来源), s(item?.分类) || '其他', s(item?.效果)]);
+}
 export function bagAdd(z, item, n = 1) {
     const q = Math.max(1, Math.floor(num(n, 1)));
     const bag = Array.isArray(z.背包) ? z.背包 : (z.背包 = []);
-    const key = (item.名称 || '') + '|' + (item.品级 || '');
-    const hit = bag.find(x => (x.名称 || '') + '|' + (x.品级 || '') === key && !x.收纳凭据 && !x.鉴定 && !item.收纳凭据 && !item.鉴定);
-    if (hit) { hit.数量 = num(hit.数量, 1) + q; for (const k of ['价格', '来源', '分类', '效果']) if (!hit[k] && item[k]) hit[k] = item[k]; }
+    const key = stackKey(item);
+    const hit = !item.收纳凭据 && !item.鉴定 && bag.find(x => !x.收纳凭据 && !x.鉴定 && stackKey(x) === key);
+    if (hit) hit.数量 = num(hit.数量, 1) + q;
     else bag.push({ ...structuredClone(item), 名称: item.名称, 品级: item.品级 || '凡品', 来源: item.来源 || '', 价格: item.价格 || 0, 分类: item.分类 || '其他', 效果: item.效果 || '', 数量: q });
 }
 /** Removes n of bag[index]; returns the removed item snapshot. */

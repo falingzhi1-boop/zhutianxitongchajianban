@@ -3,8 +3,8 @@ export const STORAGE = 'zhutianCovenantTerminal';
 /** 1.0: structure version of the 诸天系统 ledger, kept in chatMetadata[STORAGE].ledgerSchema (see src/data-io.js). */
 export const LEDGER_SCHEMA = 2;
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '1.1.0';
-export const PATCH_REV = '1.1.0-patch4';
+export const VERSION = '1.1.1';
+export const PATCH_REV = '1.1.1';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -100,6 +100,8 @@ export const CAPABILITIES = [
     {name:'动态效果自动降级',state:'implemented',scope:'1.0：设置 → 进阶设置 → 动态效果：自动（系统减少动态效果或触屏设备帧率 < 40 时精简）/ 完整 / 精简；精简时悬浮莉莉丝不摆动、装饰动画停止、演出只显示结果；真实低端机未测'},
     {name:'品阶鉴定（剧情功法 / 物品）',state:'implemented',scope:'1.0 玩家反馈：剧情 / 角色卡 / 旧存档来的功法和物品（非系统来源）可手动修正品阶，只升不降、最高神品；物品回收价保持原值；写入读回并同步楼层快照；「收录:功法名[更高品阶]」可更正（跟随楼层）。浏览器点击验收（1.19）'},
     {name:'品阶鉴定 · AI 判断',state:'experimental',scope:'1.0 实验性（模拟模型验收）：按诸天统一标准给出「品阶|理由」，走分功能 API「品阶鉴定」；真实模型的判断质量未验证'},
-    {name:'分功能 API 与接口预设',state:'implemented',scope:'1.0 玩家反馈：11 处模型调用各自跟随默认 / 酒馆主 API / 预设 / 单独配置；预设必须输入名称才能保存；存在全局变量 诸天系统_API路由，不进聊天和导出。以模拟模型请求日志验收地址、密钥、模型的改写；真实服务商未验收'},
+    {name:'分功能 API 与接口预设',state:'implemented',scope:'1.0 玩家反馈：12 处模型调用（1.1.1 加「数据块补记」）各自跟随默认 / 酒馆主 API / 预设 / 单独配置；预设必须输入名称才能保存；存在全局变量 诸天系统_API路由，不进聊天和导出。以模拟模型请求日志验收地址、密钥、模型的改写；真实服务商未验收'},
     {name:'一键关闭插件与关闭悬浮莉莉丝',state:'implemented',scope:'1.0 玩家反馈：设置 → 插件开关 调用酒馆 disableExtension（先确认）；悬浮莉莉丝拖到底部或右键关闭，确认框提示从酒馆「扩展」面板重新进入控制台，扩展面板可让她回来。1.19 浏览器验收'},
+    {name:'数据块格式守卫',state:'implemented',scope:'1.1.1 玩家反馈：新回复的 <ZhuTianPanel> 混入正文 / 思维链 / 其他卡变量、没闭合、大小写或代码块、只写在思维链里、多个块时自动整理（健康的块一字不改；原文备份在楼层，可还原）；旧楼层显示与提示词过滤按整理后的块；每轮格式提醒；「激活/领悟《X》」改写为 收录:X'},
+    {name:'数据块补记',state:'experimental',scope:'1.1.1 实验性（模拟模型验收）：回复缺少数据块时按世界书模板和本轮正文让「数据块补记」接口补写一次（默认只在缺失时，可关闭）；写入前核对聊天 / 楼层 / 分页 / 正文未变；真实模型未验收'},
 ];

@@ -9,6 +9,7 @@ import { esc, fmtNum } from './hub.js';
 import { readConfigs } from './api-center.js';
 import * as L from './ledger-ops.js';
 import { errorLine } from './errors.js';
+import { stripPanels } from './panel-guard.js';
 
 const KEY = '聊天群';
 const MAX_MSG = 150, MAX_PM = 30, MAX_MEMBERS = 30;
@@ -132,41 +133,80 @@ export function parseItem(spec) {
     if (!clip(名称, 24)) return null;
     return { 名称: clip(名称, 24), 品级: L.GRADES.includes(品级) ? 品级 : '凡品', 分类: clip(分类 || '其他', 8), 效果: clip(rest.join('/'), 80) };
 }
+// 1.1.1: models wrote packets the strict 1.0 pattern never matched —「【红包】」, 「[红包] 浸血古铜钱/凡品/… 5枚」(no
+// 物品 word), 「5000系统点 3个」, 「1.5万」, 「**@名称**:」, 「@名称（世界）:」. Such lines used to arrive as plain text
+// with nothing to grab. Now the tag, the kind and the numbers are read leniently, and a packet that still cannot be
+// read says so in the chat instead of silently becoming text.
+const PACKET_TAG = /^[[【［]\s*红包\s*[\]】］]\s*/, GIFT_TAG = /^[[【［]\s*赠礼\s*[\]】］]\s*/;
+export const PACKET_BROKEN = '（红包格式不完整，未入账）';
+/** "5000" / "1.5万" / "2亿" / "10,000" → number (NaN when there is none). */
+export function parseAmount(text) {
+    const m = /(\d+(?:\.\d+)?)\s*([万亿])?/.exec(String(text ?? '').replace(/[,，](?=\d{3})/g, ''));
+    if (!m) return NaN;
+    return Math.floor(Number(m[1]) * (m[2] === '亿' ? 1e8 : m[2] === '万' ? 1e4 : 1));
+}
+const QTY_TAIL = /(?:^|\s+|[×xX*])\s*[×xX*]?\s*(\d{1,3})\s*[枚个件份颗张瓶块把株粒支本套只条]?\s*$|(\d{1,3})\s*[枚个件份颗张瓶块把株粒支本套只条]\s*$/;
+/** The part after「[红包]」→ { kind:'points', amount, count } | { kind:'item', spec, qty } | null (unreadable). Pure. */
+export function parsePacketBody(text) {
+    let t = String(text ?? '').trim();
+    const lead = /^(系统点|点数|积分|物品)\s*[:：]?\s*/.exec(t); if (lead) t = t.slice(lead[0].length).trim();
+    const kind = lead ? (lead[1] === '物品' ? 'item' : 'points') : t.includes('/') || t.includes('／') ? 'item'
+        : /^\d[\d.,，]*\s*[万亿]?\s*(系统点|点|积分)/.test(t) || /^\d[\d.,，]*\s*[万亿]?(\s+\d+\s*个?)?\s*$/.test(t) ? 'points' : 'item';
+    if (kind === 'points') {
+        const nums = [...t.replace(/[,，](?=\d{3})/g, '').matchAll(/(\d+(?:\.\d+)?)\s*([万亿])?/g)].map(m => parseAmount(m[0]));
+        if (!nums.length || !(nums[0] >= 1)) return null;
+        return { kind, amount: nums[0], count: nums[1] >= 1 ? Math.floor(nums[1]) : 3 };
+    }
+    let qty = 1; const q = QTY_TAIL.exec(t);
+    if (q) { qty = Number(q[1] || q[2]) || 1; t = t.slice(0, q.index).trim(); }
+    if (!t) return null;
+    return { kind, spec: t, qty };
+}
 /** Member reply lines → structured messages, with the hard floor applied. */
 export function parseGroupReply(text, members, { cap = '凡品', shop = 1, max = 6 } = {}) {
     const out = [], byName = new Map(members.map(m => [m.名称, m]));
     for (const raw of String(text || '').split('\n')) {
-        const m = raw.trim().match(/^@?\s*([^:：\s][^:：]{0,23})\s*[:：]\s*(.+)$/);
+        const line = raw.replace(/\*\*|__/g, '').trim();
+        const m = line.match(/^@?\s*([^:：\s][^:：]{0,31})\s*[:：]\s*(.+)$/);
         if (!m) continue;
-        const who = byName.get(m[1].trim()); if (!who || num(who.禁言轮) > 0) continue;
-        let body = m[2].trim(); const msg = { who, text: '' };
-        const pk = body.match(/^\[红包\]\s*(系统点|物品)\s*(.+?)(?:\s*[|｜]\s*(.*))?$/);
-        const gf = body.match(/^\[赠礼\]\s*(.+?)(?:\s*[|｜]\s*(.*))?$/);
+        const name = m[1].trim(), who = byName.get(name) || byName.get(name.replace(/\s*[（(][^）)]*[）)]\s*$/, '').replace(/^@\s*/, ''));
+        if (!who || num(who.禁言轮) > 0) continue;
+        const body = m[2].trim(); const msg = { who, text: '' };
         const memberCap = L.giftCap({ 商城等级: shop }, who.档), eff = L.GRADES[Math.min(L.gradeIndex(cap), L.gradeIndex(memberCap))];
-        if (pk) {
-            const note = clip(pk[3] || '恭喜发财', 40);
-            if (pk[1] === '系统点') {
-                const [amt, cnt] = pk[2].split(/\s+/).map(s => num(s.replace(/[^\d]/g, '')));
-                const limit = packetCap(who.档, shop);
-                const amount = Math.max(1, Math.min(Math.floor(amt) || 100, limit));
-                msg.packet = { kind: 'points', amount, count: Math.max(1, Math.min(10, Math.floor(cnt) || 3)), note, downgraded: amount < Math.floor(amt) };
-            } else {
-                const parts = pk[2].split(/\s+/); const qtyRaw = parts.length > 1 && /^[×x*]?\d+$/.test(parts[parts.length - 1]) ? parts.pop() : '1';
-                const item = parseItem(parts.join(' ')); if (!item) continue;
-                const [g, down] = L.clampGrade(item.品级, eff); item.品级 = g;
-                const qty = Math.max(1, Math.min(QTY_CAP[g] || 1, num(qtyRaw.replace(/[^\d]/g, ''), 1)));
-                msg.packet = { kind: 'item', item, qty, count: qty, note, downgraded: down };
+        if (PACKET_TAG.test(body)) {
+            const rest = body.replace(PACKET_TAG, ''), cut = rest.search(/[|｜]/);
+            const spec = (cut >= 0 ? rest.slice(0, cut) : rest).trim(), note = clip((cut >= 0 ? rest.slice(cut + 1) : '').trim() || '恭喜发财', 40);
+            const pb = parsePacketBody(spec);
+            if (pb?.kind === 'points') {
+                const limit = packetCap(who.档, shop), amount = Math.max(1, Math.min(pb.amount, limit));
+                msg.packet = { kind: 'points', amount, count: Math.max(1, Math.min(10, pb.count)), note, downgraded: amount < pb.amount };
+            } else if (pb?.kind === 'item') {
+                const item = parseItem(pb.spec);
+                if (item) {
+                    const [g, down] = L.clampGrade(item.品级, eff); item.品级 = g;
+                    const qty = Math.max(1, Math.min(QTY_CAP[g] || 1, pb.qty));
+                    msg.packet = { kind: 'item', item, qty, count: qty, note, downgraded: down };
+                }
             }
-            msg.text = note;
-        } else if (gf) {
-            const item = parseItem(gf[1]); if (!item) continue;
-            const [g, down] = L.clampGrade(item.品级, eff); item.品级 = g;
-            msg.gift = { item, note: clip(gf[2] || '', 60), downgraded: down }; msg.text = msg.gift.note || '送你个小东西。';
+            msg.text = msg.packet ? note : clip([spec, cut >= 0 ? rest.slice(cut + 1).trim() : ''].filter(Boolean).join(' · ') || '红包', 260) + PACKET_BROKEN;
+        } else if (GIFT_TAG.test(body)) {
+            const rest = body.replace(GIFT_TAG, ''), cut = rest.search(/[|｜]/);
+            const item = parseItem((cut >= 0 ? rest.slice(0, cut) : rest).trim().replace(/^物品\s*[:：]?\s*/, '').replace(QTY_TAIL, ''));
+            if (!item) { msg.text = clip(rest, 260) + '（赠礼格式不完整，未入账）'; }
+            else {
+                const [g, down] = L.clampGrade(item.品级, eff); item.品级 = g;
+                msg.gift = { item, note: clip(cut >= 0 ? rest.slice(cut + 1).trim() : '', 60), downgraded: down }; msg.text = msg.gift.note || '送你个小东西。';
+            }
         } else msg.text = clip(body, 300);
         if (msg.text || msg.packet || msg.gift) out.push(msg);
         if (out.length >= max) break;
     }
     return out;
+}
+/** 1.1.1 补登: an old plain-text message that still carries a「[红包]」line (sent before 1.1.1 could read it). Pure. */
+export function rebookable(msg) {
+    if (!msg || msg.kind || msg.from === 'me' || msg.from === 'sys' || msg.rebooked) return false;
+    const t = String(msg.text || ''); return /[[【［]\s*红包\s*[\]】］]/.test(t) && !t.includes(PACKET_BROKEN);
 }
 /** 拼手气: `count` positive integer shares summing to `total` (double-mean random, like WeChat). */
 export function splitShares(total, count, rand = Math.random) {
@@ -247,7 +287,7 @@ export class HubGroup {
         // 0.8.2: every N-th story reply only (setting 闲聊间隔, default 3) — not one extra model call per message.
         const every = g.设置.闲聊间隔 || 3, due = num(g.节奏.闲聊) + 1 >= every;
         try { await this.write(gg => { gg.节奏.闲聊 = due ? 0 : num(gg.节奏.闲聊) + 1; }, token); } catch (e) { console.warn(e); return; }
-        if (due) this.round(null, String(m.mes || '').replace(/<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/g, '').slice(-400), token).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
+        if (due) this.round(null, stripPanels(m.mes).trim().slice(-400), token).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
     }
 
     // ---------- chat round: one request, 1–6 members ----------
@@ -267,6 +307,7 @@ export class HubGroup {
 ${packetRule}
 @名称: [红包] 系统点 数额 个数 | 祝福语
 @名称: [红包] 物品 名称/品级/分类/效果 数量 | 祝福语
+（例：@鹧鸪哨: [红包] 物品 摸金符/灵品/护身法器/辟邪镇煞 3 | 祝群主百无禁忌；系统点红包例：@鹧鸪哨: [红包] 系统点 5000 3 | 恭喜发财）
 @名称: [赠礼] 名称/品级/分类/效果 | 附言
 3. 物品必须是该群员世界的东西；品级只能是 凡品/灵品/仙品/神品，且不得高于${cap}，也不得高于赠送者的实力；禁忌品禁止。
 4. 只输出群聊消息行，不要旁白、不要解释。`;
@@ -290,10 +331,8 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
                     if (p.packet || p.gift) handed++;
                     if (p.packet) {
                         if (g.日计.收 >= DAILY_IN) { this.say(g, p.who.id, p.text + '（今日红包已达上限，被群规拦下）'); dropped++; continue; }
-                        const id = rid('rp'), total = p.packet.kind === 'points' ? p.packet.amount : p.packet.qty;
-                        const count = Math.max(1, Math.min(p.packet.count, total, g.成员.length + 1));
-                        g.红包[id] = { id, from: p.who.id, kind: p.packet.kind, total, item: p.packet.item || null, shares: splitShares(total, count), grabs: [], note: p.packet.note, downgraded: p.packet.downgraded, t: Date.now() };
-                        g.日计.收++; this.say(g, p.who.id, p.text, { kind: 'packet', ref: id }); got++;
+                        const id = this.openPacket(g, p.who, p.packet);
+                        this.say(g, p.who.id, p.text, { kind: 'packet', ref: id }); got++;
                     } else if (p.gift) {
                         const gid = rid('gf');
                         g.待领取.push({ id: gid, from: p.who.id, 名称: p.who.名称, 世界: p.who.世界, item: { ...p.gift.item, 价格: L.TIER_PRICE[p.gift.item.品级] }, note: p.gift.note, downgraded: p.gift.downgraded, t: Date.now() });
@@ -316,6 +355,29 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
     }
 
     // ---------- red packets & gifts ----------
+    /** A member's packet into the group's packet store (counts toward 今日红包). Returns its id. */
+    openPacket(g, who, packet) {
+        const id = rid('rp'), total = packet.kind === 'points' ? packet.amount : packet.qty;
+        const count = Math.max(1, Math.min(packet.count, total, g.成员.length + 1));
+        g.红包[id] = { id, from: who.id, kind: packet.kind, total, item: packet.item || null, shares: splitShares(total, count), grabs: [], note: packet.note, downgraded: packet.downgraded, t: Date.now() };
+        g.日计.收++; return id;
+    }
+    /** 1.1.1 补登: a「[红包]」that arrived as plain text before 1.1.1 → a real packet (same caps and daily limit). */
+    async rebook(msgId) {
+        const token = capture(this.app);
+        const out = await this.write((g, z) => {
+            const msg = g.消息.find(m => m.id === msgId); if (!rebookable(msg)) throw Error('这条消息不能补登（已补登或不是红包）。');
+            const who = g.成员.find(m => m.id === msg.from); if (!who) throw Error('发红包的群员已经退群，无法补登。');
+            if (g.日计.收 >= DAILY_IN) throw Error(`今天已经收了 ${DAILY_IN} 个红包（群规上限），明天再补登。`);
+            const shop = L.shopLevel(z), cap = L.GRADES[Math.min(shop, 4) - 1], text = String(msg.text);
+            const [p] = parseGroupReply(`${who.名称}: ${text.slice(text.search(/[[【［]\s*红包/)).replace(PACKET_BROKEN, '')}`, [{ ...who, 禁言轮: 0 }], { cap, shop });
+            if (!p?.packet) throw Error('这条红包缺少数额或物品名，仍然读不出来，无法补登。');
+            const id = this.openPacket(g, who, p.packet);
+            Object.assign(msg, { kind: 'packet', ref: id, text: p.text, rebooked: true });
+            return p.packet.kind === 'points' ? `${fmtNum(p.packet.amount)} 系统点` : `${p.packet.item.名称}（${p.packet.item.品级}）×${p.packet.qty}`;
+        }, token);
+        this.toast(`已补登红包：${out}，点「抢」领取。`, 3600); this.paint();
+    }
     async grab(packetId) {
         const out = await this.write((g, z) => {
             const p = g.红包[packetId]; if (!p) throw Error('红包已过期。');
@@ -576,6 +638,7 @@ ${g.待领取.length ? `<div class="zt-g-claims"><span>🎁 待领取 ${g.待领
             if (msg.kind === 'sys' || msg.from === 'sys') return `<div class="zt-g-sys">${esc(msg.text)}</div>`;
             const me = msg.from === 'me', m = me ? null : name(msg.from) || { 名称: '已退群', 世界: '' };
             let body = `<div class="zt-g-text">${esc(msg.text).replace(/\n/g, '<br>')}</div>`;
+            if (rebookable(msg)) body += `<div class="zt-g-gift">🧧 这条红包当时没能识别 <button type="button" class="zt-btn small" data-rebook="${esc(msg.id)}">补登</button></div>`;
             if (msg.kind === 'packet') {
                 const p = g.红包[msg.ref];
                 const mine = p?.grabs.find(x => x.who === 'me'), left = p ? p.shares.length - p.grabs.length : 0;
@@ -658,6 +721,7 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
         const d = t.dataset;
         if (d.gtab) { this.view = d.gtab; this.sheet = null; return this.paint(); }
         if (d.grab) return run(() => this.grab(d.grab));
+        if (d.rebook) return run(() => this.rebook(d.rebook));
         if (d.claim) return run(() => this.claim(d.claim));
         if (d.buy) return run(() => this.buy(d.buy));
         if (d.hawk) return run(() => this.hawk(d.hawk));

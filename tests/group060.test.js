@@ -83,9 +83,13 @@ test('ledger helpers follow the original adjustSysPoints / bagAdd semantics', ()
     assert.throws(() => L.spend(z, 5000), /系统点不足/); assert.equal(z.系统点, 1000);
     L.spend(z, 300); assert.equal(z.系统点, 700); assert.equal(z.累计消费, 300);
     L.earn(z, 50); assert.equal(z.系统点, 750);
-    L.bagAdd(z, { 名称: '灵草', 品级: '凡品', 来源: '白浅@青丘' }, 3); assert.equal(z.背包[0].数量, 5); assert.equal(z.背包[0].来源, '白浅@青丘');
-    L.bagAdd(z, { 名称: '灵草', 品级: '灵品' }, 1); assert.equal(z.背包.length, 2);
-    const took = L.bagTake(z, 0, 5); assert.equal(took.数量, 5); assert.equal(z.背包.length, 1);
+    // 1.1.1 audit: rows stack only when they are the same thing (a different 来源 is its own row)
+    L.bagAdd(z, { 名称: '灵草', 品级: '凡品' }, 3); assert.equal(z.背包[0].数量, 5);
+    L.bagAdd(z, { 名称: '灵草', 品级: '凡品', 来源: '白浅@青丘' }, 1); assert.equal(z.背包.length, 2); assert.equal(z.背包[1].来源, '白浅@青丘');
+    L.bagAdd(z, { 名称: '灵草', 品级: '灵品' }, 1); assert.equal(z.背包.length, 3);
+    z.背包.splice(1, 2);
+    const took = L.bagTake(z, 0, 5); assert.equal(took.数量, 5); assert.equal(z.背包.length, 0);
+    z.背包.push({ 名称: '灵草', 品级: '凡品', 数量: 1 });
     assert.throws(() => L.bagTake(z, 0, 2), /只有 1 个/);
 });
 

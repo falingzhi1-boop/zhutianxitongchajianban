@@ -332,6 +332,8 @@ export class Bridge {
         const data = await response.json().catch(() => null);
         if (!response.ok) throw Error(`${direct ? '独立 API' : '酒馆转发'}返回 HTTP ${response.status}${data?.error?.message ? ' · ' + data.error.message : ''}`);
         if (data?.error) throw Error('接口错误：' + (data.error.message || JSON.stringify(data.error)).slice(0, 200));
+        // 1.1.1: why the answer ended (商品生成 tells a cut-off JSON from a wrong one and shrinks its batch)
+        this.lastFinish = { reason: String(data?.choices?.[0]?.finish_reason || ''), maxTokens, at: Date.now() };
         let text;
         try { text = completionText(data, maxTokens); }
         catch (e) {
@@ -451,7 +453,7 @@ export class Bridge {
     /** Frame capabilities belong to the creating chat/context and are permanently revoked on release or switch. */
     frameApi(messageId, lastId) {
         const self = this, c = this.ctx(), expected = identity(c), chat = c?.chat, metadata = c?.chatMetadata;
-        let active = true, stop;
+        let active = true, released = false, stop;
         const dispose = () => { active = false; stop?.(); stop = null; };
         const guard = () => {
             const live = self.ctx();
@@ -460,7 +462,10 @@ export class Bridge {
             }
         };
         const read = fn => { guard(); return fn(); };
-        const request = async fn => { guard(); const result = await fn(); guard(); return result; };
+        // 1.1.1 audit: a request that *starts* after the host released the frame (it already left the DOM) does nothing
+        // and never settles, so the original code's uncaught background writes cannot surface as page errors. Requests
+        // from a still-mounted but stale frame, or interrupted mid-flight, keep rejecting.
+        const request = fn => released ? new Promise(() => {}) : (async () => { guard(); const result = await fn(); guard(); return result; })();
         // The guard also runs inside the writer after lock acquisition and after an async updater.
         const options = o => ({ ...o, engine: true, expectedIdentity: expected, frameGuard: guard });
         const api = {
@@ -473,7 +478,7 @@ export class Bridge {
             generateRaw: o => request(() => self.generateRaw(o)),
             listModels: (u, k) => request(() => self.listModels(u, k)),
         };
-        Object.defineProperties(api, { dispose: { value: dispose }, isCurrent: { value: () => { try { guard(); return true; } catch { return false; } } } });
+        Object.defineProperties(api, { dispose: { value: () => { released = true; dispose(); } }, isCurrent: { value: () => { try { guard(); return true; } catch { return false; } } } });
         stop = this.adapter.subscribe?.(() => { api.isCurrent(); });
         return api;
     }

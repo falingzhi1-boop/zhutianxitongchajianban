@@ -6,6 +6,7 @@ import { listBonds } from './bonds-data.js';
 import { esc, fmtNum } from './hub.js';
 import { TIERS } from './ledger-ops.js';
 import { THEMES, classifyWorld, WORLD_TYPES } from './world.js';
+import { scrollWithin, resetPageScroll } from './page-scroll.js';
 
 const num = (x, d = 0) => { const n = Number(x); return Number.isFinite(n) ? n : d; };
 const obj = x => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
@@ -264,7 +265,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
         this.sel[id] = nodeId; this.paint(id, true);
         const el = this.els[id], g = this.graphs[id], n = g?.nodes.find(x => x.id === nodeId);
         const target = el?.querySelector(`.zt-node[data-node="${CSS.escape(nodeId)}"]`);
-        if (target && focus) { try { target.focus({ preventScroll: true }); target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); } catch { /* ignore */ } }
+        if (target && focus) { try { target.focus({ preventScroll: true }); scrollWithin(target); resetPageScroll(); } catch { /* ignore */ } }
         if (!n || !speak) return;
         const L = this.app.lilith; if (!L) return;
         if (n.type === 'task') L.react('task', { ...this.ledger()?.任务库?.[n.task], id: n.task });
@@ -339,7 +340,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
         this.hub.go('task');
         let n = 0; const find = () => {
             const doc = this.hub.engineFrame?.contentDocument, row = doc?.querySelector(`[data-task-focus="${CSS.escape(id)}"]`);
-            if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('zt-flash'); setTimeout(() => row.classList.remove('zt-flash'), 1600); try { row.focus({ preventScroll: true }); } catch { /* ignore */ } }
+            if (row) { scrollWithin(row, { block: 'center' }); resetPageScroll(); row.classList.add('zt-flash'); setTimeout(() => row.classList.remove('zt-flash'), 1600); try { row.focus({ preventScroll: true }); } catch { /* ignore */ } }
             else if (++n < 12) setTimeout(find, 150);
         }; setTimeout(find, 80);
     }
@@ -347,7 +348,7 @@ ${n.tasks?.length ? `<div class="zt-atlas-links"><small>相关任务</small>${n.
         const mes = document.querySelector(`#chat .mes[mesid="${f}"]`);
         if (!mes) { this.hub.toast(`楼层 #${f} 不在当前加载的聊天里（可能需要先加载更早的消息）。`, 4000); return; }
         this.hub.close();
-        setTimeout(() => { mes.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); mes.classList.add('zt-floor-flash'); setTimeout(() => mes.classList.remove('zt-floor-flash'), 1800); }, 200);
+        setTimeout(() => { scrollWithin(mes, { block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); resetPageScroll(); mes.classList.add('zt-floor-flash'); setTimeout(() => mes.classList.remove('zt-floor-flash'), 1800); }, 200);
     }
     engineLinks(n, tools) {
         const map = { 1: ['stars', '星图'], 2: ['bonds', '羁绊图'], 3: ['events', '事件线'], 4: ['tree', '能力树'], 8: ['tree', '能力树'] }, m = map[n];

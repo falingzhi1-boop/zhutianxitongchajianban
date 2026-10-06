@@ -8,6 +8,7 @@
 import { ID, VERSION, STORAGE } from './contracts.js';
 import { hash } from './statusbar-host.js';
 import { shopLevel } from './ledger-ops.js';
+import { resetPageScroll, guardPageScroll, withoutFocusScroll } from './page-scroll.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const fmtNum = x => { const n = Number(x); return Number.isFinite(n) ? n.toLocaleString('zh-CN') : '—'; };
@@ -57,6 +58,8 @@ export class Hub {
         const sh = this.app.assistant?.shadow;
         this.shell = sh ? this.fromAssistant(sh) : this.fallbackShell();
         this.shadow = this.shell.shadow;
+        // 1.1.1: the page itself never scrolls while the terminal is open (外挂工坊 / 许愿 used to push ST up)
+        this.disposers.push(guardPageScroll(() => this.isOpen));
         const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = this.app.base + 'styles/hub.css'; this.shadow.append(link); this.css = link;
         // 0.7.0: world themes + layout, 图谱, 演出 (each its own file so a theme never touches layout rules).
         this.extraCss = ['world.css', 'atlas.css', 'fx.css'].map(f => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = this.app.base + 'styles/' + f; this.shadow.append(l); return l; });
@@ -202,7 +205,7 @@ export class Hub {
     }
     get isOpen() { return !!this.shell.dialog?.open; }
     close() { if (!this.isOpen) return; this.animateClose(() => this.rawClose()); }
-    rawClose() { this.passClose = true; try { (this.shell.closeBtn || this.shell.minBtn)?.click(); } finally { this.passClose = false; } if (this.shell.dialog?.open) this.shell.dialog.close(); }
+    rawClose() { this.passClose = true; try { (this.shell.closeBtn || this.shell.minBtn)?.click(); } finally { this.passClose = false; } if (this.shell.dialog?.open) this.shell.dialog.close(); resetPageScroll(); setTimeout(() => resetPageScroll(), 0); }
 
     // ---------- closing: one window, four ways, no focus jump ----------
     bindClose() {
@@ -302,7 +305,14 @@ export class Hub {
         frame.classList.remove('zt-engine-loading');
         // The original writes 闭关 / 结算 / 购物车 text into the chat input behind this window: say so, offer to close.
         const w = frame.contentWindow, orig = w?.insertIntoChatInput;
-        if (typeof orig === 'function' && !orig.__zt) { const wrapped = function (...args) { const r = orig.apply(this, args); if (r) setTimeout(() => this.hubInputWritten?.(), 0); return r; }.bind(w); wrapped.__zt = true; w.hubInputWritten = () => this.inputWritten(); w.insertIntoChatInput = wrapped; }
+        if (typeof orig === 'function' && !orig.__zt) { const hub = this;
+            // 1.1.1: the original focuses #send_textarea — behind the open terminal that scrolled the whole page up.
+            // While the terminal is open the focus is skipped (the text is still written); otherwise it cannot scroll.
+            const wrapped = function (...args) {
+                const ta = document.querySelector('#send_textarea') || document.querySelector('#send_form textarea');
+                const r = withoutFocusScroll(ta, () => orig.apply(this, args), { skipFocus: hub.isOpen });
+                resetPageScroll(); if (r) setTimeout(() => this.hubInputWritten?.(), 0); return r;
+            }.bind(w); wrapped.__zt = true; w.hubInputWritten = () => this.inputWritten(); w.insertIntoChatInput = wrapped; }
         this.setEngineTab(this.engineTab, true);
         this.onEngine?.(frame, doc);
         this.scheduleEngineView(0);

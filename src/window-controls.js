@@ -9,11 +9,37 @@ export function launcherPosition(p, v, size = 64) {
     const edge = p.edge === 'right' ? 'right' : 'left', tucked = !!p.tucked;
     return { x: tucked ? (edge === 'left' ? v.x - size + 18 : v.x + v.w - 18) : Math.max(v.x + 4, Math.min(v.x + v.w - size - 4, Number(p.x) || v.x + 18)), y: Math.max(v.y + 8, Math.min(v.y + v.h - size - 12, Number(p.y) || v.y + v.h / 2)), edge, tucked };
 }
+/**
+ * 1.1.1: where the docked avatar (#entry, 44 px) belongs (pure, for tests). The original placer centres it on the
+ * header measured from the WINDOW top; a full-screen phone window pads its top by the status-bar inset, so the avatar
+ * landed in the phone status bar (hard to tap — the system pulls down its shade). Measured from the HEADER instead.
+ * `base` = where the avatar is without our shift; returns the translate that moves it, or null when nothing to do.
+ */
+export function dockShift(base, header, inset = 13, size = 44, anchor = null) {
+    if (!header || !(header.h > 0)) return null;
+    // anchor = the centre of the header's own avatar picture (私聊 sheet): sit exactly on it, no double ring
+    const x = anchor ? anchor.cx - size / 2 : header.left + inset, y = anchor ? anchor.cy - size / 2 : header.top + Math.max(4, (header.h - size) / 2);
+    const dx = Math.round(x - base.left), dy = Math.round(y - base.top);
+    return Math.abs(dx) <= 1 && Math.abs(dy) <= 1 ? null : { dx, dy };
+}
 export class WindowControls {
     constructor(app) { this.app = app; this.off = []; }
     on(t, e, f, opts) { if (!t) return; t.addEventListener(e, f, opts); this.off.push(() => t.removeEventListener(e, f, opts)); }
     coarse() { return matchMedia('(pointer:coarse)').matches || innerWidth <= 720; }
-    viewport() { const v = visualViewport; return { x: v?.offsetLeft || 0, y: v?.offsetTop || 0, w: v?.width || innerWidth, h: v?.height || innerHeight }; }
+    /** 1.1.1: the phone status bar / notch / home bar (CSS safe-area insets; 0 on desktop and in normal browser tabs). */
+    insets() {
+        try {
+            const p = document.createElement('div');
+            p.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+            document.body.append(p); const c = getComputedStyle(p), n = k => parseFloat(c[k]) || 0;
+            const r = { top: n('paddingTop'), right: n('paddingRight'), bottom: n('paddingBottom'), left: n('paddingLeft') }; p.remove(); return r;
+        } catch { return { top: 0, right: 0, bottom: 0, left: 0 }; }
+    }
+    /** Visible area minus the safe-area insets, so the floating window and the round launcher stay out of the status bar. */
+    viewport() {
+        const v = visualViewport, i = this.ins || (this.ins = this.insets()), x = v?.offsetLeft || 0, y = v?.offsetTop || 0, w = v?.width || innerWidth, h = v?.height || innerHeight;
+        return { x: x + i.left, y: y + i.top, w: Math.max(200, w - i.left - i.right), h: Math.max(200, h - i.top - i.bottom) };
+    }
     start() {
         const h = this.app.hub; if (!h) return this;
         this.sh = h.shadow; this.d = h.shell.dialog; this.entry = this.sh.getElementById('entry');
@@ -25,6 +51,8 @@ export class WindowControls {
         this.off.push(this.app.bridge.addScriptFilter((next, prev) => this.coarse() ? keepWindowBox(next, prev) : next));
         const schedule = () => { if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.sync(); }); };
         this.on(window, 'resize', schedule); this.on(visualViewport, 'resize', schedule); this.on(visualViewport, 'scroll', schedule);
+        // 1.1.1: the header only has its final box after the open animation (terminal / 私聊) — re-dock the avatar then
+        this.on(this.sh, 'animationend', schedule); this.on(this.sh, 'transitionend', schedule);
         this.off.push(this.app.settings.onChange(k => { if (k === 'mobileLayout') this.sync(true); }));
         h.hook('onOpen', () => this.sync(true)); h.hook('onClose', schedule);
         this.obs = new MutationObserver(schedule); this.obs.observe(this.d, { attributes: true, attributeFilter: ['open', 'style'] });
@@ -48,11 +76,33 @@ export class WindowControls {
         const touch = this.coarse(), floating = touch && !this.app.mobile?.full;
         this.sh.host.toggleAttribute('data-zt-touch-window', floating);
         this.toggle.textContent = this.app.mobile?.full ? '浮窗' : '全屏'; this.toggle.setAttribute('aria-label', this.app.mobile?.full ? '切换浮窗，支持拖动缩放' : '切换全屏');
+        if (!this.g) this.ins = this.insets(); // re-read on rotation / resize, not on every drag move
         const view = this.viewport(), sig = JSON.stringify(view), resized = sig !== this.viewSig; this.viewSig = sig;
         if (floating && !this.g && (force || resized || !this.wasFloat)) this.placeWindow(this.app.settings.get('touchWindowBox') || {});
         this.wasFloat = floating;
-        if (!this.g && this.entry?.dataset.docked !== 'true') this.placeLauncher();
-        else if (this.entry?.dataset.docked === 'true') { this.entry.style.removeProperty('transform'); delete this.entry.dataset.ztTucked; }
+        if (!this.g && this.entry?.dataset.docked !== 'true') { this.dockTr = null; this.placeLauncher(); }
+        else if (this.entry?.dataset.docked === 'true') { delete this.entry.dataset.ztTucked; this.placeDocked(); }
+    }
+    /**
+     * 1.1.1: keep the docked avatar inside the header (below the phone status bar), never above it. Measured from the
+     * live boxes (minus our own shift), so a position the original placer took mid open-animation is corrected too.
+     */
+    placeDocked() {
+        const e = this.entry; if (!e) return null;
+        const chat = this.sh.getElementById('lc-panel'), chatOn = !!chat && !chat.hidden;
+        // phone: 私聊 is a full-screen sheet over the terminal, so the avatar belongs to the sheet's header even though
+        // the original placer still docks it to the (covered) terminal window
+        const sheet = chatOn && (!this.d.open || this.sh.host.hasAttribute('data-zt-mobile')), inDialog = this.d.open && !sheet;
+        const head = (inDialog || sheet) && this.sh.getElementById(sheet ? 'lc-head' : 'drag-handle');
+        const pic = sheet ? head?.querySelector(':scope>img')?.getBoundingClientRect() : null;
+        const anchor = pic?.width ? { cx: pic.left + pic.width / 2, cy: pic.top + pic.height / 2 } : null;
+        const r = head?.getBoundingClientRect(), er = e.getBoundingClientRect(), cur = this.dockTr || { dx: 0, dy: 0 };
+        const shift = r && er.width ? dockShift({ left: er.left - cur.dx, top: er.top - cur.dy }, { left: r.left, top: r.top, h: r.height }, inDialog ? 13 : 18, 44, anchor) : null;
+        if (!shift && r && er.width && cur.dx === 0 && cur.dy === 0 && !e.style.transform) return null;
+        this.dockTr = shift || { dx: 0, dy: 0 };
+        const tr = shift ? `translate(${shift.dx}px,${shift.dy}px)` : '';
+        if (e.style.transform !== tr) { if (tr) e.style.transform = tr; else e.style.removeProperty('transform'); }
+        return shift;
     }
     placeWindow(box) {
         const b = clampBox(box, this.viewport()); this.box = b;

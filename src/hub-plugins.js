@@ -6,6 +6,7 @@
 import { STORAGE, inert } from './contracts.js';
 import { esc, fmtNum } from './hub.js';
 import { DEFAULT_OFF } from './worldbook.js';
+import { scrollWithin, resetPageScroll } from './page-scroll.js';
 
 export const BUILTIN = ['无限口袋', '诸天打手', '洞察之眼', '分身派遣', '随身洞天', '万物熔炉'];
 export const GRADES = ['凡品', '灵品', '仙品', '神品', '禁忌'];
@@ -121,7 +122,7 @@ ${r.list.map(m => `<div class="zt-row"><span>${esc(m.name)}${m.strong ? ' <span 
     openEditor() {
         this.editing = null; this.hub.go('plugmgr');
         const el = this.hub.pages.get('plugmgr')?.el, ed = el?.querySelector('#zt-plug-editor');
-        ed?.scrollIntoView({ block: 'start' }); ed?.querySelector('[data-f="name"]')?.focus({ preventScroll: true });
+        if (ed) scrollWithin(ed, { block: 'start' }); resetPageScroll(); ed?.querySelector('[data-f="name"]')?.focus({ preventScroll: true });
     }
     costLabel(p) { return p.cost.kind === 'points' ? ` · ${fmtNum(p.cost.amount)} 点` : p.cost.kind === 'resource' ? ` · ${p.cost.amount} ${p.cost.res}` : ''; }
     /** Charges the cost through the ledger, reads it back, then writes the action into the input box. */
@@ -224,7 +225,7 @@ ${has ? '' : '<div class="zt-card zt-note">请先打开一个单角色聊天再�
                 .catch(e => { b.disabled = false; this.hub.toast(e.message, 4000); });
             return;
         }
-        if (b.dataset.edit) { this.editing = this.library().find(p => p.id === b.dataset.edit) || null; this.render(el); el.querySelector('#zt-plug-editor')?.scrollIntoView({ block: 'start' }); return; }
+        if (b.dataset.edit) { this.editing = this.library().find(p => p.id === b.dataset.edit) || null; this.render(el); const ed = el.querySelector('#zt-plug-editor'); if (ed) scrollWithin(ed, { block: 'start' }); resetPageScroll(); return; }
         if (b.dataset.cancel !== undefined) { this.editing = null; return this.render(el); }
         if (b.dataset.del) { const p = this.library().find(x => x.id === b.dataset.del); if (p && globalThis.confirm(`从本机外挂库删除「${p.name}」？（所有聊天都会失去它）`)) { this.saveLibrary(this.library().filter(x => x.id !== p.id)); this.syncPrompt(); this.render(el); } return; }
         if (b.dataset.export !== undefined) { const blob = new Blob([JSON.stringify({ format: 'zhutian-plugins', version: 1, plugins: this.library() }, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '诸天-自拟外挂.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return; }
