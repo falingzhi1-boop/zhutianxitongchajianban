@@ -203,7 +203,8 @@ export class LilithFloat {
         this.dims = floatDims(this.settings.get('floatSize'));
         this.el.style.setProperty('--w', this.dims.w + 'px'); this.el.style.setProperty('--h', this.dims.h + 'px'); this.el.style.setProperty('--k', String(this.dims.k));
     }
-    wanted() { return wantFloat(this.settings.get('floatLilith') || 'auto', { coarse: matchMedia('(pointer: coarse)').matches, width: innerWidth }); }
+    // 1.1.5: the floating figure is Lilith herself — another system persona uses the round avatar launcher
+    wanted() { if (this.app.persona && this.app.persona.lilith === false) return false; return wantFloat(this.settings.get('floatLilith') || 'auto', { coarse: matchMedia('(pointer: coarse)').matches, width: innerWidth }); }
     sync() {
         const on = this.wanted();
         this.el.hidden = !on;

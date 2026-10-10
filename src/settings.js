@@ -46,6 +46,13 @@ const DEFAULTS = Object.freeze({
     skills: { prompt: true, practice: true, cardAuto: false },
     panelGuard: { repair: true, backfill: 'missing', remind: true, skillHint: true }, // 1.1.1 数据块格式守卫: 自动修复新回复 · 缺失时补记 (missing | off) · 每轮格式提醒 · 剧情功法未入账提示   // 0.8.0 修行: 功法实效提示 · 实战积累 · 角色卡功法自动同步
     gachaMode: 'classic',        // 1.1.2 抽卡模式: classic 经典折叠（整次一起结算，≥50 抽折叠凡品、≥100 抽再折叠灵品）| chunk 十抽一结算
+    // 1.1.5 系统助手人设: lilith (default — nothing changes) | orb (numbered 系统光球) | custom; avatar = small data: URI
+    persona: { preset: 'lilith', name: '', code: '001', call: '', en: '', personality: '', style: '', story: '', chat: '', avatar: '' },
+    // 1.1.5 功能开关: whole modules (page + prompt + background work); navHidden = terminal pages taken out of the navigation
+    modules: { group: true, groupAuto: true, plugins: true, slash: true, guide: true },
+    navHidden: [],
+    // 1.1.5 聊天群 × 世界书: read = 召唤的群员带上世界书条目 + 按聊天关键词读取世界书背景; memory = 群聊里与世界书角色的互动摘要注入正文
+    groupWorld: { read: true, memory: true, budget: 1600 },
     live2d: { accepted: false, coreUrl: LIVE2D_CORE_URL, model: '', scale: 1, x: 0, y: 0, follow: true, lipsync: true, idle: true, moodMap: {} },
     scriptVariables: {},
     legacyImported: false,

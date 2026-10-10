@@ -8,7 +8,19 @@
 export const VOICE_SOURCE = "(?:(?:\\*\\*)?(?:【[ \\t]*莉莉[丝絲][ \\t]*】|\\[[ \\t]*莉莉[丝絲][ \\t]*\\]|莉莉[丝絲]|Lilith)(?:\\*\\*)?(?:[ \\t]*[（(]([^）)\\n:：\"<>]{1,12})[）)])?[ \\t]*[:：][ \\t]*(?:\\*\\*)?[ \\t]*|莉莉[丝絲](轻声|笑着|微笑着|轻笑着?|低声|柔声|小声|害羞地|红着脸|惊讶地|得意地|坏笑着|嘟着嘴|哼了一声|眨眨眼|俏皮地)?(?:说|道|回应|回答)[：:][ \\t]*)[“\"「『]((?:(?!\\r?\\n[ \\t]*(?:【[^】\\n]{1,30}】|\\[[^\\]\\n]{1,30}\\]|[^\\s：:<>\\n]{1,20})[ \\t]*[:：])[^<>]){1,8000}?)[”\"」』](?=[ \\t]*(?:\\r?\\n|$|<|【莉莉[丝絲]】))|^[ \\t]*(?:>[ \\t]*)?(?:\\*\\*)?(?:【[ \\t]*莉莉[丝絲][ \\t]*】|\\[[ \\t]*莉莉[丝絲][ \\t]*\\]|莉莉[丝絲]|Lilith)(?:\\*\\*)?(?:[ \\t]*[（(]([^）)\\n:：\"<>]{1,12})[）)])?[ \\t]*[:：][ \\t]*(?:\\*\\*)?[ \\t]*([^\\r\\n<>]{1,4000})";
 export const VOICE_FLAGS = 'gmi';
 export const LEGACY_VOICE_ID = 'bd2a75db-7ddd-4311-9f5b-db21afec623a';
-export const voiceRegex = () => new RegExp(VOICE_SOURCE, VOICE_FLAGS);
+// 1.1.5 系统助手人设: with a persona other than 莉莉丝 the same pattern matches 「名称：“…”」 / 【名称】：… (and the
+// English name instead of Lilith); the card shows the persona's name and avatar. null = the original pattern, unchanged.
+let PERSONA = null;
+export function setVoicePersona(p) { PERSONA = p && !p.lilith && p.name ? { name: String(p.name), en: String(p.en || ''), avatar: String(p.avatar || '') } : null; }
+export const voicePersona = () => PERSONA;
+const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function voiceSourceFor(p) {
+    if (!p) return VOICE_SOURCE;
+    const name = escRe(p.name), en = p.en ? '|' + escRe(p.en) : '';
+    // function replacers: a `$&` / `$1` in the name must stay literal (string replacements expand them)
+    return VOICE_SOURCE.replaceAll('莉莉[丝絲]', () => name).replaceAll('|Lilith)', () => en + ')');
+}
+export const voiceRegex = () => new RegExp(voiceSourceFor(PERSONA), VOICE_FLAGS);
 export const VOICE_SLOT = i => `ZTVOICESLOT${i}ZT`;
 
 /** Replaces every voice line with a slot token. Returns the new source text and the extracted voices. */
@@ -52,15 +64,18 @@ export function buildVoiceCard(doc, { cue, text }, voice) {
     if (cue) box.dataset.lilithCue = String(cue).slice(0, 24);
     box.setAttribute('style', voice?.cardStyle || CARD);
     const head = doc.createElement('span'); head.dataset.lilithHead = '1'; head.setAttribute('style', voice?.labelStyle || HEAD);
+    const P = PERSONA;
     const avatar = doc.createElement('span'); avatar.dataset.lilithAvatar = '1'; avatar.setAttribute('style', voice?.avatarStyle || AVATAR); avatar.textContent = '✧';
+    if (P?.avatar) { avatar.style.backgroundImage = `url("${P.avatar}")`; avatar.style.backgroundSize = 'cover'; avatar.textContent = ''; }
     const names = doc.createElement('span'); names.setAttribute('style', 'display:flex;flex-direction:column;min-width:0;');
-    const name = doc.createElement('span'); name.setAttribute('style', 'color:#e3c7f0;font-size:13px;font-weight:600;letter-spacing:3px;'); name.textContent = '莉莉丝 ';
-    const en = doc.createElement('span'); en.setAttribute('style', 'font-size:9px;color:#aa91b8;letter-spacing:2px;font-weight:400;'); en.textContent = 'LILITH';
+    const name = doc.createElement('span'); name.setAttribute('style', 'color:#e3c7f0;font-size:13px;font-weight:600;letter-spacing:3px;'); name.textContent = (P ? P.name : '莉莉丝') + ' ';
+    const en = doc.createElement('span'); en.setAttribute('style', 'font-size:9px;color:#aa91b8;letter-spacing:2px;font-weight:400;'); en.textContent = P ? P.en : 'LILITH';
     name.append(en); names.append(name); head.append(avatar, names);
     const body = doc.createElement('span'); body.dataset.lilithText = '1'; body.setAttribute('style', TEXT);
     body.innerHTML = inlineMarkdown(String(text ?? '').replace(/^\s+|\s+$/g, ''));
     box.append(head, body);
     // Original 1.7.x presentation: tone avatar (expression crop) + tone border colour, no mood word.
-    try { voice?.decorate?.(box, voice.avatars); } catch { /* plain card still fine */ }
+    // (a persona keeps its own avatar: the original tone avatars are Lilith's expressions)
+    if (!P) try { voice?.decorate?.(box, voice.avatars); } catch { /* plain card still fine */ }
     return box;
 }

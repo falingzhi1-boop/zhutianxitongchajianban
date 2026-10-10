@@ -3,8 +3,8 @@ export const STORAGE = 'zhutianCovenantTerminal';
 /** 1.0: structure version of the 诸天系统 ledger, kept in chatMetadata[STORAGE].ledgerSchema (see src/data-io.js). */
 export const LEDGER_SCHEMA = 2;
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '1.1.4';
-export const PATCH_REV = '1.1.4';
+export const VERSION = '1.1.5';
+export const PATCH_REV = '1.1.5-r1';   // 1.1.5 自检修订（见 docs/CHANGES-1.1.5.md「自检修订 r1」）
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -112,4 +112,7 @@ export const CAPABILITIES = [
     {name:'记忆键清洗',state:'implemented',scope:'1.1.4 玩家反馈：「记忆键重复或不安全」——模型写的记忆键先清洗成原版允许的字符（中文 / 字母数字 / _ - /，≤64）并合并同批重复键，再交给原版校验（原版校验本身不变）'},
     {name:'思维链保护与楼层检查',state:'implemented',scope:'1.1.4 玩家反馈：数据块守卫不再解析 / 改动数据块外面的思维链（开头的 <think>、预填充只有结束标签、没闭合的思维链），思维链里的草稿数据块标签改成全角（任何解析器都不再当真）；楼层渲染 / 账本绑定 / 旧楼层过滤也跳过数据块外的思维链；只有思维链里有数据块时移到正文后；莉莉丝语音框不从思维链里取台词；格式提醒默认改为深度 1（可调）；设置 → 诊断与维护 →「检查最新楼层：插件动过吗？」列出本层是否被改写 / 渲染和所有扩展注入的提示。非诸天聊天没有复现；诸天存档里「思维链草稿数据块吞掉 </think> 和正文」已在隔离酒馆复现并修复'},
     {name:'说明书',state:'implemented',scope:'1.1.4：终端 → 说明书（docs/MANUAL.md，只读，目录 / 搜索；Markdown 安全子集，文字全部转义）'},
+    {name:'系统助手人设',state:'implemented',scope:'1.1.5：设置 → 系统助手人设：莉莉丝（默认，零改动）/ 系统光球（编号）/ 自定义（名字、称呼、性格、说话方式、头像，可整段替换剧情规则和私聊人设）；剧情里每次生成临时替换世界书「02｜核心｜系统助手莉莉丝」（不写世界书文件），私聊 / 记忆 / 工作台请求换人设，界面名字和头像随之更换，可随时换回；悬浮莉莉丝、分层立绘、触摸只属于莉莉丝。真实模型的扮演效果未验证'},
+    {name:'功能开关',state:'implemented',scope:'1.1.5：设置 → 功能开关：一张表开关所有功能（系统助手 / 数据块 / 剧情提示 / 聊天群 / 界面），模块关闭同时停掉页面、注入和后台请求，数据保留；终端页面可单独从导航拿掉（总览、设置、连接保留）；「系统助手窗口」刷新后生效'},
+    {name:'聊天群 · 从世界书召唤与群员记忆',state:'experimental',scope:'1.1.5 实验性（模拟模型验收）：群员页「从世界书召唤」只读搜索世界书条目，模型按条目整理群员资料（招募费与入群费同招募令），群员记下来源（书 + 条目）；群聊 / 私聊带上条目资料和关键词命中的条目（有字数预算）；正文最近几层提到该群员时把 TA 的群聊 / 私聊 / 赠礼摘要注入正文（可关）；不写入世界书。真实模型的效果未验证'},
 ];

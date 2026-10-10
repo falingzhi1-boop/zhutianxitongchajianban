@@ -162,6 +162,7 @@ export class WindowControls {
         if (cancel) { this.sync(true); return; }
         if (target) {   // 1.1.3: dropped on 「换成莉莉丝」(切换) or 「关闭悬浮窗」(关闭) — the avatar goes back to where it was
             this.placeLauncher();
+            if (target === 'swap' && this.app.persona?.lilith === false) { this.sync(true); return; }   // 1.1.5: no floating figure for other personas
             if (target === 'swap') { swapFloat(this.app, 'lilith'); globalThis.toastr?.info('拖动莉莉丝到屏幕底部可以换回头像，或关闭悬浮窗。', '诸天 · 已切换成悬浮莉莉丝', { timeOut: 5000 }); }
             else void closeFloats(this.app);
             return;

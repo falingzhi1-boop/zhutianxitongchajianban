@@ -58,6 +58,7 @@ export class HubPlugins {
         hub.onEngineTab = (n, tools) => { prevTab?.(n, tools); this.strip(n, tools); };
         hub.onEngine = (frame, doc) => { prevEngine?.(frame, doc); this.applyEngine(doc); };
         this.disposers.push(this.app.adapter.subscribe(() => this.syncPrompt()));
+        if (this.app.settings?.onChange) this.disposers.push(this.app.settings.onChange(k => { if (k === 'modules') { this.lastPrompt = null; this.syncPrompt(); } }));
         this.syncPrompt();
         this.refreshModules().catch(() => {});
         return this;
@@ -91,7 +92,8 @@ ${r.list.map(m => `<div class="zt-row"><span>${esc(m.name)}${m.strong ? ' <span 
     // ---------- effects ----------
     syncPrompt() {
         try {
-            const zt = !!this.app.adapter.ledger?.() && !!this.app.adapter.currentIdentity();
+            // 1.1.5 功能开关 → 自拟外挂 off: no prompt
+            const zt = this.app.settings?.get('modules')?.plugins !== false && !!this.app.adapter.ledger?.() && !!this.app.adapter.currentIdentity();
             const st = zt ? this.chatState() : { off: [] };
             const text = zt ? pluginPrompt(this.enabled().filter(p => p.inject), [...new Set([...st.off, ...this.modOff])]) : '';
             // 1.0: SillyTavern empties its extension prompts when a chat is (re)loaded — compare with what is really there

@@ -376,3 +376,31 @@ dialog[data-zt-mobile=land] nav.zt-hub-nav.zt-more-open .zt-nav-more{background:
 .zt-man-body th,.zt-man-body td{border:1px solid var(--zt-line);padding:5px 8px;text-align:left;vertical-align:top}
 .zt-man-body th{background:#ffffff0a;white-space:nowrap}
 @media (max-width:640px){.zt-man-toc ul{columns:1}}
+/* 1.1.5 系统助手人设页 */
+.zt-persona-presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.zt-persona-preset{display:flex;flex-direction:column;gap:3px;border:1px solid #ffffff1a;border-radius:12px;padding:10px 12px;cursor:pointer;background:#ffffff05}
+.zt-persona-preset.on{border-color:var(--zt-sel);background:color-mix(in srgb,var(--zt-sel) 12%,transparent)}
+.zt-persona-preset input{position:absolute;opacity:0;pointer-events:none}
+.zt-persona-preset small{color:var(--zt-muted);font-size:11.5px;line-height:1.5}
+.zt-persona-id{display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:start}
+.zt-persona-av{display:flex;flex-direction:column;gap:8px;align-items:center;text-align:center}
+.zt-persona-av img{width:112px;height:112px;border-radius:50%;object-fit:cover;border:1px solid #ffffff22;box-shadow:0 0 22px #7fd3ff33}
+.zt-persona-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0 12px}
+.zt-persona-pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;line-height:1.6;max-height:280px;overflow:auto;background:#00000033;border-radius:8px;padding:10px}
+.zt-persona-bar{margin:12px 0 4px}
+.zt-persona-adv summary,.zt-persona-page details>summary{cursor:pointer;font-size:12.5px;margin:6px 0}
+@media (max-width:560px){.zt-persona-id{grid-template-columns:1fr}}
+/* 1.1.5 聊天群 · 从世界书召唤 */
+.zt-g-wblist{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto;margin-top:8px}
+.zt-g-wbhit{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid #ffffff12;border-radius:10px;padding:8px 10px;background:#ffffff04}
+.zt-g-wbhit>div{min-width:0}
+.zt-g-wbhit small{color:var(--zt-muted);font-size:11px}
+.zt-g-wbhit p{margin:2px 0 0;font-size:11.5px;color:var(--zt-muted);overflow-wrap:anywhere}
+/* 1.1.5 功能开关 */
+.zt-sw-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.zt-sw-table th,.zt-sw-table td{padding:7px 6px;border-top:1px dashed #ffffff10;text-align:left;vertical-align:middle}
+.zt-sw-table th{color:var(--zt-muted);font-weight:500;font-size:11.5px}
+.zt-sw-table td.c{width:52px;text-align:center}
+.zt-sw-table td small{display:block;color:var(--zt-muted);font-size:11px;line-height:1.5;margin-top:2px}
+.zt-sw-tag{display:inline-block;font-size:10.5px;border-radius:6px;padding:1px 6px;margin-left:6px;background:#f59e0b22;color:#fbbf24;vertical-align:1px}
+.zt-sw-sum{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px}

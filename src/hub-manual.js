@@ -78,7 +78,7 @@ export class HubManual {
         hub.addNav('终端', 'man', '说明书', 'book', { title: '说明书', render: el => this.render(el) });
         return this;
     }
-    stop() { /* the hub removes its pages and buttons */ }
+    dispose() { /* the hub removes its pages and buttons */ }
     url() { return String(this.app.base || '') + 'docs/MANUAL.md'; }
     async load() {
         if (this.md != null) return this.md;

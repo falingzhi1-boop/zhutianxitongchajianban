@@ -301,7 +301,7 @@ test('1.1.4 说明书: docs/MANUAL.md renders to escaped HTML with a table of co
     const { renderManual } = await import('../src/hub-manual.js');
     const { readFileSync } = await import('node:fs');
     const md = readFileSync(new URL('../docs/MANUAL.md', import.meta.url), 'utf8');
-    assert.match(md.split('\n')[0], /1\.1\.4/);
+    assert.match(md.split('\n')[0], /1\.1\.\d+/);   // 1.1.5+: the title follows the current version
     const { html, toc } = renderManual(md);
     assert.ok(toc.length >= 15, 'every chapter is in the table of contents');
     for (const k of ['↻ 重roll', '核对并解冻账本', '检查最新楼层', '群聊生成', '说明书']) assert.ok(html.includes(k), k);

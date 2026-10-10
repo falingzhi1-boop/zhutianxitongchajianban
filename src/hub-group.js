@@ -10,6 +10,7 @@ import { readConfigs } from './api-center.js';
 import * as L from './ledger-ops.js';
 import { errorLine } from './errors.js';
 import { stripPanels } from './panel-guard.js';
+import { GroupWorld, summonPrompt, searchEntries, entryTitle, entryKeys, worldMemoryPrompt } from './group-world.js';
 
 const KEY = '聊天群';
 const MAX_MSG = 150, MAX_PM = 30, MAX_MEMBERS = 30;
@@ -289,8 +290,22 @@ export function splitShares(total, count, rand = Math.random) {
 }
 export const signReward = (streak, members) => 100 * Math.min(7, Math.max(1, streak)) + 10 * members;
 
+/** 1.1.5 Pure: removes the plugin's group rule from a WORLDINFO_ENTRIES_LOADED payload (in place on the copies). */
+export const GROUP_RULE_COMMENT = '36｜联动｜诸天聊天群（插件）';
+export function dropGroupRule(lists) {
+    let n = 0;
+    for (const list of Object.values(lists || {})) {
+        if (!Array.isArray(list)) continue;
+        for (let i = list.length - 1; i >= 0; i--) if (list[i]?.comment === GROUP_RULE_COMMENT) { list.splice(i, 1); n++; }
+    }
+    return n;
+}
+
 export class HubGroup {
-    constructor(app) { this.app = app; this.disposers = []; this.view = 'chat'; this.busy = ''; this.pm = null; this.sheet = null; }
+    constructor(app) { this.app = app; this.disposers = []; this.view = 'chat'; this.busy = ''; this.pm = null; this.sheet = null; this.world = new GroupWorld(app); this.wb = { book: '', q: '', hits: null, err: '' }; }
+    /** 1.1.5 功能开关: the whole group (page, story prompt, auto chat) can be switched off. */
+    on() { return this.app.settings?.get('modules')?.group !== false; }
+    autoOn() { return this.on() && this.app.settings?.get('modules')?.groupAuto !== false; }
     get hub() { return this.app.hub; }
     get bridge() { return this.app.bridge; }
     get ctx() { return SillyTavern.getContext(); }
@@ -301,6 +316,21 @@ export class HubGroup {
         this.disposers.push(this.app.adapter.subscribe(() => { this.syncPrompt(); if (this.visible()) this.paint(); }));
         const ev = this.bridge.events, r = this.bridge.eventOn(ev.MESSAGE_RECEIVED || 'message_received', id => this.onStoryReply(id));
         this.disposers.push(() => r.stop());
+        // 1.1.5 群员记忆注入: the recap depends on who appears in the newest story text — refresh right before a generation
+        const gs = this.bridge.eventOn(ev.GENERATION_STARTED || 'generation_started', (_type, _o, dry) => { if (!dry) this.syncPrompt(); });
+        this.disposers.push(() => gs.stop());
+        // SillyTavern adds the user's new message AFTER GENERATION_STARTED (MESSAGE_SENT comes before the prompt is built):
+        // without this the member the user just named would only be remembered one turn later
+        const ms = this.bridge.eventOn(ev.MESSAGE_SENT || 'message_sent', () => this.syncPrompt());
+        this.disposers.push(() => ms.stop());
+        // 功能开关 → 聊天群 off: the plugin's own worldbook rule (36｜联动｜诸天聊天群) leaves this pass too, so the story
+        // model is not told about a group that is switched off (only the per-pass copies; the worldbook file is untouched)
+        if (ev.WORLDINFO_ENTRIES_LOADED) {
+            const wi = this.bridge.eventOn(ev.WORLDINFO_ENTRIES_LOADED, lists => { try { if (!this.on()) dropGroupRule(lists); } catch (e) { console.warn('[诸天聊天群] 世界书过滤失败', e); } });
+            this.disposers.push(() => wi.stop());
+        }
+        if (this.app.settings?.onChange) this.disposers.push(this.app.settings.onChange(k => { if (k === 'modules' || k === 'groupWorld') { this.lastPrompt = null; this.syncPrompt(); } }));
+        this.world.warm(this.group()).then(() => { this.lastPrompt = null; this.syncPrompt(); }).catch(() => {});
         this.syncPrompt();
         return this;
     }
@@ -337,11 +367,16 @@ export class HubGroup {
     // ---------- prompt injection ----------
     syncPrompt() {
         try {
-            const z = this.ledger(), g = z ? normGroup(z[KEY]) : null, parts = [];
+            const z = this.on() ? this.ledger() : null, g = z ? normGroup(z[KEY]) : null, parts = [];
             if (g && g.设置.摘要注入 && (g.成员.length || g.入库记录.length || groupItems(z, g).length)) {
                 parts.push(groupStoryPrompt(g, t => this.tierName(t), z));
             }
             if (g?.降临) parts.push(`【诸天聊天群 · 群员降临】${g.降临.名称}（${g.降临.世界}·${this.tierName(g.降临.档)}·${g.降临.性格 || ''}）通过聊天群降临到宿主身边，接下来 ${g.降临.轮} 轮剧情中作为同伴登场，按其性格和原世界能力行动。`);
+            // 1.1.5 群员记忆注入: summoned worldbook characters that appear in the latest story remember the group
+            if (g && g.设置.摘要注入 && this.world.cfg.memory && g.成员.some(m => m.来源)) {
+                const story = (this.ctx.chat || []).slice(-4).map(m => stripPanels(String(m?.mes || ''))).join('\n');
+                const mem = worldMemoryPrompt(g, story, m => this.world.entryOfSync(m)); if (mem) parts.push(mem);
+            }
             const text = parts.join('\n');
             // 1.0: SillyTavern empties its extension prompts when a chat is (re)loaded — compare with what is really there
             if (text === this.lastPrompt && (this.bridge.livePrompt?.('group') ?? text) === text) return; this.lastPrompt = text;
@@ -349,13 +384,14 @@ export class HubGroup {
         } catch (e) { console.warn('[诸天聊天群] 注入失败', e); }
     }
     async onStoryReply(id) {
+        if (!this.on()) return;
         const c = this.ctx, m = c.chat?.[Number(id)]; if (!m || m.is_user || m.is_system) return;
         let token; try { token = capture(this.app); } catch { return; }
         const g = this.group();
         if (g.降临) {
             try { await this.write(gg => { if (!gg.降临) return; gg.降临.轮 = num(gg.降临.轮) - 1; if (gg.降临.轮 <= 0) { this.say(gg, 'sys', `${gg.降临.名称} 的降临结束，回到了${gg.降临.世界}。`, { kind: 'sys' }); gg.降临 = null; } }, token); this.syncPrompt(); } catch (e) { console.warn(e); }
         }
-        if (!g.设置.自动闲聊 || !g.成员.length || this.busy) return;
+        if (!g.设置.自动闲聊 || !g.成员.length || this.busy || !this.autoOn()) return;
         // 0.8.2: every N-th story reply only (setting 闲聊间隔, default 3) — not one extra model call per message.
         const every = g.设置.闲聊间隔 || 3, due = num(g.节奏.闲聊) + 1 >= every;
         try { await this.write(gg => { gg.节奏.闲聊 = due ? 0 : num(gg.节奏.闲聊) + 1; }, token); } catch (e) { console.warn(e); return; }
@@ -382,6 +418,10 @@ export class HubGroup {
         const packetRule = allow === 'asked' ? '2. 宿主这次主动要了，可以按宿主的要求发红包或赠礼（最多 3 个），格式：'
             : allow ? '2. 本轮可以（不是必须）由 1 位群员发红包或赠礼，最多 1 个，格式：'
             : '2. 本轮【禁止】发红包和赠礼（群里刚发过，节奏是三四轮一次），只聊天。下面的格式本轮不要用：';
+        // 1.1.5: busy is set BEFORE the (possibly slow) worldbook read, so a second click / auto chat cannot start a parallel round
+        this.busy = opts.replace ? '群员正在重新输入…' : '群员正在输入…'; this.paint();
+        try {
+        const wbBlock = !g0.成员.some(m => m.来源) ? '' : await this.world.block(g0, [userText, story, ...g0.消息.slice(-6).map(m => m.text)].join('\n')).catch(() => '');
         const recent = g0.消息.slice(-gen.ctx).map(m => `${m.from === 'me' ? this.hostName() + '（宿主）' : m.from === 'sys' ? '系统' : (g0.成员.find(x => x.id === m.from)?.名称 || '群员')}: ${String(m.text).slice(0, 120)}`).join('\n');
         const sys = `你是诸天万界聊天群。群里的每位群员来自不同的世界，性格、说话方式和见识都符合原世界。宿主是群主，拥有诸天系统。
 回复规则：
@@ -398,11 +438,9 @@ ${packetRule}
 【宿主】${this.hostName()}，当前世界 ${z0.当前世界 || '未知'}，商城等级 Lv${shop}
 【群员】
 ${g0.成员.map(m => this.memberLine(m)).join('\n')}
-【最近消息】
+${wbBlock ? wbBlock + '\n' : ''}【最近消息】
 ${recent || '（暂无）'}
 ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根据宿主那边的最新剧情，让 ${idleLo === idleHi ? idleLo : `${idleLo}–${idleHi}`} 位群员自然闲聊。${story ? '\n最新剧情：' + story : ''}`}`;
-        this.busy = opts.replace ? '群员正在重新输入…' : '群员正在输入…'; this.paint();
-        try {
             const t0 = Date.now();
             let text = await this.ask(sys, user, gen.tokens || autoTokens(gen.hi, gen.chars), !!gen.tokens);
             // 1.1.4 截断: the reply hit the output limit (reported by the independent-API path) → the last line is cut
@@ -580,6 +618,60 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         } catch (e) { throw Error(e.message + (committing ? '' : '（未扣招募系统点，API调用可能计费）')); }
         finally { this.busy = ''; this.paint(); }
     }
+    // ---------- 1.1.5 从世界书召唤 ----------
+    /** Lists entries of the chosen book that match the search words (read-only). */
+    async wbFind(book, q) {
+        this.wb = { ...this.wb, book: String(book || ''), q: String(q || '').trim().slice(0, 40), err: '', hits: null };
+        if (!this.wb.book) throw Error('请先选择一本世界书。');
+        this.busy = '正在读取世界书…'; this.paint();
+        try {
+            const list = await this.world.entries(this.wb.book);
+            this.wb.hits = searchEntries(list, this.wb.q, 30).map(e => ({ uid: e.uid, title: entryTitle(e), keys: entryKeys(e).slice(0, 6), text: String(e.content || '').replace(/\s+/g, ' ').slice(0, 90) }));
+        } catch (e) { this.wb.err = errorLine(e); } finally { this.busy = ''; this.paint(); }
+    }
+    /** Turns one worldbook entry into the recruit candidate (same fee and invite flow as 招募令). */
+    async summon(book, uid) {
+        if (this.busy) throw Error('已有聊天群操作正在进行。');
+        const token = capture(this.app), z = this.ledger(), g = normGroup(z[KEY]);
+        if (g.成员.length >= g.容量) throw Error(`群已满（${g.容量}人）。`);
+        if (num(z.系统点) < RECRUIT_FEE) throw Error('系统点不足，未发送召唤。');
+        if (g.成员.some(m => m.来源 && m.来源.book === book && String(m.来源.uid) === String(uid))) throw Error('这个条目的角色已经在群里了。');
+        const entry = await this.world.entry({ book, uid }); if (!entry) throw Error('世界书里找不到这个条目（可能已被删除）。');
+        const tiers = L.TIERS.slice(1).map((t, i) => `${i + 1}=${t.n}`).join('，');
+        this.busy = '召唤中（未扣系统点）…'; this.paint();
+        let committing = false;
+        try {
+            const prompt = summonPrompt(entry, book, { tiers, maxTier: affordableTier(num(z.系统点) - RECRUIT_FEE) });
+            let card = parseRecruit(await this.ask('你是诸天万界聊天群的召唤系统，只根据给出的世界书条目整理资料。', prompt, 4096));
+            if (!card) card = parseRecruit(await this.ask('你是诸天万界聊天群的召唤系统，只根据给出的世界书条目整理资料。', prompt + '\n上次回答格式错误，请严格输出一行。', 4096));
+            assertCapture(this.app, token);
+            if (!card) throw Error('没有得到有效的群员资料。');
+            if (g.成员.some(m => m.名称 === card.名称)) throw Error(`${card.名称} 已经在群里了。`);
+            const src = { book: String(book).slice(0, 80), uid: entry.uid, comment: entryTitle(entry) };
+            committing = true;
+            await checkedCommit(this.app, token, zz => {
+                const gg = normGroup(zz[KEY]);
+                if (gg.rev !== g.rev || gg.成员.length >= gg.容量 || gg.成员.some(m => m.名称 === card.名称)) throw Error('聊天群状态已变化，未扣费，请重新召唤。');
+                L.spend(zz, RECRUIT_FEE); gg.候选 = { ...card, 来源: src, t: Date.now(), 超预算: card.档 > affordableTier(num(zz.系统点)) }; gg.rev = num(gg.rev) + 1; zz[KEY] = gg;
+            });
+        } catch (e) { throw Error(e.message + (committing ? '' : '（未扣召唤系统点，API调用可能计费）')); }
+        finally { this.busy = ''; this.paint(); }
+    }
+    wbView(g, z) {
+        if (this.app.settings?.get('groupWorld')?.read === false) return '';
+        let names = this.world.names(); const active = this.world.active().filter(n => names.includes(n));
+        if (!names.length) { this.bridge.prefetchWorldbooks?.()?.then?.(() => { if (this.world.names().length && this.visible()) this.paint(); }); }
+        names = [...active, ...names.filter(n => !active.includes(n))];
+        const book = this.wb.book && names.includes(this.wb.book) ? this.wb.book : names[0] || '';
+        const inGroup = new Set(g.成员.filter(m => m.来源?.book === book).map(m => String(m.来源.uid)));
+        const hits = this.wb.hits && this.wb.book === book ? this.wb.hits : null;
+        return `<section class="zt-card zt-g-wb"><h3>从世界书召唤 <small>只读你的世界书 · 每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档 · 召唤的群员会记得群聊</small></h3>
+<div class="zt-g-row"><select data-f="wbook" aria-label="世界书">${names.length ? names.map(n => `<option value="${esc(n)}" ${n === book ? 'selected' : ''}>${active.includes(n) ? '★ ' : ''}${esc(n)}</option>`).join('') : '<option value="">（读取不到世界书列表）</option>'}</select><input type="text" data-f="wq" maxlength="40" value="${esc(this.wb.q)}" placeholder="角色名或关键词，留空列出全部" aria-label="搜索世界书条目"><button type="button" class="zt-btn small" data-g="wb-find" ${this.busy || !names.length ? 'disabled' : ''}>查找</button></div>
+<small class="zt-note">★ = 当前聊天正在用的世界书。不会改动世界书文件；群员只记下「出自哪本书的哪个条目」，群聊时读取条目内容，正文里提到 TA 时把群聊记忆带进剧情（设置 → 功能开关 → 聊天群）。</small>
+${this.wb.err ? `<p class="zt-g-warn">${esc(this.wb.err)}</p>` : ''}
+${hits ? (hits.length ? `<div class="zt-g-wblist">${hits.map(h => `<div class="zt-g-wbhit"><div><b>${esc(h.title)}</b>${h.keys.length ? ` <small>${esc(h.keys.join('、'))}</small>` : ''}<p>${esc(h.text)}</p></div>${inGroup.has(String(h.uid)) ? '<span class="zt-chip">已在群里</span>' : `<button type="button" class="zt-btn small primary" data-wb-summon="${esc(String(h.uid))}" data-book="${esc(book)}" ${this.busy || g.成员.length >= g.容量 || g.候选 ? 'disabled' : ''} ${g.候选 ? 'title="先处理当前候选人（邀请或放弃）"' : ''}>召唤</button>`}</div>`).join('')}</div>` : '<p class="zt-sub">没有匹配的条目。</p>') : ''}
+</section>`;
+    }
     joinPrice(c) { return JOIN_PRICE[Math.max(1, Math.min(8, c.档 | 0))] || JOIN_PRICE[1]; }
     async invite() {
         const out = await this.write((g, z) => {
@@ -588,7 +680,7 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             const price = this.joinPrice(c);
             if (num(z.系统点) < price) throw Error(`入群费 ${fmtNum(price)} 点，当前只有 ${fmtNum(num(z.系统点))} 点。可以「放弃」再招募一位实力档低一些的。`);
             L.spend(z, price);
-            const m = { id: rid('m'), 名称: c.名称, 世界: c.世界, 档: c.档, 性格: c.性格, 特产: c.特产, 好感: 20, 身份: '群员', 禁言轮: 0, 加入: Date.now() };
+            const m = { id: rid('m'), 名称: c.名称, 世界: c.世界, 档: c.档, 性格: c.性格, 特产: c.特产, 好感: 20, 身份: '群员', 禁言轮: 0, 加入: Date.now(), ...(c.来源 ? { 来源: c.来源 } : {}) };
             g.成员.push(m); g.候选 = null; this.say(g, 'sys', `${m.名称}（${m.世界}·${this.tierName(m.档)}）加入了群聊。`, { kind: 'sys' });
             return m;
         });
@@ -624,7 +716,8 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
         const log = (this.group().私聊[id] || []).slice(-10).map(x => `${x.me ? '宿主' : m.名称}: ${x.text}`).join('\n');
         this.busy = `${m.名称} 正在输入…`; this.paint();
         try {
-            const reply = await this.ask(`你是诸天万界聊天群的群员私聊：你扮演 ${m.名称}（${m.世界}·${this.tierName(m.档)}·${m.性格}），正在和群主私聊。只输出 ${m.名称} 的一段回复，不要旁白，不超过 120 字。`, `对宿主的好感：${num(m.好感, 20)}/100\n${log ? '最近私聊：\n' + log + '\n' : ''}宿主：${text}`, 400);
+            const wbBlock = m.来源 ? await this.world.block(this.group(), text + '\n' + log, [id]).catch(() => '') : '';
+            const reply = await this.ask(`你是诸天万界聊天群的群员私聊：你扮演 ${m.名称}（${m.世界}·${this.tierName(m.档)}·${m.性格}），正在和群主私聊。只输出 ${m.名称} 的一段回复，不要旁白，不超过 120 字。${wbBlock ? '\n' + wbBlock : ''}`, `对宿主的好感：${num(m.好感, 20)}/100\n${log ? '最近私聊：\n' + log + '\n' : ''}宿主：${text}`, 400);
             await this.write(g => { const arr = g.私聊[id] = Array.isArray(g.私聊[id]) ? g.私聊[id] : []; arr.push({ me: true, text, t: Date.now() }, { me: false, text: clip(reply.replace(/^.{0,24}[:：]\s*/, ''), 300), t: Date.now() }); if (arr.length > MAX_PM) arr.splice(0, arr.length - MAX_PM); }, token);
         } finally { this.busy = ''; this.paint(); }
     }
@@ -793,13 +886,13 @@ ${sheet}
         const c = g.候选, pm = this.pm && g.成员.find(m => m.id === this.pm), pulled = new Set((Array.isArray(z?.羁绊库) ? z.羁绊库 : []).map(p => p?.群员ID).filter(Boolean));
         const recruit = `<section class="zt-card"><h3>发布招募令 <small>每次 ${RECRUIT_FEE} 点（失败退回）· 入群费按实力档 · 随机招募按你的系统点挑实力档</small></h3>
 <div class="zt-g-row"><select data-f="rmode"><option value="rand">随机世界</option><option value="world">指定世界</option><option value="char">指定角色</option></select><input type="text" data-f="rhint" maxlength="30" placeholder="${RECRUIT_PLACEHOLDER.rand}" aria-label="世界或角色名"><button type="button" class="zt-btn primary small" data-g="recruit" ${this.busy || g.成员.length >= g.容量 ? 'disabled' : ''}>发布</button></div>
-${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite" ${num(z.系统点) < this.joinPrice(c) ? 'title="系统点不足"' : ''}>邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button>${num(z.系统点) < this.joinPrice(c) ? `<small class="zt-g-warn">系统点不足（有 ${fmtNum(num(z.系统点))}）。放弃后再招募，会换一个人。</small>` : ''}<button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
+${c ? `<div class="zt-g-cand">${this.avatar(c)}<div><b>${esc(c.名称)}</b> <small>${esc(c.世界)} · ${esc(this.tierName(c.档))}${c.来源 ? ` · 📖 ${esc(c.来源.book)} / ${esc(c.来源.comment || '')}` : ''}</small><p>${esc(c.性格)} · 特产：${esc(c.特产)}</p></div><button type="button" class="zt-btn primary small" data-g="invite" ${num(z.系统点) < this.joinPrice(c) ? 'title="系统点不足"' : ''}>邀请入群 · ${fmtNum(this.joinPrice(c))} 点</button>${num(z.系统点) < this.joinPrice(c) ? `<small class="zt-g-warn">系统点不足（有 ${fmtNum(num(z.系统点))}）。放弃后再招募，会换一个人。</small>` : ''}<button type="button" class="zt-btn small" data-g="drop-cand">放弃</button></div>` : ''}
 <div class="zt-g-row"><span>容量 ${g.成员.length}/${g.容量}</span><button type="button" class="zt-btn small" data-g="expand" ${g.容量 >= MAX_MEMBERS ? 'disabled' : ''}>扩建 +5 · ${fmtNum(expandCost(g.容量))} 点</button></div></section>`;
-        const list = g.成员.map(m => `<div class="zt-g-member${pm?.id === m.id ? ' open' : ''}">${this.avatar(m)}<div class="zt-g-minfo"><b>${esc(m.名称)}${m.身份 === '管理员' ? ' <span class="zt-grade">管理员</span>' : ''}${num(m.禁言轮) > 0 ? ` <span class="zt-grade" data-g="禁忌">禁言 ${m.禁言轮} 轮</span>` : ''}${g.降临?.id === m.id ? ` <span class="zt-grade" data-g="仙品">降临中 ${g.降临.轮} 轮</span>` : ''}</b>
+        const list = g.成员.map(m => `<div class="zt-g-member${pm?.id === m.id ? ' open' : ''}">${this.avatar(m)}<div class="zt-g-minfo"><b>${esc(m.名称)}${m.身份 === '管理员' ? ' <span class="zt-grade">管理员</span>' : ''}${num(m.禁言轮) > 0 ? ` <span class="zt-grade" data-g="禁忌">禁言 ${m.禁言轮} 轮</span>` : ''}${g.降临?.id === m.id ? ` <span class="zt-grade" data-g="仙品">降临中 ${g.降临.轮} 轮</span>` : ''}${m.来源 ? ` <span class="zt-chip" title="出自世界书「${esc(m.来源.book)}」· ${esc(m.来源.comment || '')}">📖 世界书</span>` : ''}</b>
 <small>${esc(m.世界)} · ${esc(this.tierName(m.档))} · ${esc(m.性格)} · 特产 ${esc(m.特产)}</small><i class="zt-g-fav" style="--v:${num(m.好感, 20)}%" title="好感 ${num(m.好感, 20)}"></i></div>
 <div class="zt-actions"><button type="button" class="zt-btn small" data-pm="${m.id}">私聊</button>${pulled.has(m.id) ? `<button type="button" class="zt-btn small" data-bond-open="${m.id}" title="已在羁绊里">已在羁绊</button>` : `<button type="button" class="zt-btn small" data-bond-pull="${m.id}" title="把 TA 加入羁绊页（群员默认不进羁绊）">拉入羁绊</button>`}<button type="button" class="zt-btn small" data-descend="${m.id}" ${g.降临 ? 'disabled' : ''}>降临 · ${fmtNum(this.descendCost(m))}</button><button type="button" class="zt-btn small" data-live="${m.id}">直播</button><button type="button" class="zt-btn small" data-admin="op" data-id="${m.id}">${m.身份 === '管理员' ? '撤管理' : '设管理'}</button><button type="button" class="zt-btn small" data-admin="mute" data-id="${m.id}">${num(m.禁言轮) > 0 ? '解禁' : '禁言'}</button><button type="button" class="zt-btn small danger" data-admin="kick" data-id="${m.id}">踢出</button></div>
 ${pm?.id === m.id ? `<div class="zt-g-pm">${(g.私聊[m.id] || []).map(x => `<p class="${x.me ? 'me' : ''}"><b>${x.me ? '我' : esc(m.名称)}</b>${esc(x.text)}</p>`).join('') || '<p class="zt-sub">还没有私聊记录。</p>'}${this.busy ? `<p class="zt-sub">${esc(this.busy)}</p>` : ''}<div class="zt-g-row"><input type="text" data-f="pm" maxlength="300" placeholder="私聊 ${esc(m.名称)}"><button type="button" class="zt-btn primary small" data-g="pm-send" data-id="${m.id}" ${this.busy ? 'disabled' : ''}>发送</button></div></div>` : ''}</div>`).join('');
-        return `<div class="zt-g-scroll">${recruit}${list || '<div class="zt-empty">还没有群员。</div>'}</div>`;
+        return `<div class="zt-g-scroll">${recruit}${this.wbView(g, z)}${list || '<div class="zt-empty">还没有群员。</div>'}</div>`;
     }
     marketView(g, z) {
         const listNow = g.集市.day === today() ? g.集市.list : null, bag = Array.isArray(z.背包) ? z.背包 : [];
@@ -864,6 +957,7 @@ ${row('输出上限', '输出上限（max tokens）', `回复经常被截断时�
         if (d.bondPull) return run(async () => { if (!this.app.bonds) throw Error('羁绊页未启动'); await this.app.bonds.pull(d.bondPull); });
         if (d.bondOpen) { const e = (this.app.adapter.ledger()?.羁绊库 || []).find(p => p?.群员ID === d.bondOpen); if (e) this.app.bonds?.open(e.id); return; }
         if (d.descend) return run(() => this.descend(d.descend));
+        if (d.wbSummon != null) return run(() => this.summon(d.book, d.wbSummon));
         if (d.live) { this.view = 'chat'; return run(() => this.live(d.live)); }
         if (d.admin) { if (d.admin === 'kick' && !confirm('把这位群员移出群聊？')) return; return run(() => this.admin(d.id, d.admin)); }
         switch (d.g) {
@@ -881,6 +975,7 @@ ${row('输出上限', '输出上限（max tokens）', `回复经常被截断时�
             case 'inject': return run(() => this.saveMeta({ 摘要注入: t.checked }));
             case 'recruit': return run(() => this.recruit(this.val('[data-f=rmode]'), this.val('[data-f=rhint]')));
             case 'invite': return run(() => this.invite());
+            case 'wb-find': return run(() => this.wbFind(this.val('[data-f=wbook]'), this.val('[data-f=wq]')));
             case 'drop-cand': return run(async () => { await this.write(g => { if (g.候选) g.候选历史 = [...g.候选历史, g.候选.名称].slice(-12); g.候选 = null; }); this.paint(); });
             case 'expand': return run(() => this.expand());
             case 'pm-send': { const v = this.val('[data-f=pm]'); return run(() => this.privateSay(d.id, v)); }

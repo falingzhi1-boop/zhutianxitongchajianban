@@ -352,6 +352,7 @@ export class Features {
             globalThis.__zhutianSlash = true;   // the host has no unregister for legacy commands; callbacks resolve the live app
             c.registerSlashCommand('zt', (_args, value) => {
                 const app = globalThis.__zhutianApp; if (!app) return '诸天扩展未运行';
+                if (app.settings?.get('modules')?.slash === false) return '诸天斜杠命令已在 设置 → 功能开关 里关闭';
                 const [cmd, ...rest] = String(value || 'open').trim().split(/\s+/);
                 const f = app.features;
                 switch (cmd) {

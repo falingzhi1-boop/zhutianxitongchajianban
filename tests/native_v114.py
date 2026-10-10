@@ -45,7 +45,8 @@ with sync_playwright() as p:
     js("""async(url)=>{const a=__zhutianApp;const api=await import('/scripts/extensions/third-party/zhutianxitongchajianban/src/api-center.js');
       await api.saveConfigs(a.bridge,'诸天记忆助手_v1',{url,key:'qa-key-not-real',model:'mock-zt'});a.settings.patch('fx',{mode:'off',outside:false});
       await a.bridge.updateVariablesWith(v=>{const z=v.诸天系统;z.系统点=500000;z.聊天群={成员:[{id:'m1',名称:'白浅',世界:'青丘',档:4,性格:'清冷',特产:'桃花酿',好感:20},{id:'m2',名称:'陆千帆',世界:'天机阁',档:2,性格:'缜密',特产:'算筹',好感:20}]};return v;},{type:'chat',verify:true});}""", args.mock)
-    ok('version 1.1.4 loaded', js("__zhutianApp.hub.shadow.innerHTML.includes('1.1.4') || (async()=>{return (await import('/scripts/extensions/third-party/zhutianxitongchajianban/src/contracts.js')).VERSION})()") in (True, '1.1.4'))
+    ver = js("(async()=>(await import('/scripts/extensions/third-party/zhutianxitongchajianban/src/contracts.js')).VERSION)()")
+    ok('version ≥ 1.1.4 loaded', tuple(map(int, str(ver).split('.'))) >= (1, 1, 4), ver)
     hub("h.open('ov');await new Promise(r=>setTimeout(r,400));h.go('group');await new Promise(r=>setTimeout(r,500))")
 
     # ---------- 群聊生成 settings ----------

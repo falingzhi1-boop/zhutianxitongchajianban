@@ -73,7 +73,7 @@ export class Onboarding {
     memoryOn() { try { const ns = this.ns(); return !!(ns && this.app.bridge.getVariables({ type: 'chat' })?.[ns]?.enabled); } catch { return false; } }
     async maybeAuto() {
         // Only on a plain open (entry button / float / hotkey): a floor tag or a 查看星图 link asked for its own page.
-        if (this.autoTried || this.settings.get('guide') || this.hub.openedWith) return;
+        if (this.autoTried || this.settings.get('guide') || this.hub.openedWith || this.settings.get('modules')?.guide === false) return;
         this.autoTried = true;
         const steps = guideSteps(await this.status());
         if (!shouldAutoOpen(this.settings.get('guide'), steps)) { if (steps.every(s => s.done)) this.finish('done', true); return; }

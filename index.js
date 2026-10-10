@@ -11,6 +11,9 @@ import {HubSettings} from './src/hub-settings.js';
 import {HubPlugins} from './src/hub-plugins.js';
 import {HubGroup} from './src/hub-group.js';
 import { HubManual } from './src/hub-manual.js';
+import { PersonaHost } from './src/persona.js';
+import { HubPersona } from './src/hub-persona.js';
+import { HubSwitches } from './src/hub-switches.js';
 import {ID, VERSION} from './src/contracts.js';
 import {hooksSupported, fetchHostVersion} from './src/compat.js';
 import {Settings} from './src/settings.js';
@@ -65,16 +68,20 @@ class App {
         try{this.statusbar=new StatusBarHost(a,this.bridge,this.settings,base,{macros:this.macros,voice:voiceKit});await this.statusbar.start();this.parts.push(this.statusbar);}
         catch(e){this.statusbarError=e.message;console.error('[诸天] 原生状态栏未启动',e);this.statusbar=null;}
         if(this.settings.get('assistant')){
-            try{this.assistant=new AssistantHost({adapter:a,bridge:this.bridge,original,settings:this.settings,openTerminal:p=>this.openTerminal(p)}).start();this.parts.push(this.assistant);}
+            try{this.assistant=new AssistantHost({adapter:a,bridge:this.bridge,original,settings:this.settings,openTerminal:p=>this.openTerminal(p),persona:()=>this.persona}).start();this.parts.push(this.assistant);}
             catch(e){this.assistantError=e.message;this.assistant=null;console.warn('[诸天] 莉莉丝助手未启动：',e.message);globalThis.toastr?.warning(e.message,'诸天 · 莉莉丝');}
         }
         // 0.5.0: ONE window. The Lilith window is the shell; the hub adds every system page into it.
         this.hubSettings=new HubSettings(this);
         try{this.hub=new Hub(this).start();this.parts.push(this.hub);}catch(e){this.hubError=e.message;console.error('[诸天] 终端未启动',e);}
+        // 1.1.5 系统助手人设（默认莉莉丝 = 不做任何改动）
+        try{this.personaHost=new PersonaHost(this).start();this.parts.push(this.personaHost);}catch(e){console.warn('[诸天] 系统助手人设未启动',e);}
         try{this.plugins=new HubPlugins(this).start();this.parts.push(this.plugins);}catch(e){console.warn('[诸天] 外挂管理未启动',e);}
         try{this.group=new HubGroup(this).start();this.parts.push(this.group);}catch(e){console.warn('[诸天] 聊天群未启动',e);}
         // 1.1.4: 说明书 — docs/MANUAL.md inside the terminal (read-only)
         try{this.manual=new HubManual(this).start();this.parts.push(this.manual);}catch(e){console.warn('[诸天] 说明书未启动',e);}
+        try{this.personaPage=new HubPersona(this).start();this.parts.push(this.personaPage);}catch(e){console.warn('[诸天] 人设页未启动',e);}
+        try{this.switches=new HubSwitches(this).start();this.parts.push(this.switches);}catch(e){console.warn('[诸天] 功能开关未启动',e);}
         // 0.7.0: world themes, 图谱, 演出 (each optional; the terminal works without them).
         try{this.world=new World(this).start();this.parts.push(this.world);}catch(e){console.warn('[诸天] 世界主题未启动',e);}
         try{this.atlas=new HubAtlas(this).start();this.parts.push(this.atlas);}catch(e){console.warn('[诸天] 图谱未启动',e);}

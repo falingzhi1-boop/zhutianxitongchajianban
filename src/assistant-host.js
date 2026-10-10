@@ -10,6 +10,7 @@ import { streamedCompletion, reportApiError } from './api-stream.js';
 import { NATIVE_SCRIPT_ID, isMainApi, MAIN_API_MODEL, MAIN_API_URL, endpointOf } from './th-bridge.js';
 import { classifyAssistant, readRoutes, resolveRoute, routeLabel } from './api-routes.js';
 import { scrollWithin, resetPageScroll } from './page-scroll.js';
+import { rewriteMessages } from './persona.js';
 
 const LEGACY_DOM_ID = 'zt-memory-assistant-v1';
 
@@ -27,7 +28,7 @@ export function stContextProxy(getContext) {
         getOwnPropertyDescriptor(_, key) { const c = getContext() || {}; return key in c ? { enumerable: true, configurable: true, value: c[key] } : undefined; },
     });
 }
-export function proxiedFetch(bridge) {
+export function proxiedFetch(bridge, persona = () => null) {
     const real = globalThis.fetch.bind(globalThis);
     const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
     return async function fetch(url, init = {}) {
@@ -36,6 +37,8 @@ export function proxiedFetch(bridge) {
         if (String(init.method || 'GET').toUpperCase() === 'POST' && /\/chat\/completions$/.test(String(url).replace(/[?#].*$/, ''))) {
             let body = null; try { body = JSON.parse(init.body || '{}'); } catch { body = null; }
             const id = body ? classifyAssistant(body.messages) : '', over = id ? resolveRoute(readRoutes(bridge), id) : null;
+            // 1.1.5 系统助手人设: classified on the original text first, then the persona replaces Lilith's system prompt
+            const who = persona?.(); if (body && who && !who.lilith) body.messages = rewriteMessages(body.messages, who);
             const defaultCap = Number(bridge.getVariables?.({ type: 'global' })?.诸天系统_API?.maxTokens);
             const cap = Number(over?.maxTokens) || defaultCap;
             if (body && Number.isInteger(cap) && cap >= 64 && cap <= 65536) body.max_tokens = cap;
@@ -119,8 +122,8 @@ export function retimeError(e, sec) {
     const out = Error(m); out.cause = e; return out;
 }
 export class AssistantHost {
-    constructor({ adapter, bridge, original, settings, openTerminal }) {
-        Object.assign(this, { adapter, bridge, original, settings, openTerminal });
+    constructor({ adapter, bridge, original, settings, openTerminal, persona }) {
+        Object.assign(this, { adapter, bridge, original, settings, openTerminal, persona });
         this.disposeOriginal = null; this.hostElement = null; this.shadow = null; this.motion = null; this.onMotion = null;
     }
     legacyRunning() { const el = document.getElementById(LEGACY_DOM_ID); return !!el && !el.dataset.ztNative; }
@@ -171,7 +174,7 @@ export class AssistantHost {
         });
         // The original connection page calls `root.fetch(…/models)` where root is this private globalThis — not the
         // module-level `fetch`. Without this the call threw a TypeError and the page always reported "CORS" (0.8.1 fix).
-        const shimFetch = proxiedFetch(b); G.fetch = shimFetch; this.shimFetch = shimFetch;   // also for diagnostics / QA
+        const shimFetch = proxiedFetch(b, () => this.persona?.()); G.fetch = shimFetch; this.shimFetch = shimFetch;   // also for diagnostics / QA
         mountOriginalAssistant({
             globalThis: G, window: windowShim, fetch: shimFetch,
             // The original aborts every independent-API request after a fixed 60 s; behind slow providers / thinking models

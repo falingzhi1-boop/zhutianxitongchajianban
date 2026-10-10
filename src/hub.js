@@ -45,6 +45,16 @@ export const NAV = [
 /** Full names for short navigation labels (tooltip + screen readers via title). */
 const NAV_TITLE = { plugmgr: '自拟外挂：自己编写外挂（规则、代价、冷却），按聊天启用' };
 const ORIGINAL_PAGES = ['work', 'memory', 'rules', 'api', 'env'];
+/** Pages that can never be switched off (the way back to the switches). */
+export const ALWAYS_PAGES = Object.freeze(['ov', 'set', 'api', 'switches', 'persona']);
+/** Module switch → its page (a module off hides its page as well). */
+export const MODULE_PAGES = Object.freeze({ group: 'group', plugins: 'plugmgr' });
+/** 1.1.5 Pure: the set of terminal pages taken out of the navigation. */
+export function hiddenPages(navHidden, modules) {
+    const out = new Set((Array.isArray(navHidden) ? navHidden : []).map(String).filter(id => !ALWAYS_PAGES.includes(id)));
+    for (const [k, page] of Object.entries(MODULE_PAGES)) if (modules?.[k] === false) out.add(page);
+    return out;
+}
 const ORIGINAL_LABEL = { work: '工作台', memory: '记忆', rules: '规则', api: '连接', env: '状态' };
 
 export class Hub {
@@ -66,6 +76,7 @@ export class Hub {
         this.extraCss = ['world.css', 'atlas.css', 'fx.css'].map(f => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = this.app.base + 'styles/' + f; this.shadow.append(l); return l; });
         this.marker = document.createElement('div'); this.marker.id = ID; this.marker.hidden = true; document.body.append(this.marker);
         this.buildNav(); this.buildTop(); this.buildEngine(); this.buildDeco();
+        this.applyNav(); if (this.settings?.onChange) this.disposers.push(this.settings.onChange(k => { if (k === 'navHidden' || k === 'modules') this.applyNav(); }));
         const title = this.shadow.getElementById('title'); if (title) { this.oldTitle = [title.textContent, title.nextElementSibling?.textContent]; title.textContent = '诸天终端'; if (title.nextElementSibling) title.nextElementSibling.textContent = 'ZHUTIAN TERMINAL · LILITH'; }
         const pill = this.shadow.querySelector('.version-pill'); if (pill) pill.textContent = VERSION;
         this.register('set', { title: '设置', render: el => this.app.hubSettings?.render(el) });
@@ -143,6 +154,23 @@ export class Hub {
     addNav(group, id, label, ic, def) {
         const items = this.groupBox?.(group); if (items && !items.querySelector(`[data-page="${id}"]`)) items.append(this.navButton(id, label, ic));
         this.register(id, def);
+        this.applyNav();
+    }
+    /** 1.1.5 功能开关: pages switched off leave the navigation (总览 and 设置 always stay). */
+    hiddenPages() { return hiddenPages(this.settings?.get?.('navHidden'), this.settings?.get?.('modules')); }
+    navLabel(id) { const b = this.shell?.nav?.querySelector(`.nav-button[data-page="${id}"]`); return (b?.textContent || this.pages.get(id)?.title || id).trim(); }
+    applyNav() {
+        const nav = this.shell?.nav; if (!nav) return;
+        const off = this.hiddenPages();
+        // only buttons hidden HERE are shown again (others — e.g. 引导 after it was finished — keep their own state)
+        for (const b of nav.querySelectorAll('.nav-button[data-page]')) {
+            if (off.has(b.dataset.page)) { if (!b.hidden) { b.dataset.ztOff = '1'; b.hidden = true; } }
+            else if (b.dataset.ztOff) { delete b.dataset.ztOff; b.hidden = false; }
+        }
+        for (const g of nav.querySelectorAll('.zt-nav-group')) {
+            const any = !!g.querySelector('.nav-button[data-page]:not([hidden])');
+            if (!any && !g.hidden) { g.dataset.ztOff = '1'; g.hidden = true; } else if (any && g.dataset.ztOff) { delete g.dataset.ztOff; g.hidden = false; }
+        }
     }
     register(id, def) {
         let el = this.shadow.getElementById('page-' + id);
@@ -179,6 +207,7 @@ export class Hub {
 
     // ---------- navigation ----------
     go(id, { silent = false } = {}) {
+        if (this.hiddenPages().has(id)) { this.toast?.(`「${this.navLabel(id)}」已在 设置 → 功能开关 里关闭`, 3600); if (this.page && !this.hiddenPages().has(this.page) && this.page !== id) return; id = 'ov'; }
         if (ORIGINAL_PAGES.includes(id)) { const b = this.shadow.querySelector(`.zt-nav-orig[data-page="${id}"]`); if (b) { b.click(); return; } id = 'ov'; }
         const engine = id in ENGINE_TABS && !this.pages.has(id), def = this.pages.get(engine ? 'zt-engine' : id);
         if (!def) id = 'ov';

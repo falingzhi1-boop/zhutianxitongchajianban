@@ -85,6 +85,11 @@ def route(allt):
         for card in ('叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗', '苏小蛮|东海渔村|1|活泼话多|东海咸鱼干', '林小禾|青石镇|1|憨厚老实|青石镇米糕'):
             if card.split('|', 1)[0] not in avoid: return card
         return '叶清寒|问剑宗|2|冷面剑修|问剑宗剑穗'
+    if '你是诸天万界聊天群的召唤系统' in allt:                                                 # 1.1.5 从世界书召唤
+        m = re.search(r'【条目】([^（\n]+)', allt); n = (m.group(1).strip() if m else '无名')[:12]
+        return f'{n}|世界书来客|1|沉稳寡言|故乡的石子'
+    if allt.lstrip().startswith('你是系统') and '私聊' in allt and 'ZhuTianPanel' not in allt:     # 1.1.5 人设私聊
+        return 'PERSONA_OK：检测到宿主呼叫，系统在线。'
     if '你是诸天万界聊天群的任务发布系统。' in allt: return '寻找失落剑谱|前往问剑宗后山寻回《太虚剑谱》残卷|5000 系统点'
     if '你是诸天万界聊天群的群直播。' in allt: return '问剑宗山门前，数百弟子列阵练剑。\n剑光汇成一条银河，直冲云霄。\n掌门立于峰顶，目光望向镜头。'
     if '你是诸天万界聊天群的群员私聊' in allt: return '（剑穗轻晃）群主找我何事？若是切磋，随时奉陪。'
