@@ -19,6 +19,8 @@
 
 详见 [CHANGES-1.1.5](docs/CHANGES-1.1.5.md)、[ACCEPTANCE-1.1.5](docs/ACCEPTANCE-1.1.5.md)。
 
+用户文档：[1.1.3 → 1.1.5-r1 更新报告](docs/UPDATE-1.1.5-USERS.md) · [40章详细说明书](docs/USER-GUIDE-1.1.5.md) · [可搜索网页版（下载后打开）](docs/USER-GUIDE-1.1.5.html)。详细说明书逐项介绍按钮、输入项、费用、保存范围和恢复办法；插件内仍附快速版说明书。
+
 ## 1.1.4
 
 聊天群逐条删除 / 重roll / 截断处理 / 群聊生成设置、假冻结修复与「核对并解冻账本」、记忆键清洗、思维链保护与楼层检查、说明书。详见 [CHANGES-1.1.4](docs/CHANGES-1.1.4.md)、[ACCEPTANCE-1.1.4](docs/ACCEPTANCE-1.1.4.md)。
