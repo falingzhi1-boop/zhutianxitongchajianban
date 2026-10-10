@@ -15,7 +15,9 @@ export const VOICE_SLOT = i => `ZTVOICESLOT${i}ZT`;
 // 0.9.2: code is not dialogue. A 莉莉丝：… line inside a fenced code block (a character card's front-end status bar that
 // Tavern Helper / 小白X renders) or inside <script>/<style>/<textarea>/<pre> stays exactly as written — turning it into a
 // slot broke that renderer's code and put the card somewhere else in the floor.
-export const CODE_RE = /(^|\n)[ \t]*(```|~~~)[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)|<(script|style|textarea|pre)\b[\s\S]*?(?:<\/\3\s*>|$)/gi;
+// 1.1.4: a reasoning block (<think>/<thinking>/<reasoning>/<analysis>… left in the reply) is not dialogue either — a
+// 莉莉丝：… line the model drafted there stays inside the reasoning instead of being pulled out as a voice card.
+export const CODE_RE = /(^|\n)[ \t]*(```|~~~)[^\n]*\n[\s\S]*?(?:\n[ \t]*\2[ \t]*(?=\n|$)|$)|<(script|style|textarea|pre|think|thinking|thought|thoughts|reasoning|analysis)\b[\s\S]*?(?:<\/\3\s*>|$)/gi;
 /** Splits text into [prose, code, prose, code, …] (pure, for tests). */
 export function splitCode(text) {
     const s = String(text ?? ''), out = []; let last = 0; CODE_RE.lastIndex = 0;

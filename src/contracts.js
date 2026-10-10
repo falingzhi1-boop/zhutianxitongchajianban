@@ -3,8 +3,8 @@ export const STORAGE = 'zhutianCovenantTerminal';
 /** 1.0: structure version of the 诸天系统 ledger, kept in chatMetadata[STORAGE].ledgerSchema (see src/data-io.js). */
 export const LEDGER_SCHEMA = 2;
 export const PROMPT = `${ID}/memory`;
-export const VERSION = '1.1.3';
-export const PATCH_REV = '1.1.3';
+export const VERSION = '1.1.4';
+export const PATCH_REV = '1.1.4';
 // Host range replaces the former exact 1.19.0 gate; see src/compat.js for the per-version evidence.
 export { HOST_MIN, HOST_TESTED } from './compat.js';
 export const ASSISTANT_ID = 'zhutian-lilith-native';          // NOT 'zt-memory-assistant-v1' so a still-installed old helper stays detectable.
@@ -107,4 +107,9 @@ export const CAPABILITIES = [
     {name:'抽卡模式切换',state:'implemented',scope:'1.1.2 玩家反馈：经典折叠（默认，整次一起结算，≥50 抽凡品合为一行、≥100 抽灵品也合为一行，折叠部分只计数不生成；1.1.3：其余物品一次 API 调用全部生成）/ 十抽一结算（1.1.1 方式）；抽卡区和商品定制页都能切换'},
     {name:'悬浮窗切换 / 关闭',state:'implemented',scope:'1.1.3 玩家反馈：「切换」（悬浮莉莉丝 ⇄ 头像）和「关闭」（两种都不显示，从酒馆扩展面板进入）分开；莉莉丝和头像拖到底部都有两个目标；设置里可单独关闭；悬浮莉莉丝 / 头像大小最低 20%；终端 × 只关终端'},
     {name:'羁绊页重做与群员拉入',state:'implemented',scope:'1.1.2 玩家反馈：按本世界 / 全部 / 恋人 / 打手 / 群友筛选，本世界优先；人物卡显示好感阶段、黑化 / 悔意条和整理后的资料；聊天群群员默认不进羁绊，可在聊天群群员页或关系图「拉入羁绊」，拉入的群友可移出'},
+    {name:'聊天群 删除 / 重roll / 截断 / 生成设置',state:'experimental',scope:'1.1.4 玩家反馈：「🗑 管理」逐条删除（已抢的红包、已领的赠礼、自己发的红包不能删，没领的随消息作废）；「↻ 重roll」用同样的输入重新生成最近一轮，抢过红包或领过赠礼就不能重 roll，新回复到达后才替换旧的；回复被输出上限截断时丢掉半条并提示（独立 API 才能识别截断，走酒馆主 API 时识别不到）；群务 → 群聊生成：发言人数上下限、每条字数、上下文条数、输出上限（自动按人数估算）。只在单测和模拟宿主里验收'},
+    {name:'假冻结修复与核对并解冻',state:'implemented',scope:'1.1.4 玩家反馈：写入读回只比对这次改过的变量键并按 JSON 规范化（其他卡的变量、undefined / NaN 不再导致冻结）；读回不一致先重存一次再核对；设置 → 诊断与维护 →「核对并解冻账本」只读比对服务器与页面，一致即解冻，不一致提示重载'},
+    {name:'记忆键清洗',state:'implemented',scope:'1.1.4 玩家反馈：「记忆键重复或不安全」——模型写的记忆键先清洗成原版允许的字符（中文 / 字母数字 / _ - /，≤64）并合并同批重复键，再交给原版校验（原版校验本身不变）'},
+    {name:'思维链保护与楼层检查',state:'implemented',scope:'1.1.4 玩家反馈：数据块守卫不再解析 / 改动数据块外面的思维链（开头的 <think>、预填充只有结束标签、没闭合的思维链），思维链里的草稿数据块标签改成全角（任何解析器都不再当真）；楼层渲染 / 账本绑定 / 旧楼层过滤也跳过数据块外的思维链；只有思维链里有数据块时移到正文后；莉莉丝语音框不从思维链里取台词；格式提醒默认改为深度 1（可调）；设置 → 诊断与维护 →「检查最新楼层：插件动过吗？」列出本层是否被改写 / 渲染和所有扩展注入的提示。非诸天聊天没有复现；诸天存档里「思维链草稿数据块吞掉 </think> 和正文」已在隔离酒馆复现并修复'},
+    {name:'说明书',state:'implemented',scope:'1.1.4：终端 → 说明书（docs/MANUAL.md，只读，目录 / 搜索；Markdown 安全子集，文字全部转义）'},
 ];

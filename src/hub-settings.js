@@ -101,6 +101,7 @@ export class HubSettings {
             ] },
             { title: '兼容与维护', tier: 'diag', items: [
                 act('diagnose', '兼容诊断…'),
+                act('unfreeze', '核对并解冻账本', '1.1.4：提示「写入状态不明 / 已冻结」时用。拿服务器上的存档和当前页面比对：完全一致说明没有悬而未决的写入，直接解冻；不一致会告诉你哪几项不同，请重载页面（以服务器存档为准）。只读不写。'),
                 act('copy-diag', '复制诊断信息', '版本、设备、设置和最近的报错，反馈问题时直接粘贴。不含 API Key 和聊天内容。'),
                 act('selftest', '手机真机自检…', '在手机上一步步检查全屏、各页面、键盘、私聊、横屏和返回键，大约 2 分钟；结果可以一键复制。'),
                 act('takeover', '一键接管旧版', '停用（不删除）旧正则与旧酒馆助手脚本。'),
@@ -167,6 +168,12 @@ ${groups}<p class="zt-set-none" hidden>没有找到匹配的设置。</p>`;
             takeover: () => app.runTakeover(), restore: () => app.restoreLegacy(),
             'fx-preview': () => app.fx?.preview(),
             'copy-diag': () => app.features.copyDiagnostics(),
+            unfreeze: async () => {
+                const r = await app.bridge.verifyFrozen();
+                if (r.state === 'clear') return t?.info('当前聊天没有被冻结，可以正常操作。', '诸天');
+                if (r.state === 'unfrozen') { t?.success('服务器存档与页面一致，已解冻；可以继续操作（之前那笔如果没生效，请重新提交一次）。', '诸天', { timeOut: 8000 }); app.hub?.reloadEngine?.(); return; }
+                if (globalThis.confirm(`服务器存档与当前页面不一致（${r.keys.join('、')}）。\n以服务器存档为准需要重载页面，重载后冻结自动解除。现在重载？`)) globalThis.location?.reload();
+            },
             selftest: () => app.deviceCheck?.run(),
             guide: () => app.guide?.open(),
             'data-io': () => app.dataIO?.open(),

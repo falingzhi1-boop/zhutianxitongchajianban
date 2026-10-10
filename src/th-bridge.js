@@ -19,6 +19,28 @@ const plainObject = value => value && typeof value === 'object' && !Array.isArra
 const ROLE = { system: 0, user: 1, assistant: 2 };
 const POSITION = { none: -1, before_prompt: 2, in_prompt: 0, in_chat: 1 };
 export const NATIVE_SCRIPT_ID = 'zhutian-native-assistant';
+const NOW_FROZEN = '此前原生结算写入状态不明，已冻结此聊天的所有账本写入；请到 设置 → 诊断与维护 →「核对并解冻账本」，或重载页面核对。';
+/** JSON round trip: what the server can store (undefined dropped, NaN → null, -0 → 0). */
+const jsonNorm = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+/**
+ * 1.1.4 · 假冻结. Read-back after a chat-variable write: only the top-level keys THIS write changed are compared, each
+ * after a JSON round trip (pure, for tests). Before 1.1.4 the whole chat_metadata.variables was compared byte for
+ * byte, so a value the server cannot store as-is (undefined / NaN) or another script's variable changing in between
+ * froze the chat although the 诸天 ledger was written correctly. Returns the keys that differ ([] = written).
+ */
+export function readbackDiff(before, next, disk) {
+    const out = [];
+    for (const k of new Set([...Object.keys(before || {}), ...Object.keys(next || {})])) {
+        const want = stable(jsonNorm(next?.[k]));
+        if (stable(jsonNorm(before?.[k])) === want) continue;
+        if (stable(jsonNorm(disk?.[k])) !== want) out.push(k);
+    }
+    return out;
+}
+/** Keys whose values differ between two variable objects, after a JSON round trip (pure, for tests). */
+export function variablesDiff(a, b) {
+    return [...new Set([...Object.keys(a || {}), ...Object.keys(b || {})])].filter(k => stable(jsonNorm(a?.[k])) !== stable(jsonNorm(b?.[k])));
+}
 
 export function parseRange(range, last) {
     if (typeof range === 'number') return [range, range];
@@ -128,12 +150,12 @@ export class Bridge {
         const expected = identity(this.ctx());
         if (expectedIdentity && expected !== expectedIdentity) throw Error('聊天已切换；未写入。');
         if (!expected) throw Error('请先打开单角色聊天；群聊暂不写入。');
-        if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前原生结算写入状态不明，已冻结此聊天的所有账本写入；请重载核对。');
+        if (this.adapter.transactions?.uncertain?.has(expected)) throw Error(NOW_FROZEN);
         assertSaveEnvironment({ requireLocks: true });
         return navigator.locks.request('zhutian-ledger:' + expected, { signal: AbortSignal.timeout(20000) }, async () => {
             frameGuard?.();
             const c = this.ctx();
-            if (this.adapter.transactions?.uncertain?.has(expected)) throw Error('此前写入状态未确认，已冻结交易；请重载核对。');
+            if (this.adapter.transactions?.uncertain?.has(expected)) throw Error(NOW_FROZEN);
             if (this.dead || identity(c) !== expected) throw Error('聊天已经切换，取消写入。');
             // 1.0: a ledger written by a newer plugin (higher structure version) is read-only here
             const schema = Number(c.chatMetadata?.[STORAGE]?.ledgerSchema) || 0;
@@ -150,13 +172,7 @@ export class Bridge {
             };
             const serialized = JSON.stringify(before), draft = clone(before);
             const target = verify ? { avatar_url: c.characters?.[c.characterId]?.avatar, file_name: c.getCurrentChatId() } : null;
-            const diskVariables = async () => {
-                const r = await fetch('/api/chats/get', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: c.getRequestHeaders(), body: JSON.stringify(target), signal: AbortSignal.timeout(15000) });
-                if (!r.ok) throw Error('无法核对服务器账本 HTTP ' + r.status);
-                const chat = await r.json();
-                if (!Array.isArray(chat) || !chat[0]?.chat_metadata) throw Error('服务器没有返回聊天元数据');
-                return chat[0].chat_metadata.variables || {};
-            };
+            const diskVariables = () => this.#diskVariables(c, target);
             if (verify) {
                 if (this.adapter.isGenerating()) throw Error('主聊天正在生成，请结束后再操作。');
                 const disk = await diskVariables();
@@ -177,7 +193,13 @@ export class Bridge {
             c.chatMetadata.variables = next;
             try {
                 await c.saveMetadata();
-                if (verify && stable(await diskVariables()) !== stable(next)) throw Error('服务器读回不一致');
+                if (verify) {
+                    let diff = readbackDiff(before, next, await diskVariables());
+                    // 1.1.4: SillyTavern may still have had an older save of this chat in flight — save the page state
+                    // (which already holds `next`) once more and read again before calling the write uncertain
+                    if (diff.length) { await new Promise(r => setTimeout(r, 700)); await c.saveMetadata(); diff = readbackDiff(before, next, await diskVariables()); }
+                    if (diff.length) throw Error(`服务器读回不一致（${diff.join('、')}）`);
+                }
                 if (verify && identity(this.ctx()) !== expected) throw Error('写入后聊天已切换');
             } catch (e) {
                 if (verify) { this.adapter.transactions?.uncertain?.add(expected); throw Error('写入状态未确认，已冻结交易；请重载核对，不要重复提交。' + e.message); }
@@ -185,6 +207,36 @@ export class Bridge {
             }
             this.emit('chat'); this.adapter.notify();
             return clone(next);
+        });
+    }
+    async #diskVariables(c, target) {
+        const r = await fetch('/api/chats/get', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: c.getRequestHeaders(), body: JSON.stringify(target), signal: AbortSignal.timeout(15000) });
+        if (!r.ok) throw Error('无法核对服务器账本 HTTP ' + r.status);
+        const chat = await r.json();
+        if (!Array.isArray(chat) || !chat[0]?.chat_metadata) throw Error('服务器没有返回聊天元数据');
+        return chat[0].chat_metadata.variables || {};
+    }
+    /**
+     * 1.1.4 · 核对并解冻. A frozen chat (a write whose result was unknown) is compared with the server copy: when the
+     * server holds exactly what this page shows, nothing is pending and the freeze is lifted without a reload; otherwise
+     * the page is stale and must be reloaded (the server copy is the truth). Never writes anything.
+     * Returns { state: 'clear' | 'unfrozen' | 'differs', keys }.
+     */
+    async verifyFrozen() {
+        const c = this.ctx(), expected = identity(c);
+        if (!expected) throw Error('请先打开单角色聊天。');
+        const set = this.adapter.transactions?.uncertain;
+        if (!set?.has(expected)) return { state: 'clear', keys: [] };
+        if (this.adapter.isGenerating()) throw Error('主聊天正在生成，请结束后再核对。');
+        assertSaveEnvironment({ requireLocks: true });
+        return navigator.locks.request('zhutian-ledger:' + expected, { signal: AbortSignal.timeout(20000) }, async () => {
+            const live = this.ctx(); if (identity(live) !== expected) throw Error('聊天已切换，未核对。');
+            const disk = await this.#diskVariables(live, { avatar_url: live.characters?.[live.characterId]?.avatar, file_name: live.getCurrentChatId() });
+            if (identity(this.ctx()) !== expected) throw Error('聊天已切换，未核对。');
+            const keys = variablesDiff(plainObject(live.chatMetadata?.variables) ? live.chatMetadata.variables : {}, disk);
+            if (keys.length) return { state: 'differs', keys };
+            set.delete(expected); this.adapter.notify?.();
+            return { state: 'unfrozen', keys: [] };
         });
     }
     /** Rolling pre-write snapshots of the 诸天系统 ledger so a bad AI settlement can be undone from the terminal. */
@@ -397,7 +449,7 @@ export class Bridge {
     }
     /** Subset of Tavern Helper generateRaw used by the 3.1 status bar (AI 进货 / 抽卡 / 许愿 / 天眼 …).
      *  The status bar passes its limits inside custom_api (max_tokens, temperature 0.7) — both are honoured. */
-    async generateRaw({ user_input = '', ordered_prompts, custom_api, max_tokens, route = '' } = {}) {
+    async generateRaw({ user_input = '', ordered_prompts, custom_api, max_tokens, route = '', own_limit = false } = {}) {
         const prompts = Array.isArray(ordered_prompts) ? ordered_prompts : [{ role: 'system', content: '' }, 'user_input'];
         const messages = prompts.map(p => p === 'user_input' ? { role: 'user', content: String(user_input) } : (p && typeof p === 'object' && typeof p.content === 'string' ? { role: p.role || 'system', content: p.content } : null)).filter(m => m && m.content);
         let limit = Number(custom_api?.max_tokens) || Number(max_tokens) || 4096;
@@ -406,7 +458,9 @@ export class Bridge {
         const id = route || classifyStatus(messages.find(m => m.role === 'system')?.content);
         const over = id ? resolveRoute(readRoutes(this), id) : null;
         const defaultCap = Number(this.getVariables({ type: 'global' })?.诸天系统_API?.maxTokens);
-        const configuredCap = Number(over?.maxTokens) || (Number.isInteger(defaultCap) && defaultCap >= 64 && defaultCap <= 65536 ? defaultCap : 0);
+        // 1.1.4: `own_limit` — the feature's own explicit limit (聊天群 → 群务 → 输出上限) beats the default connection's cap;
+        // a per-feature route that sets its own maxTokens still wins over both
+        const configuredCap = Number(over?.maxTokens) || (!own_limit && Number.isInteger(defaultCap) && defaultCap >= 64 && defaultCap <= 65536 ? defaultCap : 0);
         if (configuredCap) limit = configuredCap;
         if (over) {
             this.lastRoute = { id, via: over.via, at: Date.now() };

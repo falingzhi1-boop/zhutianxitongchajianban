@@ -10,6 +10,7 @@ import {Hub} from './src/hub.js';
 import {HubSettings} from './src/hub-settings.js';
 import {HubPlugins} from './src/hub-plugins.js';
 import {HubGroup} from './src/hub-group.js';
+import { HubManual } from './src/hub-manual.js';
 import {ID, VERSION} from './src/contracts.js';
 import {hooksSupported, fetchHostVersion} from './src/compat.js';
 import {Settings} from './src/settings.js';
@@ -72,6 +73,8 @@ class App {
         try{this.hub=new Hub(this).start();this.parts.push(this.hub);}catch(e){this.hubError=e.message;console.error('[诸天] 终端未启动',e);}
         try{this.plugins=new HubPlugins(this).start();this.parts.push(this.plugins);}catch(e){console.warn('[诸天] 外挂管理未启动',e);}
         try{this.group=new HubGroup(this).start();this.parts.push(this.group);}catch(e){console.warn('[诸天] 聊天群未启动',e);}
+        // 1.1.4: 说明书 — docs/MANUAL.md inside the terminal (read-only)
+        try{this.manual=new HubManual(this).start();this.parts.push(this.manual);}catch(e){console.warn('[诸天] 说明书未启动',e);}
         // 0.7.0: world themes, 图谱, 演出 (each optional; the terminal works without them).
         try{this.world=new World(this).start();this.parts.push(this.world);}catch(e){console.warn('[诸天] 世界主题未启动',e);}
         try{this.atlas=new HubAtlas(this).start();this.parts.push(this.atlas);}catch(e){console.warn('[诸天] 图谱未启动',e);}

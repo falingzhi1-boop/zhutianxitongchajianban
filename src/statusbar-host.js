@@ -11,7 +11,7 @@
 import { BRIDGE_KEY, STATUSBAR_CLASS } from './contracts.js';
 import { extractVoices, buildVoiceCard, hasVoice, LEGACY_VOICE_ID } from './voice-box.js';
 import { tavernHelperMacrosActive } from './macro-like.js';
-import { displayPanel } from './panel-guard.js';
+import { displayPanel, outsideThoughts } from './panel-guard.js';
 import { scrollWithin, resetPageScroll } from './page-scroll.js';
 
 export const PANEL_RE = /<ZhuTianPanel>([\s\S]*?)<\/ZhuTianPanel>/g;
@@ -22,12 +22,13 @@ export function hash(text) { let h = 2166136261; for (let i = 0; i < text.length
 /** 1.1.1: a block that has story / <think> / other cards' code inside is shown cleaned — the stray text goes back into
  *  the story in front of the block, a block without a single field is plain story. Healthy blocks are returned as they
  *  are (same string: the engine keys each floor on the hash of the block). */
+// 1.1.4: reasoning blocks outside the data block are skipped (a draft block in <think> is neither shown nor booked)
 export function splitPanels(text) {
-    const panels = []; const stripped = String(text ?? '').replace(PANEL_RE, (_, inner) => {
+    const panels = []; const stripped = outsideThoughts(text, t => t.replace(PANEL_RE, (_, inner) => {
         const d = displayPanel(inner), story = d.story ? `\n\n${d.story}\n\n` : '';
         if (!d.ok) return story || ' ';
         panels.push(d.panel); return `${story}\n\n${SLOT(panels.length - 1)}\n\n`;
-    });
+    }));
     return { panels, stripped };
 }
 /** Reads "字段: 值" / "字段：值" lines of a panel. */

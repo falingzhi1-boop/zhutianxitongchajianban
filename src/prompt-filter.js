@@ -1,5 +1,5 @@
 import { compactLegacyOperation } from './operation-records.js';
-import { displayPanel } from './panel-guard.js';
+import { displayPanel, outsideThoughts } from './panel-guard.js';
 const OPEN_TAG = '<ZhuTianPanel>', CLOSE_TAG = '</ZhuTianPanel>';
 // "诸天状态栏 · 旧楼层不发给AI" as a native generation interceptor (manifest.generate_interceptor).
 // Original regex: /<ZhuTianPanel>[\s\S]*?<\/ZhuTianPanel>/gm → '' , promptOnly, minDepth 2 (depth 0 = newest floor).
@@ -19,7 +19,8 @@ export function stripOldPanels(chat, keepDepth = 2) {
         if (depth < keep || !m || typeof m.mes !== 'string' || !m.mes.includes('<ZhuTianPanel>')) continue;
         PANEL_BLOCK.lastIndex = 0;
         // 1.1.1: story the model wrote inside an old block stays in the prompt (only the data lines are removed)
-        const mes = m.mes.replace(PANEL_BLOCK, block => displayPanel(block.slice(OPEN_TAG.length, -CLOSE_TAG.length)).story);
+        // 1.1.4: a draft block inside a reasoning block is not a block (it would swallow the story up to the real one)
+        const mes = outsideThoughts(m.mes, t => t.replace(PANEL_BLOCK, block => displayPanel(block.slice(OPEN_TAG.length, -CLOSE_TAG.length)).story));
         if (mes !== m.mes) { chat[i] = { ...m, mes }; changed++; }
     }
     return changed;

@@ -51,12 +51,22 @@ def recorder_reply(allt):
     return json.dumps({'upserts': ups}, ensure_ascii=False)
 
 
+GROUP_N = [0]
+V114_COT = ('<think>\n先打个草稿：<ZhuTianPanel>\n系统点: 草稿\n莉莉丝：这句只是草稿\n</think>\n夜色渐深，灵气在经脉里缓缓流转。\n\n'
+            '莉莉丝：“宿主大人，今天就到这里。”\n\n<ZhuTianPanel>\n系统点: 1400\n好感度: 45/100\n当前任务: 引气入体\n任务进度: 70\n系统播报: 思维链测试\n</ZhuTianPanel>')
+
+
 def group_reply(allt):
     """诸天聊天群: answer as the listed members; the host's test phrases ask for a red packet / a gift / an over-grade item."""
     names = re.findall(r'(?m)^- ([^（\n]+)（', allt)
     names = [n for n in names if '禁言中' not in allt.split(f'- {n}（', 1)[1].split('\n', 1)[0]] or ['无名']
     said = allt.rsplit('【宿主刚发】', 1)[-1] if '【宿主刚发】' in allt else ''
     a, b = names[0], names[1 % len(names)]
+    # 1.1.4: numbered answers (重roll must show a NEW one) and a reply cut off by the output limit
+    if '【1.1.4' in said:
+        GROUP_N[0] += 1
+        if '【1.1.4截断】' in said: return f'@{a}: 第{GROUP_N[0]}次·完整的一句。\n@{b}: 说到一半就被'
+        return f'@{a}: 第{GROUP_N[0]}次回复。\n@{b}: 收到。'
     out = [f'@{a}: 群主好！今天{("你那边" if said else "")}的剧情挺热闹啊。']
     if '发红包' in said: out.append(f'@{a}: [红包] 系统点 3000 3 | 见者有份')
     elif '【测试】贪心' in allt: out.append(f'@{a}: [红包] 系统点 500 3 | 又来发红包啦')   # ignores the rhythm rule on purpose
@@ -147,6 +157,8 @@ class H(BaseHTTPRequestHandler):
         if '【1.1.1污染】' in last_user: reply = V111_POLLUTED
         elif '【1.1.1缺块】' in last_user: reply = V111_MISSING
         elif '【审计重roll】' in last_user: reply = audit_reroll(last_user, body.get('messages') or [])
+        elif '【1.1.4思维链】' in last_user: reply = V114_COT
+        finish = 'length' if '【1.1.4截断】' in last_user else 'stop'   # 1.1.4: the output limit was hit
         # 0.8.4 timeout check: a message containing 慢速测试 takes ~66 s (longer than the original fixed 60 s abort)
         slow = '慢速测试' in (text_of(body.get('messages')) or '')
         if slow: reply = '慢速回复：' + '流' * 10
@@ -158,11 +170,11 @@ class H(BaseHTTPRequestHandler):
             for i in range(0, len(reply), step):
                 chunk = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {'content': reply[i:i + step]}, 'finish_reason': None}]}
                 self.wfile.write(('data: ' + json.dumps(chunk, ensure_ascii=False) + '\n\n').encode()); self.wfile.flush(); time.sleep(9 if slow else 0.01)
-            end = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]}
+            end = {'id': 'mock', 'object': 'chat.completion.chunk', 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': finish}]}
             self.wfile.write(('data: ' + json.dumps(end) + '\n\ndata: [DONE]\n\n').encode()); self.wfile.flush(); return
         if slow: time.sleep(66)
         self._json({'id': 'mock', 'object': 'chat.completion', 'model': model,
-                    'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': reply}}],
+                    'choices': [{'index': 0, 'finish_reason': finish, 'message': {'role': 'assistant', 'content': reply}}],
                     'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}})
 
 

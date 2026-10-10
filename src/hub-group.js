@@ -44,6 +44,77 @@ export function packetCap(tier, shop) {
 export const expandCost = cap => num(cap, 5) * 1000;
 /** 自动闲聊 every N story replies (0.8.2; before: after EVERY reply = one extra model call per message). */
 export const CHAT_EVERY = [1, 2, 3, 4, 5, 6, 8, 10];
+// 1.1.4 群聊生成设置 (群务 → 群聊生成): how many members answer one message, how long a line may be, how much of the
+// log the model sees and the output limit (0 = 自动, sized from the other three).
+export const GROUP_SPEAKERS = [1, 2, 3, 4, 5, 6, 8, 10];
+export const GROUP_CHARS = [120, 200, 300, 400, 600, 800];
+export const GROUP_CONTEXT = [8, 16, 30, 50];
+export const GROUP_TOKENS = [0, 1200, 2000, 3000, 4000, 6000, 8000];
+export const MAX_ROUNDS = 5;
+const pick = (list, v, d) => (list.includes(num(v, NaN)) ? num(v) : d);
+/** The group's generation settings, normalized (pure). lo ≤ hi always. */
+export function groupGen(set = {}) {
+    let lo = pick(GROUP_SPEAKERS, set.发言下限, 1), hi = pick(GROUP_SPEAKERS, set.发言上限, 6);
+    if (lo > hi) [lo, hi] = [hi, lo];
+    return { lo, hi, chars: pick(GROUP_CHARS, set.单条字数, 300), ctx: pick(GROUP_CONTEXT, set.上下文, 16), tokens: pick(GROUP_TOKENS, set.输出上限, 0) };
+}
+/** 输出上限「自动」: room for `hi` lines of `chars` characters plus the format, 1200–6000 (pure). */
+export function autoTokens(hi, chars) { return Math.max(1200, Math.min(6000, 600 + num(hi, 6) * Math.round(num(chars, 300) + 20))); }
+/** A reply cut off by the output limit: the last line is probably half a message — drop it (pure). */
+export function dropLastLine(text) {
+    const lines = String(text ?? '').replace(/\s+$/, '').split('\n');
+    lines.pop(); return lines.join('\n');
+}
+/** Why the newest round can NOT be re-rolled ('' = it can). Something that already reached the ledger blocks it (pure). */
+export function roundBlocked(g, r) {
+    if (!r) return '没有可以重新生成的一轮（只能重 roll 1.1.4 之后生成的最近一轮）。';
+    for (const id of r.packets || []) if (g.红包[id]?.grabs?.some(x => x.who === 'me')) return '这一轮的红包你已经抢过（已入账），不能重新生成。';
+    for (const id of r.gifts || []) if (!g.待领取.some(x => x.id === id)) return '这一轮的赠礼你已经领取（已入库），不能重新生成。';
+    return '';
+}
+/** Takes one round back out of the group: its messages, its unclaimed packets / gifts, today's packet count, the
+ *  packet rhythm and the mute turns it used up (only where nothing changed them since). Pure — mutates `g`. */
+export function undoRound(g, r) {
+    const drop = new Set(r.msgs || []);
+    g.消息 = g.消息.filter(m => !drop.has(m.id));
+    for (const id of r.packets || []) delete g.红包[id];
+    const gifts = new Set(r.gifts || []); g.待领取 = g.待领取.filter(x => !gifts.has(x.id));
+    if (g.日计.day === r.prev?.day) g.日计.收 = Math.max(0, num(g.日计.收) - (r.packets || []).length);
+    if (r.prev) { g.节奏.距上次 = num(r.prev.距上次, 99); g.节奏.间隔 = Math.max(3, Math.min(4, num(r.prev.间隔, 3))); }
+    for (const m of g.成员) { const was = r.prev?.禁言?.[m.id]; if (was !== undefined && num(m.禁言轮) === Math.max(0, num(was) - 1)) m.禁言轮 = num(was); }
+    g.轮次 = g.轮次.filter(x => x.id !== r.id);
+    return g;
+}
+/** 1.1.4 删除单条消息 (pure — mutates `g`, returns the removed message). A packet you already grabbed, a packet you sent
+ *  (already paid) and a gift you already claimed are ledger records and stay; an unclaimed packet / gift goes with it. */
+export function deleteMessage(g, id) {
+    const i = g.消息.findIndex(m => m.id === id); if (i < 0) throw Error('这条消息已经不在了。');
+    const msg = g.消息[i];
+    if (msg.kind === 'packet') {
+        const p = g.红包[msg.ref];
+        if (p && msg.from === 'me') throw Error('你发出的红包已经扣账并被群员领取，这条记录不能删除。');
+        if (p?.grabs?.some(x => x.who === 'me')) throw Error('这个红包你已经抢过（已入账），这条记录不能删除。');
+        if (p) { delete g.红包[msg.ref]; if (new Date(num(p.t, Date.now())).toLocaleDateString('sv-SE') === g.日计.day) g.日计.收 = Math.max(0, num(g.日计.收) - 1); }
+    } else if (msg.kind === 'gift') {
+        const k = g.待领取.findIndex(x => x.id === msg.gift);
+        if (k < 0) throw Error('这件赠礼已经领取入库，这条记录不能删除。');
+        g.待领取.splice(k, 1);
+    }
+    g.消息.splice(i, 1);
+    for (const r of g.轮次) {
+        r.msgs = r.msgs.filter(x => x !== id);
+        if (msg.ref) r.packets = (r.packets || []).filter(x => x !== msg.ref);
+        if (msg.gift) r.gifts = (r.gifts || []).filter(x => x !== msg.gift);
+    }
+    g.轮次 = g.轮次.filter(r => r.msgs.length || r.user);
+    return msg;
+}
+const normRound = r => ({
+    id: String(r.id), t: num(r.t), user: clip(r.user, 300), story: clip(r.story, 400), cut: !!r.cut,
+    msgs: r.msgs.filter(x => typeof x === 'string'), packets: Array.isArray(r.packets) ? r.packets.filter(x => typeof x === 'string') : [],
+    gifts: Array.isArray(r.gifts) ? r.gifts.filter(x => typeof x === 'string') : [],
+    prev: { 距上次: num(r.prev?.距上次, 99), 间隔: num(r.prev?.间隔, 3), day: String(r.prev?.day || ''), 禁言: r.prev?.禁言 && typeof r.prev.禁言 === 'object' ? r.prev.禁言 : {} },
+});
 /** Bag items that came through the group (0.8.2: the item itself carries the source, so it never scrolls away). */
 export const GROUP_SRC = /^聊天群[·・]/;
 export function groupItems(z, g) {
@@ -110,7 +181,8 @@ export function normGroup(g) {
         挂单: Array.isArray(x.挂单) ? x.挂单 : [], 集市: x.集市 && typeof x.集市 === 'object' ? x.集市 : { day: '', list: [] },
         降临: x.降临 && x.降临.id ? x.降临 : null,
         日计: x.日计?.day === today() ? { day: x.日计.day, 收: num(x.日计.收), 发: num(x.日计.发) } : { day: today(), 收: 0, 发: 0 },
-        设置: { 自动闲聊: !!x.设置?.自动闲聊, 摘要注入: x.设置?.摘要注入 !== false, 闲聊间隔: CHAT_EVERY.includes(num(x.设置?.闲聊间隔)) ? num(x.设置?.闲聊间隔) : 3 },
+        设置: (() => { const gen = groupGen(x.设置 || {}); return { 自动闲聊: !!x.设置?.自动闲聊, 摘要注入: x.设置?.摘要注入 !== false, 闲聊间隔: CHAT_EVERY.includes(num(x.设置?.闲聊间隔)) ? num(x.设置?.闲聊间隔) : 3, 发言下限: gen.lo, 发言上限: gen.hi, 单条字数: gen.chars, 上下文: gen.ctx, 输出上限: gen.tokens }; })(),
+        轮次: Array.isArray(x.轮次) ? x.轮次.filter(r => r && r.id && Array.isArray(r.msgs)).map(normRound).slice(-MAX_ROUNDS) : [],
         私聊: x.私聊 && typeof x.私聊 === 'object' ? x.私聊 : {},
         候选: x.候选 && x.候选.名称 ? x.候选 : null,
         候选历史: Array.isArray(x.候选历史) ? x.候选历史.map(n => clip(n, 20)).filter(Boolean).slice(-12) : [],
@@ -163,7 +235,7 @@ export function parsePacketBody(text) {
     return { kind, spec: t, qty };
 }
 /** Member reply lines → structured messages, with the hard floor applied. */
-export function parseGroupReply(text, members, { cap = '凡品', shop = 1, max = 6 } = {}) {
+export function parseGroupReply(text, members, { cap = '凡品', shop = 1, max = 6, chars = 300 } = {}) {
     const out = [], byName = new Map(members.map(m => [m.名称, m]));
     for (const raw of String(text || '').split('\n')) {
         const line = raw.replace(/\*\*|__/g, '').trim();
@@ -197,7 +269,7 @@ export function parseGroupReply(text, members, { cap = '凡品', shop = 1, max =
                 const [g, down] = L.clampGrade(item.品级, eff); item.品级 = g;
                 msg.gift = { item, note: clip(cut >= 0 ? rest.slice(cut + 1).trim() : '', 60), downgraded: down }; msg.text = msg.gift.note || '送你个小东西。';
             }
-        } else msg.text = clip(body, 300);
+        } else msg.text = clip(body, Math.max(60, num(chars, 300)));
         if (msg.text || msg.packet || msg.gift) out.push(msg);
         if (out.length >= max) break;
     }
@@ -246,15 +318,15 @@ export class HubGroup {
             z[KEY] = g; return r;
         }, z => [z[KEY]?.rev, z.系统点, (z.背包 || []).length, Object.keys(z.任务库 || {}).length], { expectedIdentity: token?.id });
     }
-    say(g, from, text, extra = {}) { g.消息.push({ id: rid('g'), t: Date.now(), from, text: clip(text, 400), ...extra }); if (g.消息.length > MAX_MSG) g.消息.splice(0, g.消息.length - MAX_MSG); }
+    say(g, from, text, extra = {}) { const id = rid('g'); g.消息.push({ id, t: Date.now(), from, text: clip(text, Math.max(400, num(g.设置?.单条字数, 300))), ...extra }); if (g.消息.length > MAX_MSG) g.消息.splice(0, g.消息.length - MAX_MSG); return id; }
     /** What reached the host through the group — injected into the story prompt so the AI keeps the real source. */
     booked(g, what, src, how) { g.入库记录.push({ t: Date.now(), what: clip(what, 40), src: clip(src, 40), how }); if (g.入库记录.length > 20) g.入库记录.splice(0, g.入库记录.length - 20); }
     toast(t, ms = 3200, a) { this.hub?.toast(t, ms, a); }
     fail(e) { const line = errorLine(e); this.toast(line, 5500); globalThis.toastr?.warning?.(line, '诸天 · 聊天群'); }
-    async ask(system, user, maxTokens = 1200) {
+    async ask(system, user, maxTokens = 1200, own = false) {
         const cfg = readConfigs(this.bridge).status || {};
         const custom = cfg.url ? { apiurl: cfg.url, key: cfg.key, model: cfg.model, max_tokens: maxTokens, temperature: 0.85 } : undefined;
-        const text = await this.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: maxTokens, route: 'group' });
+        const text = await this.bridge.generateRaw({ user_input: user, ordered_prompts: [{ role: 'system', content: system }, 'user_input'], custom_api: custom, max_tokens: maxTokens, route: 'group', own_limit: !!own });
         if (!String(text || '').trim()) throw Error('模型没有返回内容。');
         return String(text);
     }
@@ -290,20 +362,30 @@ export class HubGroup {
         if (due) this.round(null, stripPanels(m.mes).trim().slice(-400), token).catch(e => console.warn('[诸天聊天群] 自动闲聊失败', e));
     }
 
-    // ---------- chat round: one request, 1–6 members ----------
-    async round(userText, story = '', token = capture(this.app)) {
+    // ---------- chat round: one request, 发言下限–发言上限 members (default 1–6) ----------
+    /** `opts.replace` (1.1.4 重roll): the id of the newest round — it is taken back out in the SAME write that books the
+     *  new answer, so a failed request leaves the old round untouched. */
+    async round(userText, story = '', token = capture(this.app), opts = {}) {
         assertCapture(this.app, token);
         const z0 = this.ledger(); if (!z0) throw Error('当前聊天没有诸天账本。');
-        const g0 = normGroup(z0[KEY]); const speakers = g0.成员.filter(m => num(m.禁言轮) <= 0);
+        const g0 = normGroup(structuredClone(z0[KEY] ?? {}));
+        if (opts.replace) {
+            const r0 = g0.轮次.at(-1);
+            if (!r0 || r0.id !== opts.replace) throw Error('只能重新生成最近一轮群聊；群里已经有了更新的一轮。');
+            const why = roundBlocked(g0, r0); if (why) throw Error(why);
+            undoRound(g0, r0);            // the prompt must not see the answer being replaced
+        }
+        const speakers = g0.成员.filter(m => num(m.禁言轮) <= 0);
         if (!speakers.length) throw Error(g0.成员.length ? '群员都被禁言了。' : '群里还没有群员，先去「群员」页招募。');
+        const gen = groupGen(g0.设置), idleHi = Math.min(gen.hi, Math.max(gen.lo, 3)), idleLo = Math.min(gen.lo, idleHi);
         const shop = L.shopLevel(z0), cap = L.GRADES[Math.min(shop, 4) - 1], allow = packetAllowed(g0, userText);
         const packetRule = allow === 'asked' ? '2. 宿主这次主动要了，可以按宿主的要求发红包或赠礼（最多 3 个），格式：'
             : allow ? '2. 本轮可以（不是必须）由 1 位群员发红包或赠礼，最多 1 个，格式：'
             : '2. 本轮【禁止】发红包和赠礼（群里刚发过，节奏是三四轮一次），只聊天。下面的格式本轮不要用：';
-        const recent = g0.消息.slice(-16).map(m => `${m.from === 'me' ? this.hostName() + '（宿主）' : m.from === 'sys' ? '系统' : (g0.成员.find(x => x.id === m.from)?.名称 || '群员')}: ${String(m.text).slice(0, 120)}`).join('\n');
+        const recent = g0.消息.slice(-gen.ctx).map(m => `${m.from === 'me' ? this.hostName() + '（宿主）' : m.from === 'sys' ? '系统' : (g0.成员.find(x => x.id === m.from)?.名称 || '群员')}: ${String(m.text).slice(0, 120)}`).join('\n');
         const sys = `你是诸天万界聊天群。群里的每位群员来自不同的世界，性格、说话方式和见识都符合原世界。宿主是群主，拥有诸天系统。
 回复规则：
-1. 选 1–6 位与话题最相关的群员发言（被禁言的不能发言），每条一行，格式严格为：@名称: 内容
+1. 选 ${gen.lo === gen.hi ? gen.lo : `${gen.lo}–${gen.hi}`} 位与话题最相关的群员发言（被禁言的不能发言），每条一行、不超过 ${gen.chars} 字，格式严格为：@名称: 内容
 ${packetRule}
 @名称: [红包] 系统点 数额 个数 | 祝福语
 @名称: [红包] 物品 名称/品级/分类/效果 数量 | 祝福语
@@ -318,34 +400,64 @@ ${packetRule}
 ${g0.成员.map(m => this.memberLine(m)).join('\n')}
 【最近消息】
 ${recent || '（暂无）'}
-${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根据宿主那边的最新剧情，让 1–3 位群员自然闲聊。${story ? '\n最新剧情：' + story : ''}`}`;
-        this.busy = '群员正在输入…'; this.paint();
+${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根据宿主那边的最新剧情，让 ${idleLo === idleHi ? idleLo : `${idleLo}–${idleHi}`} 位群员自然闲聊。${story ? '\n最新剧情：' + story : ''}`}`;
+        this.busy = opts.replace ? '群员正在重新输入…' : '群员正在输入…'; this.paint();
         try {
-            const text = await this.ask(sys, user, 1200);
+            const t0 = Date.now();
+            let text = await this.ask(sys, user, gen.tokens || autoTokens(gen.hi, gen.chars), !!gen.tokens);
+            // 1.1.4 截断: the reply hit the output limit (reported by the independent-API path) → the last line is cut
+            const fin = this.bridge.lastFinish, cut = !!fin && num(fin.at) >= t0 && /^(length|max_tokens|max_output_tokens)$/i.test(String(fin.reason || ''));
+            if (cut) text = dropLastLine(text);
             let got = 0, dropped = 0;
             const res = await this.write((g, z) => {
-                const parsed = parseGroupReply(text, g.成员, { cap, shop }); let handed = 0;
+                if (opts.replace) {
+                    const r = g.轮次.at(-1);
+                    if (!r || r.id !== opts.replace) throw Error('只能重新生成最近一轮群聊；群里已经有了更新的一轮。');
+                    const why = roundBlocked(g, r); if (why) throw Error(why);
+                    undoRound(g, r);
+                }
+                const rec = { id: rid('rd'), t: Date.now(), user: clip(userText || '', 300), story: userText ? '' : clip(story, 400), cut, msgs: [], packets: [], gifts: [],
+                    prev: { 距上次: num(g.节奏.距上次, 99), 间隔: num(g.节奏.间隔, 3), day: g.日计.day, 禁言: Object.fromEntries(g.成员.filter(m => num(m.禁言轮) > 0).map(m => [m.id, num(m.禁言轮)])) } };
+                const parsed = parseGroupReply(text, g.成员, { cap, shop, max: gen.hi, chars: gen.chars }); let handed = 0;
                 for (const p of parsed) {
                     // Hard floor for the rhythm: the model may ignore the rule, the ledger does not.
                     if ((p.packet || p.gift) && (!allow || handed >= (allow === 'asked' ? 3 : 1))) { dropped++; continue; }
                     if (p.packet || p.gift) handed++;
                     if (p.packet) {
-                        if (g.日计.收 >= DAILY_IN) { this.say(g, p.who.id, p.text + '（今日红包已达上限，被群规拦下）'); dropped++; continue; }
-                        const id = this.openPacket(g, p.who, p.packet);
-                        this.say(g, p.who.id, p.text, { kind: 'packet', ref: id }); got++;
+                        if (g.日计.收 >= DAILY_IN) { rec.msgs.push(this.say(g, p.who.id, p.text + '（今日红包已达上限，被群规拦下）')); dropped++; continue; }
+                        const id = this.openPacket(g, p.who, p.packet); rec.packets.push(id);
+                        rec.msgs.push(this.say(g, p.who.id, p.text, { kind: 'packet', ref: id })); got++;
                     } else if (p.gift) {
-                        const gid = rid('gf');
+                        const gid = rid('gf'); rec.gifts.push(gid);
                         g.待领取.push({ id: gid, from: p.who.id, 名称: p.who.名称, 世界: p.who.世界, item: { ...p.gift.item, 价格: L.TIER_PRICE[p.gift.item.品级] }, note: p.gift.note, downgraded: p.gift.downgraded, t: Date.now() });
-                        this.say(g, p.who.id, p.text, { kind: 'gift', gift: gid, label: `${p.gift.item.名称}（${p.gift.item.品级}）${p.gift.downgraded ? ' · 按群规降级' : ''}` }); got++;
-                    } else this.say(g, p.who.id, p.text);
+                        rec.msgs.push(this.say(g, p.who.id, p.text, { kind: 'gift', gift: gid, label: `${p.gift.item.名称}（${p.gift.item.品级}）${p.gift.downgraded ? ' · 按群规降级' : ''}` })); got++;
+                    } else rec.msgs.push(this.say(g, p.who.id, p.text));
                 }
+                if (cut) rec.msgs.push(this.say(g, 'sys', `⚠ 这一轮回复达到输出上限被截断，最后半条已丢弃。可以点「↻ 重roll」重来，或在 群务 → 群聊生成 调高输出上限 / 调低每条字数。`, { kind: 'sys' }));
                 for (const m of g.成员) if (num(m.禁言轮) > 0) m.禁言轮 = num(m.禁言轮) - 1;
                 if (got) g.节奏 = { 距上次: 0, 间隔: Math.random() < 0.5 ? 3 : 4 }; else g.节奏.距上次 = Math.min(99, num(g.节奏.距上次) + 1);
+                if (rec.msgs.length) { g.轮次.push(rec); if (g.轮次.length > MAX_ROUNDS) g.轮次.splice(0, g.轮次.length - MAX_ROUNDS); }
                 return parsed.length;
             }, token);
-            if (!res) this.toast('群员这次没有按格式回复（模型输出无法解析），可以再发一次。', 4200);
+            if (!res) this.toast(cut ? '回复被输出上限截断，没有一条完整的群消息。请在 群务 → 群聊生成 调高输出上限后重试。' : '群员这次没有按格式回复（模型输出无法解析），可以再发一次。', 5200);
+            else if (cut) this.toast('回复被截断：最后半条已丢弃，可以「↻ 重roll」。', 4200);
             else if (got) this.toast(dropped ? '有红包/赠礼到达，部分超出今日上限或节奏。' : '群里有红包或赠礼，点开领取。', 3200);
         } finally { this.busy = ''; this.syncPrompt(); this.paint(); }
+    }
+    /** 1.1.4 重roll上一轮: same input (your message / the story it reacted to), new answer. */
+    async reroll() {
+        const token = capture(this.app);
+        const g = this.group(), r = g.轮次.at(-1), why = roundBlocked(g, r);
+        if (why) throw Error(why);
+        if (!globalThis.confirm?.(`重新生成最近一轮群聊？\n这一轮群员的 ${r.msgs.length} 条消息会被新的回复替换${r.packets.length || r.gifts.length ? '（其中没领的红包 / 赠礼一起作废）' : ''}；${r.user ? '你的发言保留。' : '这是一轮自动闲聊。'}`)) return;
+        await this.round(r.user || null, r.story || '', token, { replace: r.id });
+    }
+    /** 1.1.4 删除单条消息 (群聊页「🗑 管理」). */
+    async removeMessage(id) {
+        const token = capture(this.app), g = this.group(), msg = g.消息.find(m => m.id === id);
+        if (msg && (msg.kind === 'packet' || msg.kind === 'gift') && !globalThis.confirm?.(msg.kind === 'packet' ? '删除这条红包消息？没抢的红包会一起作废。' : '删除这条赠礼消息？没领的赠礼会一起作废。')) return;
+        await this.write(gg => { deleteMessage(gg, id); }, token);
+        this.paint();
     }
     async send(text) {
         text = clip(text, 300); if (!text) return;
@@ -608,6 +720,12 @@ ${userText ? `【宿主刚发】${userText}` : `【宿主没有发言】请根�
             if ('自动闲聊' in patch) g.设置.自动闲聊 = !!patch.自动闲聊;
             if ('摘要注入' in patch) g.设置.摘要注入 = !!patch.摘要注入;
             if ('闲聊间隔' in patch && CHAT_EVERY.includes(num(patch.闲聊间隔))) { g.设置.闲聊间隔 = num(patch.闲聊间隔); g.节奏.闲聊 = 0; }
+            // 1.1.4 群聊生成: only listed values; 下限 > 上限 pulls the other one along
+            if ('发言下限' in patch && GROUP_SPEAKERS.includes(num(patch.发言下限))) { g.设置.发言下限 = num(patch.发言下限); if (g.设置.发言上限 < g.设置.发言下限) g.设置.发言上限 = g.设置.发言下限; }
+            if ('发言上限' in patch && GROUP_SPEAKERS.includes(num(patch.发言上限))) { g.设置.发言上限 = num(patch.发言上限); if (g.设置.发言下限 > g.设置.发言上限) g.设置.发言下限 = g.设置.发言上限; }
+            if ('单条字数' in patch && GROUP_CHARS.includes(num(patch.单条字数))) g.设置.单条字数 = num(patch.单条字数);
+            if ('上下文' in patch && GROUP_CONTEXT.includes(num(patch.上下文))) g.设置.上下文 = num(patch.上下文);
+            if ('输出上限' in patch && GROUP_TOKENS.includes(num(patch.输出上限))) g.设置.输出上限 = num(patch.输出上限);
         });
         this.syncPrompt(); this.paint();
     }
@@ -629,13 +747,14 @@ ${g.待领取.length ? `<div class="zt-g-claims"><span>🎁 待领取 ${g.待领
 <div class="zt-g-body">${this.view === 'members' ? this.membersView(g, z) : this.view === 'market' ? this.marketView(g, z) : this.view === 'admin' ? this.adminView(g) : this.chatView(g, z)}</div></div>`;
         const input = el.querySelector('#zt-g-input'); if (input) { input.value = draft; if (hadFocus) { try { input.focus({ preventScroll: true }); input.setSelectionRange(caret, caret); } catch { } } }
         const log = el.querySelector('.zt-g-log'); if (log) log.scrollTop = atBottom ? log.scrollHeight : oldTop;
-        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('change', e => { const sel = e.target.closest?.('[data-g-sel=every]'); if (sel) this.saveMeta({ 闲聊间隔: Number(sel.value) }).catch(err => this.fail(err)); if (e.target.matches?.('[data-f=rmode]')) this.recruitModeChanged(); }); el.addEventListener('input', e => { if (e.target.matches?.('[data-f=rhint]')) this.recruitHintTyped(); }); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
+        if (!this.bound) { this.bound = true; el.addEventListener('click', e => this.onClick(e)); el.addEventListener('change', e => { const sel = e.target.closest?.('[data-g-sel=every]'); if (sel) this.saveMeta({ 闲聊间隔: Number(sel.value) }).catch(err => this.fail(err)); const gs = e.target.closest?.('[data-g-set]'); if (gs) this.saveMeta({ [gs.dataset.gSet]: Number(gs.value) }).catch(err => this.fail(err)); if (e.target.matches?.('[data-f=rmode]')) this.recruitModeChanged(); }); el.addEventListener('input', e => { if (e.target.matches?.('[data-f=rhint]')) this.recruitHintTyped(); }); el.addEventListener('keydown', e => { if (e.target.id === 'zt-g-input' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); el.querySelector('[data-g=send]')?.click(); } }); }
     }
     avatar(m) { const h = [...String(m?.名称 || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % 360; return `<span class="zt-g-av" style="background:hsl(${h} 45% 38%)">${esc(String(m?.名称 || '?').slice(0, 1))}</span>`; }
     chatView(g, z) {
         const name = id => g.成员.find(m => m.id === id);
         const rows = g.消息.map(msg => {
-            if (msg.kind === 'sys' || msg.from === 'sys') return `<div class="zt-g-sys">${esc(msg.text)}</div>`;
+            const del = this.manage ? `<button type="button" class="zt-btn small zt-g-del" data-gdel="${esc(msg.id)}" title="删除这条消息" aria-label="删除这条消息">🗑</button>` : '';
+            if (msg.kind === 'sys' || msg.from === 'sys') return `<div class="zt-g-sys">${esc(msg.text)}${del}</div>`;
             const me = msg.from === 'me', m = me ? null : name(msg.from) || { 名称: '已退群', 世界: '' };
             let body = `<div class="zt-g-text">${esc(msg.text).replace(/\n/g, '<br>')}</div>`;
             if (rebookable(msg)) body += `<div class="zt-g-gift">🧧 这条红包当时没能识别 <button type="button" class="zt-btn small" data-rebook="${esc(msg.id)}">补登</button></div>`;
@@ -650,12 +769,12 @@ ${g.待领取.length ? `<div class="zt-g-claims"><span>🎁 待领取 ${g.待领
                 body += `<div class="zt-g-gift">🎁 ${esc(msg.label || '赠礼')} ${pending ? `<button type="button" class="zt-btn small primary" data-claim="${msg.gift}">领取</button>` : '<em>已领取</em>'}</div>`;
             } else if (msg.kind === 'live') body = `<div class="zt-g-live"><b>● 直播中</b>${esc(msg.text).replace(/\n/g, '<br>')}</div>`;
             else if (msg.kind === 'task') body += `<div class="zt-g-gift">📜 已进入任务库 <button type="button" class="zt-btn small" data-g="to-task">查看</button></div>`;
-            return `<div class="zt-g-msg${me ? ' me' : ''}">${me ? '' : this.avatar(m)}<div class="zt-g-bub">${me ? '' : `<div class="zt-g-who">${esc(m.名称)}<small>${esc(m.世界 || '')}${m.档 ? ' · ' + esc(this.tierName(m.档)) : ''}</small></div>`}${body}</div></div>`;
+            return `<div class="zt-g-msg${me ? ' me' : ''}">${me ? '' : this.avatar(m)}<div class="zt-g-bub">${me ? '' : `<div class="zt-g-who">${esc(m.名称)}<small>${esc(m.世界 || '')}${m.档 ? ' · ' + esc(this.tierName(m.档)) : ''}</small></div>`}${body}</div>${del}</div>`;
         }).join('');
         const sheet = this.sheet === 'packet' ? this.packetSheet(z) : this.sheet === 'help' ? this.helpSheet(g) : '';
         return `<div class="zt-g-log" aria-live="polite">${g.公告 ? `<div class="zt-g-notice">📌 ${esc(g.公告)}</div>` : ''}${rows || `<div class="zt-empty">${g.成员.length ? '说点什么吧，群员们都在。' : '群里还没有人。去「群员」页发布招募令。'}</div>`}${this.busy ? `<div class="zt-g-sys typing">${esc(this.busy)}</div>` : ''}</div>
 ${sheet}
-<div class="zt-g-tools"><button type="button" class="zt-btn small" data-g="sheet-packet">🧧 发红包</button><button type="button" class="zt-btn small" data-g="sign" ${g.签到.day === today() ? 'disabled' : ''}>${g.签到.day === today() ? `已签到 · ${g.签到.streak} 天` : '签到'}</button><button type="button" class="zt-btn small" data-g="sheet-help">求助</button><button type="button" class="zt-btn small" data-g="live">群直播</button><label class="zt-g-auto" title="每轮剧情回复后，群员自动在群里聊几句"><input type="checkbox" data-g="auto" ${g.设置.自动闲聊 ? 'checked' : ''}> 自动闲聊</label></div>
+<div class="zt-g-tools"><button type="button" class="zt-btn small" data-g="sheet-packet">🧧 发红包</button><button type="button" class="zt-btn small" data-g="sign" ${g.签到.day === today() ? 'disabled' : ''}>${g.签到.day === today() ? `已签到 · ${g.签到.streak} 天` : '签到'}</button><button type="button" class="zt-btn small" data-g="sheet-help">求助</button><button type="button" class="zt-btn small" data-g="live">群直播</button><button type="button" class="zt-btn small" data-g="reroll" ${this.busy || !g.轮次.length ? 'disabled' : ''} title="${esc(roundBlocked(g, g.轮次.at(-1)) || '用同样的输入重新生成最近一轮群员发言')}">↻ 重roll</button><button type="button" class="zt-btn small" data-g="manage" aria-pressed="${!!this.manage}">${this.manage ? '✓ 完成' : '🗑 管理'}</button><label class="zt-g-auto" title="每轮剧情回复后，群员自动在群里聊几句"><input type="checkbox" data-g="auto" ${g.设置.自动闲聊 ? 'checked' : ''}> 自动闲聊</label></div>
 <div class="zt-g-send"><textarea id="zt-g-input" rows="1" maxlength="300" placeholder="${g.成员.length ? '发消息到群里（Enter 发送）' : '先招募群员'}" ${this.busy ? 'disabled' : ''}></textarea><button type="button" class="zt-btn primary" data-g="send" ${this.busy || !g.成员.length ? 'disabled' : ''}>发送</button></div>`;
     }
     packetSheet(z) {
@@ -701,7 +820,20 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
 <section class="zt-card"><h3>与剧情联动</h3>
 <div class="zt-row"><span>群摘要写进提示词<span class="zt-desc">让正文 AI 知道群的存在、群员和最近群聊。</span></span><label class="zt-switch"><input type="checkbox" data-g="inject" ${g.设置.摘要注入 ? 'checked' : ''}><i></i></label></div>
 <div class="zt-row"><span>剧情后自动闲聊<span class="zt-desc">每 N 次正文回复，群员自动聊一次（一次额外的模型请求）。</span></span><label class="zt-switch"><input type="checkbox" data-g="auto" ${g.设置.自动闲聊 ? 'checked' : ''}><i></i></label></div>
-<div class="zt-row"><span>闲聊间隔<span class="zt-desc">每几次正文回复闲聊一次。</span></span><select data-g-sel="every" aria-label="闲聊间隔">${CHAT_EVERY.map(n => `<option value="${n}" ${g.设置.闲聊间隔 === n ? 'selected' : ''}>每 ${n} 轮</option>`).join('')}</select></div></section></div>`;
+<div class="zt-row"><span>闲聊间隔<span class="zt-desc">每几次正文回复闲聊一次。</span></span><select data-g-sel="every" aria-label="闲聊间隔">${CHAT_EVERY.map(n => `<option value="${n}" ${g.设置.闲聊间隔 === n ? 'selected' : ''}>每 ${n} 轮</option>`).join('')}</select></div></section>
+${this.genView(g)}</div>`;
+    }
+    /** 1.1.4 群聊生成 settings card. */
+    genView(g) {
+        const s = g.设置, opt = (list, v, label) => list.map(n => `<option value="${n}" ${v === n ? 'selected' : ''}>${esc(label(n))}</option>`).join('');
+        const row = (k, title, desc, list, label) => `<div class="zt-row"><span>${title}<span class="zt-desc">${desc}</span></span><select data-g-set="${k}" aria-label="${title}">${opt(list, s[k], label)}</select></div>`;
+        return `<section class="zt-card"><h3>群聊生成 <small>1.1.4 · 每次群聊请求</small></h3>
+${row('发言下限', '每次最少几人发言', '模型至少让几位群员说话。自动闲聊最多 3 人。', GROUP_SPEAKERS, n => `${n} 人`)}
+${row('发言上限', '每次最多几人发言', '超出的行会被忽略。人数多时请同时调高输出上限。', GROUP_SPEAKERS, n => `${n} 人`)}
+${row('单条字数', '每条消息字数上限', '写进提示词，超出的部分会被截掉。', GROUP_CHARS, n => `${n} 字`)}
+${row('上下文', '带给模型的最近消息条数', '越多越连贯，但更费 token。', GROUP_CONTEXT, n => `最近 ${n} 条`)}
+${row('输出上限', '输出上限（max tokens）', `回复经常被截断时调高。自动 = 按人数和字数估算（当前约 ${autoTokens(groupGen(s).hi, groupGen(s).chars)}）；「分功能 API」里给聊天群单独设的上限优先。`, GROUP_TOKENS, n => (n ? `${n}` : '自动'))}
+</section>`;
     }
     val(sel) { return this.el.querySelector(sel)?.value ?? ''; }
     /** 0.9.4 招募令: typing a name while「随机世界」is selected switches to「指定世界」(指定角色 stays selectable). */
@@ -721,6 +853,7 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
         const d = t.dataset;
         if (d.gtab) { this.view = d.gtab; this.sheet = null; return this.paint(); }
         if (d.grab) return run(() => this.grab(d.grab));
+        if (d.gdel) return run(() => this.removeMessage(d.gdel));
         if (d.rebook) return run(() => this.rebook(d.rebook));
         if (d.claim) return run(() => this.claim(d.claim));
         if (d.buy) return run(() => this.buy(d.buy));
@@ -742,6 +875,8 @@ ${g.挂单.map(s => `<div class="zt-row"><span>${esc(s.item.名称)}（${s.item.
             case 'help-go': { const v = this.val('[data-f=help]'), h = this.val('[data-f=helper]'); this.sheet = null; return run(() => this.help(v, h)); }
             case 'sign': return run(() => this.signIn());
             case 'live': return run(() => this.live());
+            case 'reroll': return run(() => this.reroll());
+            case 'manage': this.manage = !this.manage; return this.paint();
             case 'auto': return run(() => this.saveMeta({ 自动闲聊: t.checked }));
             case 'inject': return run(() => this.saveMeta({ 摘要注入: t.checked }));
             case 'recruit': return run(() => this.recruit(this.val('[data-f=rmode]'), this.val('[data-f=rhint]')));

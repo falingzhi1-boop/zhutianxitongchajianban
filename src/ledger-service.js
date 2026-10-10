@@ -45,8 +45,10 @@ export class LedgerService {
    // Consume approval before issuing a possibly-ambiguous write. No retry and no compensating rollback.
    guard();this.#drafts.delete(id);this.uncertain.add(d.identity);
    const saved=await this.request('save',d.target,{chat:next,force:false});if(!saved.ok)throw Error('宿主未确认写入。');
-   const verify=await this.request('get',d.target);
-   if(!Array.isArray(verify)||stable(verify)!==stable(next))throw Error('存档回读不一致，已冻结交易，请人工核对；不会自动重试。');
+   let verify=await this.request('get',d.target);
+   // 1.1.4: one more read after a short pause (an older SillyTavern save of this chat may still have been in flight); never re-written here
+   if(!Array.isArray(verify)||stable(verify)!==stable(next)){await new Promise(r=>setTimeout(r,800));verify=await this.request('get',d.target);}
+   if(!Array.isArray(verify)||stable(verify)!==stable(next))throw Error('存档回读不一致，已冻结交易；请到 设置 → 诊断与维护 →「核对并解冻账本」核对；不会自动重试。');
    this.uncertain.delete(d.identity);
    // The target is captured, never inferred again after await. Do not copy into another chat.
    if(a.currentIdentity()===d.identity&&this.state()===d.stamp&&!a.dead){

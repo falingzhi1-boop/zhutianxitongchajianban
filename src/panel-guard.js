@@ -17,7 +17,7 @@
 //   * only NEW replies are rewritten (MESSAGE_RECEIVED / GENERATION_ENDED of the newest floor); old floors are only
 //     displayed and filtered with the cleaned block.
 // The optional 补记 (backfill) asks the status-bar model for a missing block once per reply (setting, default 只在缺失时).
-import { STORAGE } from './contracts.js';
+import { ID, STORAGE } from './contracts.js';
 import { MacroLike } from './macro-like.js';
 import { latestRules } from './worldbook.js';
 import { errorLine } from './errors.js';
@@ -34,7 +34,7 @@ const FOREIGN_HINT = /<\/?(UpdateVariable|JSONPatch|StatusPlaceHolderImpl|div|ta
 export const ISSUE_TEXT = Object.freeze({
     missing: '这一轮没有数据块', tag: '数据块标签大小写 / 空格不规范', fence: '数据块被包在代码块里', unclosed: '数据块没有结束标签',
     unopened: '数据块缺少开始标签', multiple: '一条回复里写了多个数据块', empty: '数据块里没有任何字段', polluted: '正文 / 思维链写进了数据块',
-    foreign: '其他卡的变量 / 网页代码写进了数据块', reasoning: '数据块只写在了思维链里', untagged: '数据块字段没有包在标签里', skill: '新功法没有按「收录:功法名[品阶]」写',
+    foreign: '其他卡的变量 / 网页代码写进了数据块', reasoning: '数据块只写在了思维链里', cotopen: '思维链没有结束标签（回复可能被截断，本层不补记）', cot: '思维链保护：无法安全整理，已保留原文', cotpanel: '思维链里的数据块草稿已停用：标签改成全角，不再被当成正式数据块', untagged: '数据块字段没有包在标签里', skill: '新功法没有按「收录:功法名[品阶]」写',
 });
 export const issueText = list => (list || []).map(k => ISSUE_TEXT[k] || k).join('；');
 
@@ -159,7 +159,75 @@ function wrapUntagged(text) {
  * Repairs one assistant reply (pure). `reasoning` = m.extra.reasoning (a block found only there is moved into the reply).
  * Returns { mes, changed, issues: [code…], panel: the kept block ('' = none), spill: moved text, foreign: bool }.
  */
-export function repairMessage(mes, { reasoning = '' } = {}) {
+// 1.1.4 · 思维链保护. A reasoning block the model wrote OUTSIDE the data block (<think>…</think> at the top of the reply,
+// a prefilled reply that only has the closing </thinking>, or a <thinking> that never closes because the reply was cut)
+// is never parsed, moved or rewritten: it is swapped for a placeholder before the repair and put back byte for byte
+// afterwards. A <think> INSIDE the data block keeps the 1.1.1 behaviour (moved to SillyTavern's reasoning box).
+const COT_NAME = '(?:think|thinking|thought|thoughts|reasoning|analysis|cot|思考|思维链)[\\w-]*';
+const COT_TOKEN = () => new RegExp(`<\\s*(\\/?)\\s*(zhutianpanel|${COT_NAME})(?=[\\s>/])[^>]*>`, 'gi');
+const COT_SLOT = i => `\uE000ZTCOT${i}\uE001`;
+const COT_SLOT_RE = /\uE000ZTCOT(\d+)\uE001/g;
+/**
+ * Masks the reasoning blocks that sit outside every data block (pure, for tests).
+ * Returns { text, blocks, open, restore(s) } — `open` = a reasoning block that never closes (masked to the end).
+ */
+export function protectThoughts(mes) {
+    const s = String(mes ?? ''), tokens = [...s.matchAll(COT_TOKEN())].map(m => ({ at: m.index, end: m.index + m[0].length, close: !!m[1], name: m[2].toLowerCase() }));
+    const ranges = []; let depth = 0, open = false, k0 = 0;
+    // prefill: the reply starts inside the reasoning (the opening tag was in the prompt) — the first reasoning tag is a
+    // closing one → everything up to it is reasoning, even a draft <ZhuTianPanel> in there
+    const firstCot = tokens.findIndex(t => t.name !== 'zhutianpanel');
+    if (firstCot >= 0 && tokens[firstCot].close) { ranges.push([0, tokens[firstCot].end]); k0 = firstCot + 1; }
+    for (let k = k0; k < tokens.length; k++) {
+        const t = tokens[k];
+        if (t.name === 'zhutianpanel') { depth = t.close ? 0 : 1; continue; }
+        if (depth || t.close) continue;
+        let j = k + 1; while (j < tokens.length && !(tokens[j].close && tokens[j].name === t.name)) j++;
+        if (j >= tokens.length) { ranges.push([t.at, s.length]); open = true; break; }
+        ranges.push([t.at, tokens[j].end]); k = j;
+    }
+    if (!ranges.length) return { text: s, blocks: [], open: false, restore: x => x };
+    const blocks = []; let text = '', last = 0;
+    for (const [a, b] of ranges) { text += s.slice(last, a) + COT_SLOT(blocks.length); blocks.push(s.slice(a, b)); last = b; }
+    text += s.slice(last);
+    return { text, blocks, open, restore: x => String(x).replace(COT_SLOT_RE, (m, n) => blocks[Number(n)] ?? m) };
+}
+
+/** Runs `fn` on the text with every outside reasoning block masked, then puts them back (pure). Used by every parser
+ *  that looks for data blocks with a plain regex (display, engine binding, prompt filter): a draft <ZhuTianPanel> in the
+ *  reasoning would otherwise pair with the real block's closing tag and swallow the </think>, the story and the block. */
+export function outsideThoughts(text, fn) {
+    const cot = protectThoughts(text);
+    if (!cot.blocks.length) return fn(String(text ?? ''));
+    return cot.restore(fn(cot.text));
+}
+/** A data-block tag inside the reasoning → full-width brackets: still readable, never parsed as a block. */
+const neutralize = block => block.replace(/<\s*(\/?)\s*zhutianpanel\s*>/gi, (_m, slash) => `＜${slash}ZhuTianPanel＞`);
+export function repairMessage(mes, opts = {}) {
+    const src = String(mes ?? ''), cot = protectThoughts(src);
+    if (!cot.blocks.length) return repairCore(src, opts);
+    let text = cot.text, moved = false;
+    // the only data block is inside the reasoning → move it out, right after the story (the reasoning itself stays)
+    // (not while a reasoning block is still open: the reply was cut there and is left exactly as it is)
+    if (!cot.open && !/zhutianpanel/i.test(text)) {
+        for (let i = cot.blocks.length - 1; i >= 0 && !moved; i--) {
+            const all = [...cot.blocks[i].matchAll(/<\s*zhutianpanel\s*>[\s\S]*?<\s*\/\s*zhutianpanel\s*>/gi)], m = all.at(-1);
+            if (!m) continue;
+            cot.blocks[i] = cot.blocks[i].slice(0, m.index).replace(/[ \t]*\n?$/, '') + cot.blocks[i].slice(m.index + m[0].length);
+            text = text.replace(/\s*$/, '') + '\n\n' + m[0]; moved = true;
+        }
+    }
+    // 1.1.4 browser check: a draft tag left in the reasoning breaks the original kernel's own parser (hash-locked, it
+    // pairs the draft with the real block's end tag) — the drafts are made inert in the saved reply (original kept)
+    let drafts = false;
+    cot.blocks.forEach((b, i) => { const n = neutralize(b); if (n !== b) { drafts = true; cot.blocks[i] = n; } });   // in place: restore() reads this array
+    const r = repairCore(text, opts), out = cot.restore(r.mes);
+    // never lose a reasoning block: every one must be back exactly once, else leave the reply untouched
+    if ((out.match(COT_SLOT_RE) || []).length || cot.blocks.some(b => !out.includes(b))) return { mes: src, changed: false, issues: ['cot'], panel: '', spill: [], thoughts: [], foreign: false, skip: true };
+    const issues = new Set(r.issues); if (moved) issues.add('reasoning'); if (cot.open) issues.add('cotopen'); if (drafts) issues.add('cotpanel');
+    return { ...r, mes: out === src ? src : out, changed: out !== src, issues: [...issues], skip: cot.open || r.skip };
+}
+function repairCore(mes, { reasoning = '' } = {}) {
     const src = String(mes ?? ''), issues = new Set();
     let text = /zhutianpanel/i.test(src) ? balanceTags(src, issues) : src;
     const found = []; PANEL.lastIndex = 0; let m;
@@ -210,7 +278,7 @@ export function displayPanel(inner) {
 }
 /** Removes every block but keeps the story that was hidden inside (for story-reading features). */
 export function stripPanels(text) {
-    return String(text ?? '').replace(PANEL, (_, inner) => { const d = displayPanel(inner); return d.story ? `\n\n${d.story}\n\n` : ' '; });
+    return outsideThoughts(text, t => t.replace(PANEL, (_, inner) => { const d = displayPanel(inner); return d.story ? `\n\n${d.story}\n\n` : ' '; }));
 }
 
 /** 「你获得了功法《独孤九剑》」in the story while the block has no 收录 for it → names to remind about (pure). */
@@ -257,7 +325,7 @@ export function panelTemplate(rules) {
 }
 /** Per-turn reminder (stronger right after a broken reply). */
 export function reminderText(trouble) {
-    const base = '【诸天数据块格式】回复末尾必须有且只有一个 <ZhuTianPanel>…</ZhuTianPanel>，开始和结束标签都要写；块内只写「字段: 值」行，正文、思考过程、其他卡的变量或网页代码一律写在块外；新学会的功法在「功法修炼」写 收录:功法名[品阶]。';
+    const base = '【诸天数据块格式】回复末尾必须有且只有一个 <ZhuTianPanel>…</ZhuTianPanel>，开始和结束标签都要写；块内只写「字段: 值」行，正文、其他卡的变量或网页代码一律写在块外；新学会的功法在「功法修炼」写 收录:功法名[品阶]。';
     return trouble?.length ? base + `上一轮的数据块有问题（${issueText(trouble)}），本轮务必写完整。` : base;
 }
 
@@ -273,6 +341,26 @@ export function ledgerStamp(z) {
     if (!z || typeof z !== 'object') return 'null';
     const norm = v => Array.isArray(v) ? v.map(norm) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, norm(v[k])])) : v;
     return JSON.stringify(norm(Object.fromEntries(Object.entries(z).filter(([k]) => !VOLATILE.has(k)))));
+}
+
+const POS_NAME = { '-1': '不注入', 0: '故事串之后', 1: '聊天中', 2: '提示最前' };
+const ROLE_NAME = { 0: 'system', 1: 'user', 2: 'assistant' };
+/** 1.1.4: what the plugin did to one floor, and every extension prompt that is live right now (pure, for tests). */
+export function floorReport({ floor, m, zhutian, prompts = {}, rendered = null, voices = null }) {
+    const own = m?.extra?.[STORAGE] || {}, b = own.panelRepair, mes = String(m?.mes ?? ''), reasoning = String(m?.extra?.reasoning ?? '');
+    const cot = protectThoughts(mes);
+    const lines = [`【诸天 · 楼层检查】第 ${floor} 层（swipe ${m?.swipe_id ?? 0}）`, `这个聊天是诸天存档：${zhutian ? '是' : '否（数据块守卫和格式提醒都不会动这个聊天）'}`];
+    lines.push(b ? `正文：被数据块守卫改写过（${issueText(b.issues)}）。原文已备份，可在 设置 → 数据块格式守卫 →「还原最新一次自动修复」恢复。` : '正文：插件没有改写过（没有修复备份）。');
+    lines.push(`思维链：正文里 ${cot.blocks.length} 段${cot.open ? '（有一段没有结束标签）' : ''}；SillyTavern 推理框 ${reasoning.trim() ? reasoning.length + ' 字' : '空'}${b?.reasoning ? '（其中内容是插件从数据块里移过去的）' : ''}`);
+    if (rendered !== null) lines.push(`显示：${rendered ? '由插件渲染（数据块标签 / 语音框）' : '插件没有渲染这一层'}${voices ? `，语音框 ${voices} 个` : ''}`);
+    const live = Object.entries(prompts || {}).filter(([, p]) => String(p?.value ?? '').trim());
+    lines.push(`当前注入的扩展提示 ${live.length} 条：`);
+    for (const [k, p] of live) {
+        const pos = POS_NAME[p.position] ?? String(p.position);
+        lines.push(`· ${k.startsWith(ID + '/') ? '[诸天] ' : ''}${k} — ${pos}${Number(p.position) === 1 ? ` 深度 ${p.depth ?? 0}` : ''} · ${ROLE_NAME[p.role] ?? p.role ?? 'system'} · ${String(p.value).length} 字`);
+    }
+    lines.push('判断：如果正文没有被改写、插件也没渲染这一层，而思维链仍然显示异常，多半是预设 / 其他扩展 / 正则造成的；可以逐个停用后重试。');
+    return lines.join('\n');
 }
 
 export class PanelGuard {
@@ -300,8 +388,10 @@ export class PanelGuard {
             { type: 'switch', k: 'panelGuard.remind', label: '每轮提醒 AI 数据块格式', desc: '一行系统提示；上一轮出错时提示会更具体。' },
             { type: 'switch', k: 'panelGuard.skillHint', label: '剧情里学会功法但没入账时提示', desc: '正文写了「获得《某功法》」但数据块没收录时弹出提示，可去剧情收纳登记。' },
             { type: 'action', id: 'pg-backfill', label: '补记最新一层数据块', desc: '手动让 AI 按本轮正文补写数据块（最新一层没有数据块时可用）。' },
+            { type: 'select', k: 'panelGuard.remindDepth', label: '格式提醒插入深度', options: [['1', '深度 1（默认，最新一条消息之前）'], ['0', '深度 0（最末尾，1.1.3 及以前）'], ['2', '深度 2'], ['4', '深度 4']], desc: '1.1.4：默认改为 1。和预填充 / 思维链开头的预设一起用时，深度 0 的系统提示会插在它们后面，可能打乱思维链格式。' },
             { type: 'action', id: 'pg-restore', label: '还原最新一次自动修复', desc: '把最近一层被自动修复的回复恢复成 AI 的原文。' },
-        ], actions: { 'pg-backfill': () => this.manualBackfill(), 'pg-restore': () => this.restore() } });
+            { type: 'action', id: 'pg-inspect', tier: 'diag', label: '检查最新楼层：插件动过吗？', desc: '思维链标签不见了 / 楼层显示异常时用：列出这一层是否被数据块守卫改写过、是否由插件渲染，以及当前所有扩展注入的提示（位置 / 深度），方便判断是不是插件冲突。结果可复制。' },
+        ], actions: { 'pg-backfill': () => this.manualBackfill(), 'pg-restore': () => this.restore(), 'pg-inspect': () => this.inspect() } });
         this.disposers.push(this.app.adapter.subscribe(() => this.syncPrompt()));
         this.disposers.push(this.app.settings.onChange(k => { if (k === 'panelGuard') { this.lastPrompt = null; this.syncPrompt(); } }));
         this.syncPrompt();
@@ -315,6 +405,9 @@ export class PanelGuard {
             t.info(text + (action?.label ? `（点击：${action.label}）` : ''), '诸天', { timeOut: ms, onclick: action?.terminal ? () => this.app.openTerminal?.(action.terminal) : undefined });
         } catch { /* hub / toastr gone */ }
     }
+    /** 1.1.4: depth of the one-line reminder. 1 (default) = above the newest message, so it never sits between the
+     *  reply prefill / reasoning start and the model; 0 = the 1.1.1 position (very last). */
+    remindDepth() { const d = Number(this.cfg.remindDepth ?? 1); return [0, 1, 2, 4].includes(d) ? d : 1; }
     isZhutian() { try { return !!this.app.adapter.currentIdentity() && (!!this.ctx.chatMetadata?.variables?.诸天系统 || this.app.features?.isZhutianChat?.()); } catch { return false; } }
     /** The newest assistant floor (or `id`), checked once per (floor, swipe, text). */
     check(id, via, type = '') {
@@ -334,8 +427,8 @@ export class PanelGuard {
                 this.seen = `${this.app.adapter.currentIdentity()}|${i}|${m.swipe_id ?? 0}|${hashText(m.mes)}`;
             }
             // 补记 only for a real story reply (not the greeting, /sys or extension messages, not a late GENERATION_ENDED)
-            if (!r.panel && this.cfg.backfill === 'missing' && via === 'received' && !['first_message', 'command', 'extension'].includes(type) && chat.slice(0, i).some(x => x?.is_user) && c.chatMetadata?.variables?.诸天系统) this.scheduleBackfill(i, 'auto');
-            if (this.cfg.skillHint !== false) this.hintSkills(m.mes, r.panel);
+            if (!r.panel && !r.skip && this.cfg.backfill === 'missing' && via === 'received' && !['first_message', 'command', 'extension'].includes(type) && chat.slice(0, i).some(x => x?.is_user) && c.chatMetadata?.variables?.诸天系统) this.scheduleBackfill(i, 'auto');
+            if (this.cfg.skillHint !== false && !r.skip) this.hintSkills(m.mes, r.panel);
             this.syncPrompt();
         } catch (e) { console.warn('[诸天数据块] 检查失败', e); }
     }
@@ -381,6 +474,20 @@ export class PanelGuard {
         }
         this.toast('当前聊天里没有被自动修复过的楼层');
     }
+    /** 1.1.4: 「这一层插件动过吗」— a plain report (pure part: floorReport) shown in a dialog and copied. */
+    inspect() {
+        const c = this.ctx, chat = c?.chat || [];
+        let i = chat.length - 1; while (i >= 0 && (chat[i]?.is_user || chat[i]?.is_system)) i--;
+        if (i < 0) return this.toast('当前聊天里还没有 AI 回复的楼层。');
+        const m = chat[i], el = globalThis.document?.querySelector?.(`#chat .mes[mesid="${i}"] .mes_text`);
+        const text = floorReport({
+            floor: i, m, zhutian: this.isZhutian(), prompts: c?.extensionPrompts || {},
+            rendered: !!el?.querySelector?.(':scope > .zt-render-mark'), voices: el ? el.querySelectorAll('.zt-lilith-voice,[data-lilith-voice]').length : null,
+        });
+        try { globalThis.navigator?.clipboard?.writeText?.(text)?.catch?.(() => {}); } catch { /* copy is optional */ }
+        if (typeof globalThis.alert === 'function') globalThis.alert(text + '\n\n（已尝试复制到剪贴板）'); else this.toast(text, 15000);
+        return text;
+    }
     hintSkills(mes, panel) {
         try {
             const z = this.ctx.chatMetadata?.variables?.诸天系统; if (!z) return;
@@ -395,8 +502,9 @@ export class PanelGuard {
         try {
             const text = this.cfg.remind !== false && this.isZhutian() ? reminderText(this.trouble) : '';
             const live = this.app.bridge.livePrompt?.('panelguard') ?? text;
-            if (text === this.lastPrompt && live === text) return; this.lastPrompt = text;
-            if (text) this.app.bridge.injectPrompts([{ id: 'panelguard', content: text, position: 'in_chat', depth: 0, role: 'system' }]);
+            const key = `${this.remindDepth()}|${text}`;
+            if (key === this.lastPrompt && live === text) return; this.lastPrompt = key;
+            if (text) this.app.bridge.injectPrompts([{ id: 'panelguard', content: text, position: 'in_chat', depth: this.remindDepth(), role: 'system' }]);
             else this.app.bridge.uninjectPrompts(['panelguard']);
         } catch (e) { console.warn('[诸天数据块] 提示注入失败', e); }
     }
